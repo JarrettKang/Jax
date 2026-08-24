@@ -42,6 +42,16 @@ class EventsPage extends StatelessWidget {
                                   () => controller.start(event.id),
                                 ),
                               ),
+                            if (event.status == EventStatus.paused)
+                              IconButton(
+                                key: ValueKey('resume-${event.id}'),
+                                icon: const Icon(Icons.play_arrow),
+                                tooltip: '恢复',
+                                onPressed: () => _run(
+                                  context,
+                                  () => controller.resume(event.id),
+                                ),
+                              ),
                             if (event.status == EventStatus.running)
                               IconButton(
                                 key: ValueKey('pause-${event.id}'),
