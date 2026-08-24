@@ -54,6 +54,16 @@ class EventsPage extends StatelessWidget {
                               ),
                             if (event.status == EventStatus.running)
                               IconButton(
+                                key: ValueKey('complete-${event.id}'),
+                                icon: const Icon(Icons.check),
+                                tooltip: '完成',
+                                onPressed: () => _run(
+                                  context,
+                                  () => controller.complete(event.id),
+                                ),
+                              ),
+                            if (event.status == EventStatus.running)
+                              IconButton(
                                 key: ValueKey('pause-${event.id}'),
                                 icon: const Icon(Icons.pause),
                                 tooltip: '暂停',

@@ -1,0 +1,38 @@
+import '../entities/completed_record.dart';
+import '../entities/event_status.dart';
+import '../errors/domain_failure.dart';
+import '../repositories/event_repository.dart';
+import 'create_event.dart';
+
+class CompleteEvent {
+  const CompleteEvent({required this.repository, required this.now});
+  final EventRepository repository;
+  final Clock now;
+  Future<CompletedRecord> call(String id) async {
+    final current = await repository.getEvent(id);
+    if (current == null) throw const DomainFailure('事件不存在');
+    if (current.status != EventStatus.running) {
+      throw const DomainFailure('只有正在进行的事件可以完成');
+    }
+    final segments = await repository.getRunSegments(id);
+    final open = segments
+        .where((segment) => segment.endedAt == null)
+        .firstOrNull;
+    if (open == null) throw const DomainFailure('执行计时数据不完整');
+    final timestamp = now().toUtc();
+    final completed = current.copyWith(
+      status: EventStatus.completed,
+      completedAt: timestamp,
+      updatedAt: timestamp,
+    );
+    final closed = open.copyWith(endedAt: timestamp);
+    await repository.pauseEvent(completed, closed);
+    final duration = segments.fold(
+      Duration.zero,
+      (total, segment) =>
+          total +
+          (segment.id == open.id ? closed : segment).durationAt(timestamp),
+    );
+    return CompletedRecord(event: completed, duration: duration);
+  }
+}

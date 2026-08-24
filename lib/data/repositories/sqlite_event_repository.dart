@@ -24,6 +24,17 @@ class SqliteEventRepository implements EventRepository {
   }
 
   @override
+  Future<List<JaxEvent>> getCompletedEvents() async {
+    final rows = await _appDatabase.database.query(
+      'events',
+      where: 'status = ?',
+      whereArgs: [EventStatus.completed.name],
+      orderBy: 'completed_at_utc DESC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
   Future<JaxEvent?> getEvent(String id) async {
     final rows = await _appDatabase.database.query(
       'events',

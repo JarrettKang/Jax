@@ -10,7 +10,11 @@ class MemoryRepository implements EventRepository {
   @override
   Future<void> insertEvent(JaxEvent event) async => events.add(event);
   @override
-  Future<List<JaxEvent>> getIncompleteEvents() async => List.of(events);
+  Future<List<JaxEvent>> getIncompleteEvents() async =>
+      events.where((event) => event.status.name != 'completed').toList();
+  @override
+  Future<List<JaxEvent>> getCompletedEvents() async =>
+      events.where((event) => event.status.name == 'completed').toList();
   @override
   Future<JaxEvent?> getEvent(String id) async =>
       events.where((event) => event.id == id).firstOrNull;

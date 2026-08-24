@@ -7,6 +7,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
+import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
 import '../../core/use_cases/edit_event.dart';
@@ -21,6 +22,7 @@ class EventController extends ChangeNotifier {
     required Clock now,
   }) : _repository = repository,
        _now = now,
+       _complete = CompleteEvent(repository: repository, now: now),
        _create = CreateEvent(repository: repository, newId: newId, now: now),
        _edit = EditEvent(repository: repository, now: now),
        _delete = DeleteEvent(repository),
@@ -29,6 +31,7 @@ class EventController extends ChangeNotifier {
        _start = StartEvent(repository: repository, newId: newId, now: now);
   final EventRepository _repository;
   final Clock _now;
+  final CompleteEvent _complete;
   final CreateEvent _create;
   final EditEvent _edit;
   final DeleteEvent _delete;
@@ -37,9 +40,11 @@ class EventController extends ChangeNotifier {
   final StartEvent _start;
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
+  List<JaxEvent> _history = const [];
   bool _loading = true;
   Timer? _ticker;
   List<JaxEvent> get events => List.unmodifiable(_events);
+  List<JaxEvent> get history => List.unmodifiable(_history);
   bool get loading => _loading;
 
   Future<void> load() async {
@@ -52,6 +57,7 @@ class EventController extends ChangeNotifier {
 
   Future<void> _reload() async {
     _events = await _repository.getIncompleteEvents();
+    _history = await _repository.getCompletedEvents();
     for (final event in _events) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
     }
@@ -65,6 +71,7 @@ class EventController extends ChangeNotifier {
   Future<String?> start(String id) => _change(() => _start(id));
   Future<String?> pause(String id) => _change(() => _pause(id));
   Future<String?> resume(String id) => _change(() => _resume(id));
+  Future<String?> complete(String id) => _change(() => _complete(id));
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,

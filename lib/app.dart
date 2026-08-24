@@ -45,7 +45,7 @@ class _JaxAppState extends State<JaxApp> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       EventsPage(controller: _controller),
-      const HistoryPage(),
+      HistoryPage(controller: _controller),
     ];
 
     return MaterialApp(

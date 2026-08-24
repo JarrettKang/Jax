@@ -4,6 +4,7 @@ import '../entities/run_segment.dart';
 abstract interface class EventRepository {
   Future<void> insertEvent(JaxEvent event);
   Future<List<JaxEvent>> getIncompleteEvents();
+  Future<List<JaxEvent>> getCompletedEvents();
   Future<JaxEvent?> getEvent(String id);
   Future<void> updateEvent(JaxEvent event);
   Future<void> deleteEvent(String id);

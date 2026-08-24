@@ -53,6 +53,8 @@ class _Repository implements EventRepository {
   @override
   Future<List<JaxEvent>> getIncompleteEvents() async => List.of(events);
   @override
+  Future<List<JaxEvent>> getCompletedEvents() async => const [];
+  @override
   Future<void> insertEvent(JaxEvent event) async => events.add(event);
   @override
   @override
