@@ -1,0 +1,18 @@
+import '../entities/event_status.dart';
+import '../errors/domain_failure.dart';
+import '../repositories/event_repository.dart';
+
+class DeleteEvent {
+  const DeleteEvent(this.repository);
+  final EventRepository repository;
+
+  Future<void> call(String id) async {
+    final event = await repository.getEvent(id);
+    if (event == null) throw const DomainFailure('事件不存在');
+    if (event.status != EventStatus.pending &&
+        event.status != EventStatus.paused) {
+      throw const DomainFailure('当前状态不允许删除');
+    }
+    await repository.deleteEvent(id);
+  }
+}

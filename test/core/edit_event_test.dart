@@ -54,6 +54,11 @@ class _Repository implements EventRepository {
   @override
   Future<void> insertEvent(JaxEvent event) async => events.add(event);
   @override
+  @override
+  Future<void> deleteEvent(String id) async =>
+      events.removeWhere((event) => event.id == id);
+
+  @override
   Future<void> updateEvent(JaxEvent event) async {
     events[events.indexWhere((item) => item.id == event.id)] = event;
   }

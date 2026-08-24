@@ -5,4 +5,5 @@ abstract interface class EventRepository {
   Future<List<JaxEvent>> getIncompleteEvents();
   Future<JaxEvent?> getEvent(String id);
   Future<void> updateEvent(JaxEvent event);
+  Future<void> deleteEvent(String id);
 }

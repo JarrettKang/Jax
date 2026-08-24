@@ -22,11 +22,22 @@ class EventsPage extends StatelessWidget {
                       child: ListTile(
                         title: Text(event.name),
                         subtitle: const Text('未开始'),
-                        trailing: IconButton(
-                          key: ValueKey('edit-${event.id}'),
-                          icon: const Icon(Icons.edit),
-                          tooltip: '编辑',
-                          onPressed: () => _showEditor(context, event),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: ValueKey('edit-${event.id}'),
+                              icon: const Icon(Icons.edit),
+                              tooltip: '编辑',
+                              onPressed: () => _showEditor(context, event),
+                            ),
+                            IconButton(
+                              key: ValueKey('delete-${event.id}'),
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: '删除',
+                              onPressed: () => _confirmDelete(context, event),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -45,6 +56,32 @@ class EventsPage extends StatelessWidget {
     context: context,
     builder: (_) => _EventEditor(controller: controller, event: event),
   );
+
+  Future<void> _confirmDelete(BuildContext context, JaxEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除事件'),
+        content: Text('确定删除“${event.name}”吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final error = await controller.delete(event.id);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
 }
 
 class _EventEditor extends StatefulWidget {

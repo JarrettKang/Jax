@@ -15,4 +15,7 @@ class MemoryRepository implements EventRepository {
   @override
   Future<void> updateEvent(JaxEvent event) async =>
       events[events.indexWhere((item) => item.id == event.id)] = event;
+  @override
+  Future<void> deleteEvent(String id) async =>
+      events.removeWhere((event) => event.id == id);
 }

@@ -44,6 +44,16 @@ class SqliteEventRepository implements EventRepository {
     if (count != 1) throw StateError('Event not found: ${event.id}');
   }
 
+  @override
+  Future<void> deleteEvent(String id) async {
+    final count = await _appDatabase.database.delete(
+      'events',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (count != 1) throw StateError('Event not found: $id');
+  }
+
   Map<String, Object?> _toRow(JaxEvent event) => {
     'id': event.id,
     'name': event.name,
