@@ -1,0 +1,27 @@
+# Local development toolchains
+.tools/
+
+# Flutter/Dart generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+
+# IDE and local settings
+.idea/
+.vscode/
+*.iml
+
+# Platform-generated ephemeral files
+**/flutter/ephemeral/
+
+# Local databases and temporary files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
