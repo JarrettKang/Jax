@@ -58,6 +58,15 @@ class SqliteEventRepository implements EventRepository {
   @override
   Future<void> startEvent(JaxEvent event, RunSegment segment) async {
     await _appDatabase.database.transaction((transaction) async {
+      final running = await transaction.query(
+        'events',
+        where: 'status = ? AND id != ?',
+        whereArgs: [EventStatus.running.name, event.id],
+        limit: 1,
+      );
+      if (running.isNotEmpty) {
+        throw StateError('Another event is already running');
+      }
       await transaction.update(
         'events',
         _toRow(event),
