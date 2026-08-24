@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
+import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/repositories/event_repository.dart';
 
 void main() {
   testWidgets('shows the empty events and history sections', (tester) async {
-    await tester.pumpWidget(const JaxApp());
+    await tester.pumpWidget(JaxApp(repository: _MemoryRepository()));
+    await tester.pumpAndSettle();
 
     expect(find.text('Jax'), findsOneWidget);
     expect(find.text('事件'), findsOneWidget);
@@ -14,4 +17,12 @@ void main() {
 
     expect(find.text('暂无历史记录'), findsOneWidget);
   });
+}
+
+class _MemoryRepository implements EventRepository {
+  @override
+  Future<void> insertEvent(JaxEvent event) async {}
+
+  @override
+  Future<List<JaxEvent>> getIncompleteEvents() async => const [];
 }

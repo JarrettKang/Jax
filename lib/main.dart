@@ -1,8 +1,11 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'data/database/windows_database.dart';
+import 'data/repositories/sqlite_event_repository.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const JaxApp());
+  final database = await openWindowsDatabase();
+  runApp(JaxApp(repository: SqliteEventRepository(database)));
 }
