@@ -37,6 +37,8 @@ class MemoryRepository implements EventRepository {
   }
 
   @override
-  Future<void> deleteEvent(String id) async =>
-      events.removeWhere((event) => event.id == id);
+  Future<void> deleteEvent(String id) async {
+    events.removeWhere((event) => event.id == id);
+    segments.removeWhere((segment) => segment.eventId == id);
+  }
 }

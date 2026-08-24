@@ -58,12 +58,14 @@ class SqliteEventRepository implements EventRepository {
 
   @override
   Future<void> deleteEvent(String id) async {
-    final count = await _appDatabase.database.delete(
-      'events',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (count != 1) throw StateError('Event not found: $id');
+    await _appDatabase.database.transaction((transaction) async {
+      final count = await transaction.delete(
+        'events',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (count != 1) throw StateError('Event not found: $id');
+    });
   }
 
   @override

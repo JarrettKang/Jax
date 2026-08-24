@@ -10,6 +10,7 @@ import '../../core/repositories/event_repository.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
+import '../../core/use_cases/delete_history_record.dart';
 import '../../core/use_cases/edit_event.dart';
 import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/resume_event.dart';
@@ -26,6 +27,7 @@ class EventController extends ChangeNotifier {
        _create = CreateEvent(repository: repository, newId: newId, now: now),
        _edit = EditEvent(repository: repository, now: now),
        _delete = DeleteEvent(repository),
+       _deleteHistory = DeleteHistoryRecord(repository),
        _pause = PauseEvent(repository: repository, now: now),
        _resume = ResumeEvent(repository: repository, newId: newId, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now);
@@ -35,6 +37,7 @@ class EventController extends ChangeNotifier {
   final CreateEvent _create;
   final EditEvent _edit;
   final DeleteEvent _delete;
+  final DeleteHistoryRecord _deleteHistory;
   final PauseEvent _pause;
   final ResumeEvent _resume;
   final StartEvent _start;
@@ -68,6 +71,7 @@ class EventController extends ChangeNotifier {
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
   Future<String?> delete(String id) => _change(() => _delete(id));
+  Future<String?> deleteHistory(String id) => _change(() => _deleteHistory(id));
   Future<String?> start(String id) => _change(() => _start(id));
   Future<String?> pause(String id) => _change(() => _pause(id));
   Future<String?> resume(String id) => _change(() => _resume(id));
