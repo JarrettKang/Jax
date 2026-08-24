@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+
+import 'dart:ui' show AppExitResponse;
+
 import 'package:uuid/uuid.dart';
 
 import 'core/repositories/event_repository.dart';
 import 'core/services/save_service.dart';
 import 'core/use_cases/create_event.dart';
+import 'core/use_cases/prepare_for_shutdown.dart';
 import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
 import 'ui/pages/history_page.dart';
@@ -30,6 +34,8 @@ class JaxApp extends StatefulWidget {
 
 class _JaxAppState extends State<JaxApp> {
   late final EventController _controller;
+  late final PrepareForShutdown _prepareForShutdown;
+  late final AppLifecycleListener _lifecycleListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   var _selectedIndex = 0;
   var _saving = false;
@@ -41,6 +47,14 @@ class _JaxAppState extends State<JaxApp> {
       repository: widget.repository,
       newId: widget.newId,
       now: widget.now,
+    );
+    _prepareForShutdown = PrepareForShutdown(
+      repository: widget.repository,
+      saveService: widget.saveService,
+      now: widget.now,
+    );
+    _lifecycleListener = AppLifecycleListener(
+      onExitRequested: _handleExitRequest,
     );
     _controller.load();
   }
@@ -62,8 +76,21 @@ class _JaxAppState extends State<JaxApp> {
     }
   }
 
+  Future<AppExitResponse> _handleExitRequest() async {
+    try {
+      await _prepareForShutdown();
+      return AppExitResponse.exit;
+    } catch (_) {
+      _messengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('关闭前保存失败，请重试')),
+      );
+      return AppExitResponse.cancel;
+    }
+  }
+
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _controller.dispose();
     super.dispose();
   }
