@@ -5,13 +5,11 @@ import '../database/app_database.dart';
 
 class SqliteEventRepository implements EventRepository {
   const SqliteEventRepository(this._appDatabase);
-
   final AppDatabase _appDatabase;
 
   @override
-  Future<void> insertEvent(JaxEvent event) async {
-    await _appDatabase.database.insert('events', _toRow(event));
-  }
+  Future<void> insertEvent(JaxEvent event) =>
+      _appDatabase.database.insert('events', _toRow(event));
 
   @override
   Future<List<JaxEvent>> getIncompleteEvents() async {
@@ -22,6 +20,28 @@ class SqliteEventRepository implements EventRepository {
       orderBy: 'created_at_utc ASC, id ASC',
     );
     return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<JaxEvent?> getEvent(String id) async {
+    final rows = await _appDatabase.database.query(
+      'events',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _fromRow(rows.single);
+  }
+
+  @override
+  Future<void> updateEvent(JaxEvent event) async {
+    final count = await _appDatabase.database.update(
+      'events',
+      _toRow(event),
+      where: 'id = ?',
+      whereArgs: [event.id],
+    );
+    if (count != 1) throw StateError('Event not found: ${event.id}');
   }
 
   Map<String, Object?> _toRow(JaxEvent event) => {
@@ -35,8 +55,8 @@ class SqliteEventRepository implements EventRepository {
   };
 
   JaxEvent _fromRow(Map<String, Object?> row) {
-    DateTime? optionalTime(String column) {
-      final value = row[column] as int?;
+    DateTime? optional(String key) {
+      final value = row[key] as int?;
       return value == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
@@ -46,8 +66,8 @@ class SqliteEventRepository implements EventRepository {
       id: row['id']! as String,
       name: row['name']! as String,
       status: EventStatus.fromStorage(row['status']! as String),
-      firstStartedAt: optionalTime('first_started_at_utc'),
-      completedAt: optionalTime('completed_at_utc'),
+      firstStartedAt: optional('first_started_at_utc'),
+      completedAt: optional('completed_at_utc'),
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         row['created_at_utc']! as int,
         isUtc: true,

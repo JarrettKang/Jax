@@ -1,104 +1,106 @@
 import 'package:flutter/material.dart';
 
+import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
 
 class EventsPage extends StatelessWidget {
   const EventsPage({required this.controller, super.key});
-
   final EventController controller;
-
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return Scaffold(
-          body: controller.loading
-              ? const Center(child: CircularProgressIndicator())
-              : controller.events.isEmpty
-              ? const Center(child: Text('暂无未完成事件'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(24),
-                  itemCount: controller.events.length,
-                  itemBuilder: (context, index) {
-                    final event = controller.events[index];
-                    return Card(
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    builder: (context, _) => Scaffold(
+      body: controller.loading
+          ? const Center(child: CircularProgressIndicator())
+          : controller.events.isEmpty
+          ? const Center(child: Text('暂无未完成事件'))
+          : ListView(
+              padding: const EdgeInsets.all(24),
+              children: controller.events
+                  .map(
+                    (event) => Card(
                       child: ListTile(
                         title: Text(event.name),
                         subtitle: const Text('未开始'),
+                        trailing: IconButton(
+                          key: ValueKey('edit-${event.id}'),
+                          icon: const Icon(Icons.edit),
+                          tooltip: '编辑',
+                          onPressed: () => _showEditor(context, event),
+                        ),
                       ),
-                    );
-                  },
-                ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => _CreateEventDialog(controller: controller),
+                    ),
+                  )
+                  .toList(),
             ),
-            icon: const Icon(Icons.add),
-            label: const Text('新建事件'),
-          ),
-        );
-      },
-    );
-  }
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showEditor(context, null),
+        icon: const Icon(Icons.add),
+        label: const Text('新建事件'),
+      ),
+    ),
+  );
+
+  void _showEditor(BuildContext context, JaxEvent? event) => showDialog<void>(
+    context: context,
+    builder: (_) => _EventEditor(controller: controller, event: event),
+  );
 }
 
-class _CreateEventDialog extends StatefulWidget {
-  const _CreateEventDialog({required this.controller});
-
+class _EventEditor extends StatefulWidget {
+  const _EventEditor({required this.controller, this.event});
   final EventController controller;
-
+  final JaxEvent? event;
   @override
-  State<_CreateEventDialog> createState() => _CreateEventDialogState();
+  State<_EventEditor> createState() => _EventEditorState();
 }
 
-class _CreateEventDialogState extends State<_CreateEventDialog> {
-  final _textController = TextEditingController();
+class _EventEditorState extends State<_EventEditor> {
+  late final TextEditingController _text = TextEditingController(
+    text: widget.event?.name,
+  );
   String? _error;
-  bool _submitting = false;
-
+  bool _busy = false;
   @override
   void dispose() {
-    _textController.dispose();
+    _text.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('新建事件'),
-      content: TextField(
-        controller: _textController,
-        autofocus: true,
-        decoration: InputDecoration(labelText: '事件名称', errorText: _error),
-        onSubmitted: _submitting ? null : (_) => _submit(),
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.event == null ? '新建事件' : '编辑事件'),
+    content: TextField(
+      controller: _text,
+      autofocus: true,
+      decoration: InputDecoration(labelText: '事件名称', errorText: _error),
+      onSubmitted: _busy ? null : (_) => _submit(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.pop(context),
+        child: const Text('取消'),
       ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: const Text('创建'),
-        ),
-      ],
-    );
-  }
-
+      FilledButton(
+        onPressed: _busy ? null : _submit,
+        child: Text(widget.event == null ? '创建' : '保存'),
+      ),
+    ],
+  );
   Future<void> _submit() async {
     setState(() {
-      _submitting = true;
+      _busy = true;
       _error = null;
     });
-    final message = await widget.controller.create(_textController.text);
+    final message = widget.event == null
+        ? await widget.controller.create(_text.text)
+        : await widget.controller.edit(widget.event!.id, _text.text);
     if (!mounted) return;
     if (message == null) {
       Navigator.pop(context);
     } else {
       setState(() {
-        _submitting = false;
+        _busy = false;
         _error = message;
       });
     }
