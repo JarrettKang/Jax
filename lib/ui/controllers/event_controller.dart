@@ -89,6 +89,8 @@ class EventController extends ChangeNotifier {
       return null;
     } on DomainFailure catch (failure) {
       return failure.message;
+    } catch (_) {
+      return '保存失败，请重试';
     }
   }
 
