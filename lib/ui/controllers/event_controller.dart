@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
+import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
 import '../../core/use_cases/edit_event.dart';
+import '../../core/use_cases/start_event.dart';
 
 class EventController extends ChangeNotifier {
   EventController({
@@ -13,38 +18,78 @@ class EventController extends ChangeNotifier {
     required IdGenerator newId,
     required Clock now,
   }) : _repository = repository,
+       _now = now,
        _create = CreateEvent(repository: repository, newId: newId, now: now),
        _edit = EditEvent(repository: repository, now: now),
-       _delete = DeleteEvent(repository);
+       _delete = DeleteEvent(repository),
+       _start = StartEvent(repository: repository, newId: newId, now: now);
   final EventRepository _repository;
+  final Clock _now;
   final CreateEvent _create;
   final EditEvent _edit;
   final DeleteEvent _delete;
+  final StartEvent _start;
+  final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
   bool _loading = true;
+  Timer? _ticker;
   List<JaxEvent> get events => List.unmodifiable(_events);
   bool get loading => _loading;
 
   Future<void> load() async {
     _loading = true;
     notifyListeners();
-    _events = await _repository.getIncompleteEvents();
+    await _reload();
     _loading = false;
     notifyListeners();
+  }
+
+  Future<void> _reload() async {
+    _events = await _repository.getIncompleteEvents();
+    for (final event in _events) {
+      _segments[event.id] = await _repository.getRunSegments(event.id);
+    }
+    _syncTicker();
   }
 
   Future<String?> create(String name) => _change(() => _create(name));
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
   Future<String?> delete(String id) => _change(() => _delete(id));
+  Future<String?> start(String id) => _change(() => _start(id));
+  Duration elapsedFor(JaxEvent event) =>
+      (_segments[event.id] ?? const <RunSegment>[]).fold(
+        Duration.zero,
+        (total, segment) => total + segment.durationAt(_now()),
+      );
   Future<String?> _change(Future<Object?> Function() action) async {
     try {
       await action();
-      _events = await _repository.getIncompleteEvents();
+      await _reload();
       notifyListeners();
       return null;
     } on DomainFailure catch (failure) {
       return failure.message;
     }
+  }
+
+  void _syncTicker() {
+    final running = _events.any((event) => event.status == EventStatus.running);
+    if (running && _ticker == null) {
+      _ticker = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => notifyListeners(),
+      );
+    }
+    if (!running) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
   }
 }

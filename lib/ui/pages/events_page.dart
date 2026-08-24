@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
 
@@ -21,22 +22,38 @@ class EventsPage extends StatelessWidget {
                     (event) => Card(
                       child: ListTile(
                         title: Text(event.name),
-                        subtitle: const Text('未开始'),
+                        subtitle: Text(
+                          event.status == EventStatus.running
+                              ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
+                              : '未开始',
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
-                              key: ValueKey('edit-${event.id}'),
-                              icon: const Icon(Icons.edit),
-                              tooltip: '编辑',
-                              onPressed: () => _showEditor(context, event),
-                            ),
-                            IconButton(
-                              key: ValueKey('delete-${event.id}'),
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: '删除',
-                              onPressed: () => _confirmDelete(context, event),
-                            ),
+                            if (event.status == EventStatus.pending)
+                              IconButton(
+                                key: ValueKey('start-${event.id}'),
+                                icon: const Icon(Icons.play_arrow),
+                                tooltip: '开始',
+                                onPressed: () => _run(
+                                  context,
+                                  () => controller.start(event.id),
+                                ),
+                              ),
+                            if (event.status == EventStatus.pending)
+                              IconButton(
+                                key: ValueKey('edit-${event.id}'),
+                                icon: const Icon(Icons.edit),
+                                tooltip: '编辑',
+                                onPressed: () => _showEditor(context, event),
+                              ),
+                            if (event.status == EventStatus.pending)
+                              IconButton(
+                                key: ValueKey('delete-${event.id}'),
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: '删除',
+                                onPressed: () => _confirmDelete(context, event),
+                              ),
                           ],
                         ),
                       ),
@@ -51,12 +68,23 @@ class EventsPage extends StatelessWidget {
       ),
     ),
   );
+  static String _duration(Duration value) =>
+      '${value.inHours.toString().padLeft(2, '0')}:${(value.inMinutes % 60).toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
+  Future<void> _run(
+    BuildContext context,
+    Future<String?> Function() action,
+  ) async {
+    final error = await action();
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
 
   void _showEditor(BuildContext context, JaxEvent? event) => showDialog<void>(
     context: context,
     builder: (_) => _EventEditor(controller: controller, event: event),
   );
-
   Future<void> _confirmDelete(BuildContext context, JaxEvent event) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -75,11 +103,8 @@ class EventsPage extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed != true || !context.mounted) return;
-    final error = await controller.delete(event.id);
-    if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+    if (confirmed == true && context.mounted) {
+      await _run(context, () => controller.delete(event.id));
     }
   }
 }
@@ -129,16 +154,16 @@ class _EventEditorState extends State<_EventEditor> {
       _busy = true;
       _error = null;
     });
-    final message = widget.event == null
+    final error = widget.event == null
         ? await widget.controller.create(_text.text)
         : await widget.controller.edit(widget.event!.id, _text.text);
     if (!mounted) return;
-    if (message == null) {
+    if (error == null) {
       Navigator.pop(context);
     } else {
       setState(() {
         _busy = false;
-        _error = message;
+        _error = error;
       });
     }
   }

@@ -1,5 +1,6 @@
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
+import '../../core/entities/run_segment.dart';
 import '../../core/repositories/event_repository.dart';
 import '../database/app_database.dart';
 
@@ -54,6 +55,56 @@ class SqliteEventRepository implements EventRepository {
     if (count != 1) throw StateError('Event not found: $id');
   }
 
+  @override
+  Future<void> startEvent(JaxEvent event, RunSegment segment) async {
+    await _appDatabase.database.transaction((transaction) async {
+      await transaction.update(
+        'events',
+        _toRow(event),
+        where: 'id = ?',
+        whereArgs: [event.id],
+      );
+      await transaction.insert('run_segments', _segmentToRow(segment));
+    });
+  }
+
+  @override
+  Future<List<RunSegment>> getRunSegments(String eventId) async {
+    final rows = await _appDatabase.database.query(
+      'run_segments',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+      orderBy: 'started_at_utc ASC',
+    );
+    return rows.map(_segmentFromRow).toList(growable: false);
+  }
+
+  Map<String, Object?> _segmentToRow(RunSegment segment) => {
+    'id': segment.id,
+    'event_id': segment.eventId,
+    'started_at_utc': segment.startedAt.millisecondsSinceEpoch,
+    'ended_at_utc': segment.endedAt?.millisecondsSinceEpoch,
+    'created_at_utc': segment.createdAt.millisecondsSinceEpoch,
+  };
+
+  RunSegment _segmentFromRow(Map<String, Object?> row) => RunSegment(
+    id: row['id']! as String,
+    eventId: row['event_id']! as String,
+    startedAt: DateTime.fromMillisecondsSinceEpoch(
+      row['started_at_utc']! as int,
+      isUtc: true,
+    ),
+    endedAt: row['ended_at_utc'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(
+            row['ended_at_utc']! as int,
+            isUtc: true,
+          ),
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      row['created_at_utc']! as int,
+      isUtc: true,
+    ),
+  );
   Map<String, Object?> _toRow(JaxEvent event) => {
     'id': event.id,
     'name': event.name,

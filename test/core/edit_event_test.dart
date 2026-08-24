@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 import 'package:jax/core/use_cases/edit_event.dart';
@@ -54,6 +55,11 @@ class _Repository implements EventRepository {
   @override
   Future<void> insertEvent(JaxEvent event) async => events.add(event);
   @override
+  @override
+  @override
+  Future<void> startEvent(JaxEvent event, RunSegment segment) async => updateEvent(event);
+  @override
+  Future<List<RunSegment>> getRunSegments(String eventId) async => const [];
   @override
   Future<void> deleteEvent(String id) async =>
       events.removeWhere((event) => event.id == id);
