@@ -25,6 +25,8 @@ class EventsPage extends StatelessWidget {
                         subtitle: Text(
                           event.status == EventStatus.running
                               ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
+                              : event.status == EventStatus.paused
+                              ? '已暂停 · ${_duration(controller.elapsedFor(event))}'
                               : '未开始',
                         ),
                         trailing: Row(
@@ -40,14 +42,24 @@ class EventsPage extends StatelessWidget {
                                   () => controller.start(event.id),
                                 ),
                               ),
-                            if (event.status == EventStatus.pending)
+                            if (event.status == EventStatus.running)
+                              IconButton(
+                                key: ValueKey('pause-${event.id}'),
+                                icon: const Icon(Icons.pause),
+                                tooltip: '暂停',
+                                onPressed: () => _run(
+                                  context,
+                                  () => controller.pause(event.id),
+                                ),
+                              ),
+                            if (event.status != EventStatus.running)
                               IconButton(
                                 key: ValueKey('edit-${event.id}'),
                                 icon: const Icon(Icons.edit),
                                 tooltip: '编辑',
                                 onPressed: () => _showEditor(context, event),
                               ),
-                            if (event.status == EventStatus.pending)
+                            if (event.status != EventStatus.running)
                               IconButton(
                                 key: ValueKey('delete-${event.id}'),
                                 icon: const Icon(Icons.delete_outline),

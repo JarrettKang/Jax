@@ -88,6 +88,25 @@ class SqliteEventRepository implements EventRepository {
     return rows.map(_segmentFromRow).toList(growable: false);
   }
 
+  @override
+  Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
+    await _appDatabase.database.transaction((transaction) async {
+      await transaction.update(
+        'events',
+        _toRow(event),
+        where: 'id = ?',
+        whereArgs: [event.id],
+      );
+      final count = await transaction.update(
+        'run_segments',
+        _segmentToRow(segment),
+        where: 'id = ? AND ended_at_utc IS NULL',
+        whereArgs: [segment.id],
+      );
+      if (count != 1) throw StateError('Open run segment not found');
+    });
+  }
+
   Map<String, Object?> _segmentToRow(RunSegment segment) => {
     'id': segment.id,
     'event_id': segment.eventId,

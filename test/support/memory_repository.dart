@@ -27,6 +27,12 @@ class MemoryRepository implements EventRepository {
   Future<List<RunSegment>> getRunSegments(String eventId) async =>
       segments.where((segment) => segment.eventId == eventId).toList();
   @override
+  Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
+    await updateEvent(event);
+    segments[segments.indexWhere((item) => item.id == segment.id)] = segment;
+  }
+
+  @override
   Future<void> deleteEvent(String id) async =>
       events.removeWhere((event) => event.id == id);
 }

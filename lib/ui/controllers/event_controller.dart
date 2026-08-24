@@ -10,6 +10,7 @@ import '../../core/repositories/event_repository.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
 import '../../core/use_cases/edit_event.dart';
+import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/start_event.dart';
 
 class EventController extends ChangeNotifier {
@@ -22,12 +23,14 @@ class EventController extends ChangeNotifier {
        _create = CreateEvent(repository: repository, newId: newId, now: now),
        _edit = EditEvent(repository: repository, now: now),
        _delete = DeleteEvent(repository),
+       _pause = PauseEvent(repository: repository, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now);
   final EventRepository _repository;
   final Clock _now;
   final CreateEvent _create;
   final EditEvent _edit;
   final DeleteEvent _delete;
+  final PauseEvent _pause;
   final StartEvent _start;
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
@@ -57,6 +60,7 @@ class EventController extends ChangeNotifier {
       _change(() => _edit(id, name));
   Future<String?> delete(String id) => _change(() => _delete(id));
   Future<String?> start(String id) => _change(() => _start(id));
+  Future<String?> pause(String id) => _change(() => _pause(id));
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,
