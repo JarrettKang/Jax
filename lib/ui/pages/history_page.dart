@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
+import 'event_hierarchy_dialog.dart';
+import 'history_detail_dialog.dart';
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({required this.controller, super.key});
@@ -13,19 +15,41 @@ class HistoryPage extends StatelessWidget {
         ? const Center(child: Text('暂无历史记录'))
         : ListView(
             padding: const EdgeInsets.all(12),
-            children: controller.history
+            children: controller.historyRoots
                 .map(
                   (event) => Card(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         final details =
                             '开始：${_time(event.firstStartedAt!.toLocal())}\n结束：${_time(event.completedAt!.toLocal())}\n持续：${controller.elapsedFor(event).inMinutes} 分钟';
-                        final delete = IconButton(
-                          key: ValueKey('delete-history-${event.id}'),
-                          icon: const Icon(Icons.delete_outline),
-                          tooltip: '删除记录',
-                          onPressed: () => _confirmDelete(context, event),
-                        );
+                        final actions = <Widget>[
+                          IconButton(
+                            key: ValueKey('history-detail-${event.id}'),
+                            icon: const Icon(Icons.analytics_outlined),
+                            tooltip: '投入详情',
+                            onPressed: () => showHistoryDetailDialog(
+                              context,
+                              controller: controller,
+                              event: event,
+                            ),
+                          ),
+                          IconButton(
+                            key: ValueKey('history-hierarchy-${event.id}'),
+                            icon: const Icon(Icons.account_tree_outlined),
+                            tooltip: '调整层级',
+                            onPressed: () => showEventHierarchyDialog(
+                              context,
+                              controller: controller,
+                              event: event,
+                            ),
+                          ),
+                          IconButton(
+                            key: ValueKey('delete-history-${event.id}'),
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: '删除记录',
+                            onPressed: () => _confirmDelete(context, event),
+                          ),
+                        ];
                         if (constraints.maxWidth < 600) {
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
@@ -42,7 +66,7 @@ class HistoryPage extends StatelessWidget {
                                 Text(details),
                                 Align(
                                   alignment: Alignment.centerRight,
-                                  child: delete,
+                                  child: Wrap(children: actions),
                                 ),
                               ],
                             ),
@@ -51,7 +75,10 @@ class HistoryPage extends StatelessWidget {
                         return ListTile(
                           title: Text(event.name),
                           subtitle: Text(details),
-                          trailing: delete,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: actions,
+                          ),
                         );
                       },
                     ),

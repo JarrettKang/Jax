@@ -8,6 +8,7 @@ import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/services/event_hierarchy_service.dart';
+import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
@@ -34,6 +35,7 @@ class EventController extends ChangeNotifier {
        _resume = ResumeEvent(repository: repository, newId: newId, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now),
        _hierarchy = EventHierarchyService(repository),
+       _durations = HierarchyDurationService(repository, now: now),
        _updateParent = UpdateEventParent(repository: repository, now: now);
   final EventRepository _repository;
   final Clock _now;
@@ -46,10 +48,12 @@ class EventController extends ChangeNotifier {
   final ResumeEvent _resume;
   final StartEvent _start;
   final EventHierarchyService _hierarchy;
+  final HierarchyDurationService _durations;
   final UpdateEventParent _updateParent;
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
+  List<JaxEvent> _historyRoots = const [];
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   bool _loading = true;
@@ -57,6 +61,7 @@ class EventController extends ChangeNotifier {
   Timer? _ticker;
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
+  List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
@@ -76,6 +81,14 @@ class EventController extends ChangeNotifier {
   Future<void> _reload() async {
     _events = await _repository.getIncompleteEvents();
     _history = await _repository.getCompletedEvents();
+    final roots = <JaxEvent>[];
+    for (final event in _history) {
+      final parent = await _repository.getParent(event.id);
+      if (parent == null || parent.status != EventStatus.completed) {
+        roots.add(event);
+      }
+    }
+    _historyRoots = roots;
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
     }
@@ -109,6 +122,8 @@ class EventController extends ChangeNotifier {
       _hierarchy.childCandidates(id);
   Future<String?> setParent(String id, String? parentId) =>
       _change(() => _updateParent(id, parentId));
+  Future<Duration> directDuration(String id) => _durations.directDuration(id);
+  Future<Duration> totalDuration(String id) => _durations.totalDuration(id);
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,
