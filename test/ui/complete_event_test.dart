@@ -6,6 +6,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('moves completed event from events to history', (tester) async {
@@ -32,6 +33,7 @@ void main() {
           );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => end));
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('complete-one')));
     await tester.pumpAndSettle();
     expect(find.text('完成任务'), findsNothing);

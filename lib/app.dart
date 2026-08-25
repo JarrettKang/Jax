@@ -13,6 +13,7 @@ import 'core/use_cases/prepare_for_shutdown.dart';
 import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
 import 'ui/pages/history_page.dart';
+import 'ui/pages/home_page.dart';
 
 class JaxApp extends StatefulWidget {
   JaxApp({
@@ -131,6 +132,11 @@ class _JaxAppState extends State<JaxApp> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
+      HomePage(
+        controller: _controller,
+        now: widget.now,
+        onOpenEvents: () => setState(() => _selectedIndex = 1),
+      ),
       EventsPage(controller: _controller),
       HistoryPage(controller: _controller),
     ];
@@ -187,6 +193,11 @@ class _JaxAppState extends State<JaxApp> {
                         },
                         destinations: const [
                           NavigationRailDestination(
+                            icon: Icon(Icons.home_outlined),
+                            selectedIcon: Icon(Icons.home),
+                            label: Text('首页'),
+                          ),
+                          NavigationRailDestination(
                             icon: Icon(Icons.checklist_outlined),
                             selectedIcon: Icon(Icons.checklist),
                             label: Text('事件'),
@@ -209,6 +220,11 @@ class _JaxAppState extends State<JaxApp> {
                       setState(() => _selectedIndex = index);
                     },
                     destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.home_outlined),
+                        selectedIcon: Icon(Icons.home),
+                        label: '首页',
+                      ),
                       NavigationDestination(
                         icon: Icon(Icons.checklist_outlined),
                         selectedIcon: Icon(Icons.checklist),

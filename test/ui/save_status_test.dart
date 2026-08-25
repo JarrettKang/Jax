@@ -5,6 +5,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/services/save_service.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 class MutableSaveService implements SaveService {
   Object? error;
@@ -139,6 +140,7 @@ void main() {
 }
 
 Future<void> _createEvent(WidgetTester tester, String name) async {
+  await openEventsPage(tester);
   await tester.tap(find.text('新建事件'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField), name);

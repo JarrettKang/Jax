@@ -51,6 +51,8 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> get history => List.unmodifiable(_history);
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
+  JaxEvent? get runningEvent =>
+      _events.where((event) => event.status == EventStatus.running).firstOrNull;
 
   Future<void> load() async {
     _loading = true;

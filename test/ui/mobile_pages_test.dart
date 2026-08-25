@@ -6,6 +6,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('all event actions remain usable on a narrow phone', (
@@ -47,6 +48,7 @@ void main() {
 
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
 
     final pendingName = find.text('这是一个很长的未开始事件名称用于验证手机布局');
     expect(

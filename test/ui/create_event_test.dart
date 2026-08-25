@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('creates an event without exposing its id', (tester) async {
@@ -15,6 +16,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.text('新建事件'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '学习 Flutter');
@@ -30,6 +32,7 @@ void main() {
     final repository = MemoryRepository();
     await tester.pumpWidget(JaxApp(repository: repository));
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.text('新建事件'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '   ');

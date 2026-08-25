@@ -50,12 +50,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('我们来做点什么？'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('manual-save')));
     await tester.pumpAndSettle();
     expect(find.text('保存成功'), findsOneWidget);
     expect(find.textContaining('最后保存：'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('我们来做点什么？'));
     await tester.pumpAndSettle();
 
     Future<void> create(String name) async {
@@ -69,6 +72,12 @@ void main() {
     await create('任务 A');
     now = now.add(const Duration(minutes: 1));
     await tester.tap(find.byKey(const ValueKey('start-event-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('当前正在执行：'), findsOneWidget);
+    expect(find.text('任务 A'), findsOneWidget);
+    await tester.tap(find.text('事件'));
     await tester.pumpAndSettle();
     await create('任务 B');
 
@@ -120,6 +129,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('事件'));
+    await tester.pumpAndSettle();
     expect(find.text('任务 B'), findsOneWidget);
     expect((await repository.getEvent('event-b'))!.status, EventStatus.paused);
     await tester.tap(find.text('记录'));

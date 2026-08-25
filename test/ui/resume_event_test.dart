@@ -5,6 +5,7 @@ import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('resumes a paused event from the UI', (tester) async {
@@ -23,6 +24,7 @@ void main() {
       JaxApp(repository: repository, newId: () => 'new', now: () => time),
     );
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('resume-one')));
     await tester.pump();
     expect(find.textContaining('正在进行'), findsOneWidget);

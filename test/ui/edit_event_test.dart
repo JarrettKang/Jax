@@ -5,6 +5,7 @@ import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('edits a pending event through the UI', (tester) async {
@@ -20,6 +21,7 @@ void main() {
     ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('edit-one')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '新名称');

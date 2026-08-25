@@ -14,6 +14,8 @@ void main() {
 
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
+    expect(_navigationLabels(tester), ['首页', '事件', '记录']);
+    expect(find.text('我们来做点什么？'), findsOneWidget);
     expect(find.text('已加载本地数据'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -30,9 +32,24 @@ void main() {
 
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+    expect(_navigationLabels(tester), ['首页', '事件', '记录']);
+    expect(find.text('我们来做点什么？'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
+
+List<String> _navigationLabels(WidgetTester tester) => tester
+    .widgetList<Text>(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) => widget is NavigationBar || widget is NavigationRail,
+        ),
+        matching: find.byType(Text),
+      ),
+    )
+    .map((text) => text.data)
+    .whereType<String>()
+    .toList();
 
 Future<void> _setViewport(
   WidgetTester tester,
