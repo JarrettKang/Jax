@@ -120,6 +120,13 @@ Butler2/
 
 具体文件可以随实现进行小范围调整，但三层边界和依赖方向不可改变。
 
+### 4.4 Android A0 平台适配
+
+- Android 与 Windows 使用同一 Flutter 工程、Core、数据模型、Repository 和可复用 UI，不建立 Android 专用业务层。
+- 平台入口仅选择本地数据库驱动与路径：Windows 使用 `sqflite_common_ffi` 和 `%APPDATA%`，Android 使用 `sqflite` 和应用私有数据库目录。
+- Windows 正常关闭自动暂停仅注册于 Windows；Android 后台、锁屏、返回键和进程回收策略留待 Android v0.1 功能适配阶段确认。
+- A0 仅要求 Android 16/API 36 模拟器 Debug 启动；Debug 包名暂为 `com.example.jax`，正式发布前必须确认应用 ID。
+
 ## 5. 数据模型
 
 ### 5.1 `events` 表

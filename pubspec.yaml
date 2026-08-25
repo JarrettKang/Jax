@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   path: ^1.9.1
+  sqflite: ^2.4.3
   sqflite_common_ffi: ^2.4.2+1
   uuid: ^4.6.0
 
@@ -24,8 +25,8 @@ flutter:
   uses-material-design: true
 
 # Windows includes winsqlite3.dll. Reusing it keeps v0.1 builds offline and
-# avoids downloading native binaries during tests. Android will supply its own
-# Data-layer SQLite binding in the later mobile phase.
+# avoids downloading native binaries during tests. Android uses the sqflite
+# platform driver while sharing the same schema and Repository implementation.
 hooks:
   user_defines:
     sqlite3:

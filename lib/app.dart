@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'dart:ui' show AppExitResponse;
@@ -35,7 +37,7 @@ class JaxApp extends StatefulWidget {
 class _JaxAppState extends State<JaxApp> {
   late final EventController _controller;
   late final PrepareForShutdown _prepareForShutdown;
-  late final AppLifecycleListener _lifecycleListener;
+  AppLifecycleListener? _lifecycleListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   var _selectedIndex = 0;
   var _saving = false;
@@ -53,9 +55,11 @@ class _JaxAppState extends State<JaxApp> {
       saveService: widget.saveService,
       now: widget.now,
     );
-    _lifecycleListener = AppLifecycleListener(
-      onExitRequested: _handleExitRequest,
-    );
+    if (Platform.isWindows) {
+      _lifecycleListener = AppLifecycleListener(
+        onExitRequested: _handleExitRequest,
+      );
+    }
     _controller.load();
   }
 
@@ -98,7 +102,7 @@ class _JaxAppState extends State<JaxApp> {
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    _lifecycleListener?.dispose();
     _controller.dispose();
     super.dispose();
   }

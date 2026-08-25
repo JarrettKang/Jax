@@ -9,7 +9,14 @@ class AppDatabase {
   static Future<AppDatabase> open(String path) => _open(path);
   static Future<AppDatabase> _open(String path) async {
     sqfliteFfiInit();
-    final database = await databaseFactoryFfi.openDatabase(
+    return openWithFactory(path, databaseFactoryFfi);
+  }
+
+  static Future<AppDatabase> openWithFactory(
+    String path,
+    DatabaseFactory factory,
+  ) async {
+    final database = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
         version: schemaVersion,
