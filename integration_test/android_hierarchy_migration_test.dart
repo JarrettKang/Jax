@@ -14,7 +14,7 @@ import 'package:sqflite/sqflite.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Android sqflite migrates v2 hierarchy data to v3', (
+  testWidgets('Android sqflite migrates v2 hierarchy data to v4', (
     tester,
   ) async {
     expect(Platform.isAndroid, isTrue);
@@ -66,9 +66,11 @@ void main() {
         .getEvent('phone-existing');
     final version = await upgraded.database.rawQuery('PRAGMA user_version');
 
-    expect(version.single['user_version'], 3);
+    expect(version.single['user_version'], 4);
     expect(event?.name, '真机旧数据模型');
     expect(event?.parentEventId, isNull);
+    final columns = await upgraded.database.rawQuery('PRAGMA table_info(events)');
+    expect(columns.map((row) => row['name']), contains('sort_order'));
 
     JaxEvent pending(String id, {String? parent}) => JaxEvent(
       id: id,

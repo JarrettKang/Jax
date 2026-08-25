@@ -62,7 +62,7 @@ void main() {
     final event = await repository.getEvent('existing');
     final segments = await repository.getRunSegments('existing');
 
-    expect(AppDatabase.schemaVersion, 3);
+    expect(AppDatabase.schemaVersion, 4);
     expect(event?.parentEventId, isNull);
     expect(event?.status.name, 'completed');
     expect(event?.firstStartedAt, started);
@@ -73,5 +73,6 @@ void main() {
       'PRAGMA table_info(events)',
     );
     expect(columns.map((row) => row['name']), contains('parent_event_id'));
+    expect(columns.map((row) => row['name']), contains('sort_order'));
   });
 }

@@ -137,9 +137,41 @@ class SqliteEventRepository implements EventRepository {
       'events',
       where: 'parent_event_id = ?',
       whereArgs: [parentEventId],
-      orderBy: 'created_at_utc ASC, id ASC',
+      orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
     );
     return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<List<JaxEvent>> getOrderedSiblings(String eventId) async {
+    final event = await getEvent(eventId);
+    if (event == null) throw StateError('Event not found: $eventId');
+    return _querySiblings(event.parentEventId);
+  }
+
+  @override
+  Future<List<JaxEvent>> getOrderedTopLevelEvents() => _querySiblings(null);
+
+  Future<List<JaxEvent>> _querySiblings(String? parentEventId) async {
+    final rows = await _appDatabase.database.query(
+      'events',
+      where: parentEventId == null
+          ? 'parent_event_id IS NULL'
+          : 'parent_event_id = ?',
+      whereArgs: parentEventId == null ? null : [parentEventId],
+      orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  Future<int> _nextSortOrder(dynamic executor, String? parentEventId) async {
+    final rows = await executor.rawQuery(
+      parentEventId == null
+          ? 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM events WHERE parent_event_id IS NULL'
+          : 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM events WHERE parent_event_id = ?',
+      parentEventId == null ? null : [parentEventId],
+    );
+    return rows.single['next_order']! as int;
   }
 
   @override
@@ -187,6 +219,7 @@ class SqliteEventRepository implements EventRepository {
         'events',
         {
           'parent_event_id': parentEventId,
+          'sort_order': await _nextSortOrder(transaction, parentEventId),
           'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
         },
         where: 'id = ?',
@@ -270,6 +303,7 @@ class SqliteEventRepository implements EventRepository {
     'name': event.name,
     'status': event.status.name,
     'parent_event_id': event.parentEventId,
+    'sort_order': event.sortOrder,
     'first_started_at_utc': event.firstStartedAt?.millisecondsSinceEpoch,
     'completed_at_utc': event.completedAt?.millisecondsSinceEpoch,
     'created_at_utc': event.createdAt.millisecondsSinceEpoch,
@@ -289,6 +323,7 @@ class SqliteEventRepository implements EventRepository {
       name: row['name']! as String,
       status: EventStatus.fromStorage(row['status']! as String),
       parentEventId: row['parent_event_id'] as String?,
+      sortOrder: row['sort_order'] as int?,
       firstStartedAt: optional('first_started_at_utc'),
       completedAt: optional('completed_at_utc'),
       createdAt: DateTime.fromMillisecondsSinceEpoch(

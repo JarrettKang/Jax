@@ -102,3 +102,14 @@
 
 - F2.1–F2.7 每项均测试先行、全量回归、双端 Debug 验证、独立 commit 后再继续。migration 先在临时库、Windows 和 Android 模拟器验证；未经单独确认不得在真机真实数据库升级。
 - 额度不足时优先停在测试通过、已提交且工作区干净的增量边界；若中途暂停则维护 `CODEX_RESUME.md`，准确记录测试、schema、migration、Git、平台进程和恢复后的第一个具体动作。
+
+## 5. F3：同级事件排序
+
+- F3 延续 Core + Data + UI、Windows/Android 共用模型、Local First、Debug 优先和每个增量独立测试/回归/提交规则；不生成 Release，不连接真机。
+- F3.1：排序数据模型与 v3→v4 migration，使用 `created_at_utc + id` 为旧数据建立稳定初始顺序，并提供有序查询。
+- F3.2：Core/Repository 同级重排序、新建末尾、层级移动/解除后进入新集合末尾及原子事务。
+- F3.3：事件与记录页面的共享排序入口、逐层有序展示和窄屏/大字体适配。
+- F3.4：首页同级列表按用户定义顺序展示，状态仍来自现有 Event。
+- F3.5：全量测试、Windows/Android Debug、migration 和回归验收；完成后形成稳定 Debug 基线，不生成 Release。
+- 当前状态：F3.1 开始前，F2.8 已完成，schema 当前为 v3，Android 真机真实数据库不参与 migration。
+- F3.1 状态：已完成。新增 `sort_order` 模型字段和 v3→v4 migration；旧 v2→v4 数据按 `created_at_utc + id` 建立稳定初始顺序，顶级及任意上层下的同级查询按该顺序返回，reopen 后保持。101 项自动化测试、静态分析、Windows Debug 回归和 Android 模拟器 migration 通过；真机未连接、未执行 migration。

@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 3;
+  static const schemaVersion = 4;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -34,6 +34,7 @@ class AppDatabase {
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
       status TEXT NOT NULL CHECK(status IN ('pending','running','paused','completed')),
       parent_event_id TEXT REFERENCES events(id) ON DELETE RESTRICT,
+      sort_order INTEGER,
       first_started_at_utc INTEGER,
       completed_at_utc INTEGER,
       created_at_utc INTEGER NOT NULL,
@@ -52,6 +53,19 @@ class AppDatabase {
       await database.execute(
         'ALTER TABLE events ADD COLUMN parent_event_id TEXT REFERENCES events(id) ON DELETE RESTRICT',
       );
+    }
+    if (oldVersion < 4) {
+      await database.execute(
+        'ALTER TABLE events ADD COLUMN sort_order INTEGER',
+      );
+      await database.execute('''UPDATE events
+        SET sort_order = (
+          SELECT COUNT(*) - 1 FROM events sibling
+          WHERE sibling.parent_event_id IS events.parent_event_id
+            AND (sibling.created_at_utc < events.created_at_utc
+              OR (sibling.created_at_utc = events.created_at_utc
+                AND sibling.id <= events.id))
+        )''');
     }
   }
 

@@ -13,6 +13,8 @@ abstract interface class EventRepository {
   Future<void> pauseEvent(JaxEvent event, RunSegment segment);
   Future<JaxEvent?> getParent(String eventId);
   Future<List<JaxEvent>> getDirectChildren(String parentEventId);
+  Future<List<JaxEvent>> getOrderedSiblings(String eventId);
+  Future<List<JaxEvent>> getOrderedTopLevelEvents();
   Future<void> updateParent(
     String eventId,
     String? parentEventId,

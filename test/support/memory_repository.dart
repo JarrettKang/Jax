@@ -46,7 +46,28 @@ class MemoryRepository implements EventRepository {
 
   @override
   Future<List<JaxEvent>> getDirectChildren(String parentEventId) async =>
-      events.where((event) => event.parentEventId == parentEventId).toList();
+      _ordered(events.where((event) => event.parentEventId == parentEventId));
+
+  @override
+  Future<List<JaxEvent>> getOrderedSiblings(String eventId) async {
+    final event = await getEvent(eventId);
+    if (event == null) throw StateError('Event not found: $eventId');
+    return _ordered(
+      events.where((item) => item.parentEventId == event.parentEventId),
+    );
+  }
+
+  @override
+  Future<List<JaxEvent>> getOrderedTopLevelEvents() async =>
+      _ordered(events.where((event) => event.parentEventId == null));
+
+  List<JaxEvent> _ordered(Iterable<JaxEvent> source) => source.toList()
+    ..sort((a, b) {
+      final order = (a.sortOrder ?? 1 << 30).compareTo(b.sortOrder ?? 1 << 30);
+      if (order != 0) return order;
+      final created = a.createdAt.compareTo(b.createdAt);
+      return created != 0 ? created : a.id.compareTo(b.id);
+    });
 
   @override
   Future<void> updateParent(

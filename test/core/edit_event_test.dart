@@ -76,6 +76,11 @@ class _Repository implements EventRepository {
   Future<List<JaxEvent>> getDirectChildren(String parentEventId) async =>
       const [];
   @override
+  Future<List<JaxEvent>> getOrderedSiblings(String eventId) async =>
+      List.of(events);
+  @override
+  Future<List<JaxEvent>> getOrderedTopLevelEvents() async => List.of(events);
+  @override
   Future<void> updateParent(
     String eventId,
     String? parentEventId,
