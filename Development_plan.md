@@ -124,8 +124,12 @@ Butler2/
 
 - Android 与 Windows 使用同一 Flutter 工程、Core、数据模型、Repository 和可复用 UI，不建立 Android 专用业务层。
 - 平台入口仅选择本地数据库驱动与路径：Windows 使用 `sqflite_common_ffi` 和 `%APPDATA%`，Android 使用 `sqflite` 和应用私有数据库目录。
-- Windows 正常关闭自动暂停仅注册于 Windows；Android 后台、锁屏、返回键和进程回收策略留待 Android v0.1 功能适配阶段确认。
-- A0 仅要求 Android 16/API 36 模拟器 Debug 启动；Debug 包名暂为 `com.example.jax`，正式发布前必须确认应用 ID。
+- Windows 正常关闭自动暂停仅注册于 Windows；Android 生命周期按 `PRD.md` 的 Android v0.1 平台规则执行。
+- A0 已完成 Android 16/API 36 模拟器 Debug 启动；Android application ID 确认为 `com.example.jax`。
+
+### 4.5 Android v0.1 阶段入口
+
+Android v0.1 的兼容性结论、平台规则、A1–A6 增量与专属验收流程见 `Android_v0.1_Development_plan.md`。本阶段继续复用现有 Core、Data schema 和 Repository 语义，只实现经测试证明必要的平台与手机 UI 适配；开发期间仅使用 Debug，全部 Debug 验收通过后等待用户决定是否进入 Android Release。
 
 ## 5. 数据模型
 
