@@ -18,6 +18,7 @@ import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/resume_event.dart';
 import '../../core/use_cases/start_event.dart';
 import '../../core/use_cases/update_event_parent.dart';
+import '../../core/use_cases/reorder_sibling.dart';
 
 class EventController extends ChangeNotifier {
   EventController({
@@ -36,7 +37,8 @@ class EventController extends ChangeNotifier {
        _start = StartEvent(repository: repository, newId: newId, now: now),
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
-       _updateParent = UpdateEventParent(repository: repository, now: now);
+       _updateParent = UpdateEventParent(repository: repository, now: now),
+       _reorder = ReorderSibling(repository);
   final EventRepository _repository;
   final Clock _now;
   final CompleteEvent _complete;
@@ -50,6 +52,7 @@ class EventController extends ChangeNotifier {
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
   final UpdateEventParent _updateParent;
+  final ReorderSibling _reorder;
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
@@ -79,7 +82,7 @@ class EventController extends ChangeNotifier {
   }
 
   Future<void> _reload() async {
-    _events = await _repository.getIncompleteEvents();
+    _events = _orderTree(await _repository.getIncompleteEvents());
     _history = await _repository.getCompletedEvents();
     final roots = <JaxEvent>[];
     for (final event in _history) {
@@ -88,7 +91,7 @@ class EventController extends ChangeNotifier {
         roots.add(event);
       }
     }
-    _historyRoots = roots;
+    _historyRoots = _sortByOrder(roots);
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
     }
@@ -122,6 +125,22 @@ class EventController extends ChangeNotifier {
       _hierarchy.childCandidates(id);
   Future<String?> setParent(String id, String? parentId) =>
       _change(() => _updateParent(id, parentId));
+  Future<String?> reorder(String id, int targetIndex) =>
+      _change(() => _reorder(id, targetIndex));
+  Future<String?> moveUp(String id) async {
+    final siblings = await _repository.getOrderedSiblings(id);
+    final index = siblings.indexWhere((event) => event.id == id);
+    return index <= 0 ? null : reorder(id, index - 1);
+  }
+
+  Future<String?> moveDown(String id) async {
+    final siblings = await _repository.getOrderedSiblings(id);
+    final index = siblings.indexWhere((event) => event.id == id);
+    return index < 0 || index >= siblings.length - 1
+        ? null
+        : reorder(id, index + 1);
+  }
+
   Future<Duration> directDuration(String id) => _durations.directDuration(id);
   Future<Duration> totalDuration(String id) => _durations.totalDuration(id);
   Duration elapsedFor(JaxEvent event) =>
@@ -146,6 +165,35 @@ class EventController extends ChangeNotifier {
     _lastSavedAt = _now().toLocal();
     notifyListeners();
   }
+
+  List<JaxEvent> _orderTree(List<JaxEvent> source) {
+    final byParent = <String?, List<JaxEvent>>{};
+    final ids = source.map((event) => event.id).toSet();
+    for (final event in source) {
+      final parent = ids.contains(event.parentEventId)
+          ? event.parentEventId
+          : null;
+      byParent.putIfAbsent(parent, () => []).add(event);
+    }
+    final result = <JaxEvent>[];
+    void visit(String? parent) {
+      for (final event in _sortByOrder(byParent[parent] ?? const [])) {
+        result.add(event);
+        visit(event.id);
+      }
+    }
+
+    visit(null);
+    return result;
+  }
+
+  List<JaxEvent> _sortByOrder(Iterable<JaxEvent> source) => source.toList()
+    ..sort((a, b) {
+      final order = (a.sortOrder ?? 1 << 30).compareTo(b.sortOrder ?? 1 << 30);
+      if (order != 0) return order;
+      final created = a.createdAt.compareTo(b.createdAt);
+      return created != 0 ? created : a.id.compareTo(b.id);
+    });
 
   void _syncTicker() {
     final running = _events.any((event) => event.status == EventStatus.running);

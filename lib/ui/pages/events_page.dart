@@ -84,6 +84,18 @@ class EventsPage extends StatelessWidget {
         event: event,
       ),
     ),
+    IconButton(
+      key: ValueKey('move-up-${event.id}'),
+      icon: const Icon(Icons.arrow_upward),
+      tooltip: '上移',
+      onPressed: () => _run(context, () => controller.moveUp(event.id)),
+    ),
+    IconButton(
+      key: ValueKey('move-down-${event.id}'),
+      icon: const Icon(Icons.arrow_downward),
+      tooltip: '下移',
+      onPressed: () => _run(context, () => controller.moveDown(event.id)),
+    ),
     if (event.status == EventStatus.pending)
       IconButton(
         key: ValueKey('start-${event.id}'),

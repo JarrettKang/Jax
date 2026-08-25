@@ -49,6 +49,18 @@ class HistoryPage extends StatelessWidget {
                             tooltip: '删除记录',
                             onPressed: () => _confirmDelete(context, event),
                           ),
+                          IconButton(
+                            key: ValueKey('move-up-history-${event.id}'),
+                            icon: const Icon(Icons.arrow_upward),
+                            tooltip: '上移',
+                            onPressed: () => _reorder(context, event, true),
+                          ),
+                          IconButton(
+                            key: ValueKey('move-down-history-${event.id}'),
+                            icon: const Icon(Icons.arrow_downward),
+                            tooltip: '下移',
+                            onPressed: () => _reorder(context, event, false),
+                          ),
                         ];
                         if (constraints.maxWidth < 600) {
                           return Padding(
@@ -108,6 +120,16 @@ class HistoryPage extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final error = await controller.deleteHistory(event.id);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _reorder(BuildContext context, JaxEvent event, bool up) async {
+    final error = up
+        ? await controller.moveUp(event.id)
+        : await controller.moveDown(event.id);
     if (error != null && context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error)));
