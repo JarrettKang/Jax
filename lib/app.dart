@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'dart:ui' show AppExitResponse;
@@ -14,6 +15,13 @@ import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
 import 'ui/pages/history_page.dart';
 import 'ui/pages/home_page.dart';
+
+ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
+  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
+  fontFamily: platform == TargetPlatform.windows ? 'Microsoft YaHei UI' : null,
+  platform: platform,
+  useMaterial3: true,
+);
 
 class JaxApp extends StatefulWidget {
   JaxApp({
@@ -145,10 +153,7 @@ class _JaxAppState extends State<JaxApp> {
       scaffoldMessengerKey: _messengerKey,
       title: 'Jax',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
-        useMaterial3: true,
-      ),
+      theme: buildJaxTheme(defaultTargetPlatform),
       home: Builder(
         builder: (context) {
           final compact = MediaQuery.sizeOf(context).width < 600;

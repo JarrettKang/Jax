@@ -49,4 +49,8 @@
 
 - 文档、测试和实现作为 F1 完整功能提交，建议提交信息：`feat: add shared Jax home page`。
 - 完成条件：全部自动化测试、静态分析和双端 Debug 验收通过，diff 无无关修改，独立提交后工作区干净。
-- 当前状态：已完成。问候语边界、首页状态、响应式导航及全部历史自动化测试共 70 项通过；Windows Debug 集成测试、Android 模拟器 Debug 完整流程和 Android `sqflite` 契约测试均通过；`flutter analyze` 无问题。模拟器主程序人工可见性检查确认当地问候、三项底部导航和首页窄屏布局正常。F1 未修改 Data 或 SQLite schema，未执行 Release。
+- 当前状态：已完成。问候语边界、首页状态、响应式导航及全部历史自动化测试共 72 项通过；Windows Debug 集成测试、Android 模拟器 Debug 完整流程和 Android `sqflite` 契约测试均通过；`flutter analyze` 无问题。模拟器主程序人工可见性检查确认当地问候、三项底部导航和首页窄屏布局正常。F1 未修改 Data 或 SQLite schema，未执行 Release。
+
+### 3.6 F1 UI 修复记录
+
+- 2026-08-25：修复 Windows 默认字体发生中文逐字形 fallback、导致同一句文字视觉字重不一致的问题；Windows Theme 统一使用系统自带的 Microsoft YaHei UI，保留 Material 原有字号和字重层级，Android 继续使用平台默认字体。
