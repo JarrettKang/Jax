@@ -5,7 +5,7 @@
 - 需求基线：`PRD.md`
 - 历史基线：`Development_plan.md`、`Android_v0.1_Development_plan.md`
 - 目标平台：Windows、Android
-- 当前增量：F2.6：首页层级上下文
+- 当前增量：F2.7：记录栏目层级统计
 - 状态：F2 开发中
 - 更新日期：2026-08-25
 
@@ -86,6 +86,7 @@
 ### F2.6：首页层级上下文
 
 - running Event 有有效上下文时显示直接上层和同级 Event；顶级或无有效同级时保持 F1 首页。
+- 当前状态：已完成。首页从每次 Repository reload 得到 running Event 的直接上层和其他同级；仅在同时存在直接上层及至少一个其他同级时显示，上下文不足时严格保持 F1。99 项自动化测试、静态分析及 Windows/Android 模拟器 Debug 完整工作流通过；未新增持久化状态或平台专用 UI。
 
 ### F2.7：记录栏目层级统计
 

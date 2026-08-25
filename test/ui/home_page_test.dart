@@ -59,6 +59,40 @@ void main() {
     expect(find.text('上午好，我是 Jax'), findsOneWidget);
   });
 
+  testWidgets('shows parent and siblings only with meaningful context', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 25, 12);
+    final repository = MemoryRepository([
+      _event('parent', '论文项目', EventStatus.paused, now),
+      _event('running', '修改正文', EventStatus.running, now, parent: 'parent'),
+      _event('sibling', '整理参考文献', EventStatus.pending, now, parent: 'parent'),
+    ]);
+
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+
+    expect(find.text('上层：论文项目'), findsOneWidget);
+    expect(find.text('同级事件：整理参考文献'), findsOneWidget);
+  });
+
+  testWidgets('keeps F1 home when running Event has no other sibling', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 25, 12);
+    final repository = MemoryRepository([
+      _event('parent', '论文项目', EventStatus.paused, now),
+      _event('running', '修改正文', EventStatus.running, now, parent: 'parent'),
+    ]);
+
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('home-running-parent')), findsNothing);
+    expect(find.byKey(const ValueKey('home-running-siblings')), findsNothing);
+    expect(find.text('修改正文'), findsOneWidget);
+  });
+
   testWidgets('tracks start pause resume and complete state changes', (
     tester,
   ) async {
@@ -113,13 +147,19 @@ void main() {
   });
 }
 
-JaxEvent _event(String id, String name, EventStatus status, DateTime now) =>
-    JaxEvent(
-      id: id,
-      name: name,
-      status: status,
-      createdAt: now,
-      updatedAt: now,
-      firstStartedAt: status == EventStatus.pending ? null : now,
-      completedAt: status == EventStatus.completed ? now : null,
-    );
+JaxEvent _event(
+  String id,
+  String name,
+  EventStatus status,
+  DateTime now, {
+  String? parent,
+}) => JaxEvent(
+  id: id,
+  name: name,
+  status: status,
+  parentEventId: parent,
+  createdAt: now,
+  updatedAt: now,
+  firstStartedAt: status == EventStatus.pending ? null : now,
+  completedAt: status == EventStatus.completed ? now : null,
+);

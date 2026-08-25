@@ -50,6 +50,8 @@ class EventController extends ChangeNotifier {
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
+  JaxEvent? _runningParent;
+  List<JaxEvent> _runningSiblings = const [];
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
@@ -59,6 +61,9 @@ class EventController extends ChangeNotifier {
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
       _events.where((event) => event.status == EventStatus.running).firstOrNull;
+  JaxEvent? get runningParent =>
+      _runningSiblings.isEmpty ? null : _runningParent;
+  List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
 
   Future<void> load() async {
     _loading = true;
@@ -74,6 +79,15 @@ class EventController extends ChangeNotifier {
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
     }
+    final running = runningEvent;
+    _runningParent = running == null
+        ? null
+        : await _repository.getParent(running.id);
+    _runningSiblings = _runningParent == null || running == null
+        ? const []
+        : (await _repository.getDirectChildren(_runningParent!.id))
+              .where((event) => event.id != running.id)
+              .toList(growable: false);
     _syncTicker();
   }
 

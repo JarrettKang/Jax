@@ -109,6 +109,18 @@ class _HomePageState extends State<HomePage> {
                               key: const ValueKey('home-running-event'),
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
+                            if (widget.controller.runningParent != null) ...[
+                              const Divider(height: 32),
+                              Text(
+                                '上层：${widget.controller.runningParent!.name}',
+                                key: const ValueKey('home-running-parent'),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '同级事件：${widget.controller.runningSiblings.map((event) => event.name).join('、')}',
+                                key: const ValueKey('home-running-siblings'),
+                              ),
+                            ],
                           ],
                         ),
                       ),
