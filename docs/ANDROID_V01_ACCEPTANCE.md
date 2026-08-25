@@ -64,3 +64,8 @@ Pixel 7 模拟器 Debug 人工验证确认：保存状态位于手机 AppBar 的
 - Android 生产入口 Debug APK：构建、安装和启动通过。
 - 最终生命周期复验：Home 后返回以及 `am force-stop` 后显式重启均恢复 `running`，开放片段 `ended_at_utc` 仍为 `NULL`，界面持续时间包含离开期间。
 - Windows 与 Android 均未生成 Release；等待用户决定 Android Release / 真机验收阶段。
+
+## 真机 Debug 验收
+
+Private device rollout evidence omitted from this historical version.
+
