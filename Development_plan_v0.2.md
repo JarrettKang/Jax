@@ -5,7 +5,7 @@
 - 需求基线：`PRD.md`
 - 历史基线：`Development_plan.md`、`Android_v0.1_Development_plan.md`
 - 目标平台：Windows、Android
-- 当前增量：F2.2：层级 Core 规则
+- 当前增量：F2.3：层级执行状态
 - 状态：F2 开发中
 - 更新日期：2026-08-25
 
@@ -66,6 +66,7 @@
 ### F2.2：层级 Core 规则
 
 - 设置、移动、解除关系；自身/后代无环硬校验；事件/记录候选范围；有下层时删除保护。Core 与 Repository 双重校验并使用事务。
+- 当前状态：已完成。Core 支持设置/移动/解除、无环与栏目状态候选规则；pending/completed 删除均保护直接下层；SQLite Repository 在事务内再次验证事件存在、状态组合和递归无环。全部 81 项自动化测试、静态分析、Windows Debug 集成及 Android 模拟器 sqflite 规则测试通过。
 
 ### F2.3：层级执行状态
 

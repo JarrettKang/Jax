@@ -149,6 +149,40 @@ class SqliteEventRepository implements EventRepository {
     DateTime updatedAt,
   ) async {
     await _appDatabase.database.transaction((transaction) async {
+      final childRows = await transaction.query(
+        'events',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (childRows.isEmpty) throw StateError('Event not found: $eventId');
+      if (parentEventId != null) {
+        final parentRows = await transaction.query(
+          'events',
+          columns: ['status'],
+          where: 'id = ?',
+          whereArgs: [parentEventId],
+          limit: 1,
+        );
+        if (parentRows.isEmpty) {
+          throw StateError('Parent event not found: $parentEventId');
+        }
+        if (childRows.single['status'] != EventStatus.completed.name &&
+            parentRows.single['status'] == EventStatus.completed.name) {
+          throw StateError('Incomplete event cannot have completed parent');
+        }
+        final cycle = await transaction.rawQuery(
+          '''WITH RECURSIVE ancestors(id, parent_event_id) AS (
+               SELECT id, parent_event_id FROM events WHERE id = ?
+               UNION ALL
+               SELECT event.id, event.parent_event_id FROM events event
+               JOIN ancestors ON event.id = ancestors.parent_event_id
+             ) SELECT 1 FROM ancestors WHERE id = ? LIMIT 1''',
+          [parentEventId, eventId],
+        );
+        if (cycle.isNotEmpty) throw StateError('Hierarchy cycle detected');
+      }
       final count = await transaction.update(
         'events',
         {

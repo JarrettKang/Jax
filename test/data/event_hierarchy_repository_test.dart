@@ -58,4 +58,32 @@ void main() {
       throwsA(anything),
     );
   });
+
+  test(
+    'repository transaction rejects cycles and invalid status nesting',
+    () async {
+      final parent = event('parent');
+      final child = event('child', parentId: parent.id);
+      final completed = JaxEvent(
+        id: 'completed',
+        name: 'completed',
+        status: EventStatus.completed,
+        createdAt: time,
+        updatedAt: time,
+      );
+      await repository.insertEvent(parent);
+      await repository.insertEvent(child);
+      await repository.insertEvent(completed);
+
+      await expectLater(
+        repository.updateParent(parent.id, child.id, time),
+        throwsA(anything),
+      );
+      await expectLater(
+        repository.updateParent(parent.id, completed.id, time),
+        throwsA(anything),
+      );
+      expect((await repository.getEvent(parent.id))?.parentEventId, isNull);
+    },
+  );
 }

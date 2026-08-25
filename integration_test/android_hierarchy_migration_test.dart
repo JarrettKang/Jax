@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:jax/core/entities/event_status.dart';
+import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 import 'package:path/path.dart' as path;
@@ -65,5 +67,22 @@ void main() {
     expect(version.single['user_version'], 3);
     expect(event?.name, '真机旧数据模型');
     expect(event?.parentEventId, isNull);
+
+    JaxEvent pending(String id, {String? parent}) => JaxEvent(
+      id: id,
+      name: id,
+      status: EventStatus.pending,
+      parentEventId: parent,
+      createdAt: time,
+      updatedAt: time,
+    );
+    final repository = SqliteEventRepository(upgraded);
+    await repository.insertEvent(pending('parent'));
+    await repository.insertEvent(pending('child', parent: 'parent'));
+    await expectLater(
+      repository.updateParent('parent', 'child', time),
+      throwsA(anything),
+    );
+    expect((await repository.getEvent('parent'))?.parentEventId, isNull);
   });
 }
