@@ -116,3 +116,4 @@
 - F3.2 状态：已完成。Core `ReorderSibling` 与 SQLite/Memory Repository 支持同级内部重排；新建、换上层和解除上层在目标集合末尾，排序与 hierarchy 通过事务一致更新，状态/层级/执行事实不被重排改变。107 项自动化测试、静态分析、Windows Debug 回归和 Android 模拟器 sqflite migration/排序验收通过。
 - F3.3 状态：已完成。事件页、记录页及记录详情复用共享排序控制，逐层展示同级顺序；新增上移/下移操作不改变状态、层级或执行事实，并覆盖窄屏与大字体布局。109 项自动化测试、`flutter analyze`、Windows Debug 层级工作流和 Android 模拟器 Debug 层级工作流通过；未修改 SQLite schema，真机未连接。
 - F3.4 状态：已完成。首页复用现有有序 Repository 同级查询展示上下文，同级事件名称保持用户定义顺序，未增加首页专用状态或数据；新增首页顺序 Widget 测试通过。110 项自动化测试、`flutter analyze`、Windows/Android Debug 回归通过；未修改 SQLite schema，真机未连接。
+- F3.5 状态：已完成。全量 110 项 Core/Data/Widget 自动化测试、`flutter analyze`、Windows v0.1/v0.2 Debug 工作流、Android 模拟器 v0.1 工作流及 v2→v4 sqflite migration/排序回归全部通过；schema 当前为 v4，未连接或修改 Android 真机，未生成 Release。F3 形成稳定 Debug 基线。
