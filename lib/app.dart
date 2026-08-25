@@ -64,6 +64,7 @@ class _JaxAppState extends State<JaxApp> {
     setState(() => _saving = true);
     try {
       await widget.saveService.flush();
+      _controller.recordSaveSuccess();
       _messengerKey.currentState?.showSnackBar(
         const SnackBar(content: Text('保存成功')),
       );
@@ -86,6 +87,13 @@ class _JaxAppState extends State<JaxApp> {
       );
       return AppExitResponse.cancel;
     }
+  }
+
+  String _formatSaveStatus(DateTime? savedAt) {
+    if (savedAt == null) return '已加载本地数据';
+    final local = savedAt.toLocal();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '最后保存：${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
   @override
@@ -114,6 +122,20 @@ class _JaxAppState extends State<JaxApp> {
         appBar: AppBar(
           title: const Text('Jax'),
           actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, _) => Text(
+                    _saving
+                        ? '正在保存…'
+                        : _formatSaveStatus(_controller.lastSavedAt),
+                    key: const ValueKey('save-status'),
+                  ),
+                ),
+              ),
+            ),
             IconButton(
               key: const ValueKey('manual-save'),
               tooltip: _saving ? '正在保存' : '保存',

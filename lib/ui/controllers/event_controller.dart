@@ -45,10 +45,12 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
   bool _loading = true;
+  DateTime? _lastSavedAt;
   Timer? _ticker;
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   bool get loading => _loading;
+  DateTime? get lastSavedAt => _lastSavedAt;
 
   Future<void> load() async {
     _loading = true;
@@ -85,13 +87,18 @@ class EventController extends ChangeNotifier {
     try {
       await action();
       await _reload();
-      notifyListeners();
+      recordSaveSuccess();
       return null;
     } on DomainFailure catch (failure) {
       return failure.message;
     } catch (_) {
       return '保存失败，请重试';
     }
+  }
+
+  void recordSaveSuccess() {
+    _lastSavedAt = _now().toLocal();
+    notifyListeners();
   }
 
   void _syncTicker() {
