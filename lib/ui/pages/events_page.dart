@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
+import 'event_hierarchy_dialog.dart';
 
 class EventsPage extends StatelessWidget {
   const EventsPage({required this.controller, super.key});
@@ -73,6 +74,16 @@ class EventsPage extends StatelessWidget {
       : '未开始';
 
   List<Widget> _actions(BuildContext context, JaxEvent event) => [
+    IconButton(
+      key: ValueKey('hierarchy-${event.id}'),
+      icon: const Icon(Icons.account_tree_outlined),
+      tooltip: '层级详情',
+      onPressed: () => showEventHierarchyDialog(
+        context,
+        controller: controller,
+        event: event,
+      ),
+    ),
     if (event.status == EventStatus.pending)
       IconButton(
         key: ValueKey('start-${event.id}'),

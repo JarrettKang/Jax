@@ -7,6 +7,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
+import '../../core/services/event_hierarchy_service.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
@@ -15,6 +16,7 @@ import '../../core/use_cases/edit_event.dart';
 import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/resume_event.dart';
 import '../../core/use_cases/start_event.dart';
+import '../../core/use_cases/update_event_parent.dart';
 
 class EventController extends ChangeNotifier {
   EventController({
@@ -30,7 +32,9 @@ class EventController extends ChangeNotifier {
        _deleteHistory = DeleteHistoryRecord(repository),
        _pause = PauseEvent(repository: repository, now: now),
        _resume = ResumeEvent(repository: repository, newId: newId, now: now),
-       _start = StartEvent(repository: repository, newId: newId, now: now);
+       _start = StartEvent(repository: repository, newId: newId, now: now),
+       _hierarchy = EventHierarchyService(repository),
+       _updateParent = UpdateEventParent(repository: repository, now: now);
   final EventRepository _repository;
   final Clock _now;
   final CompleteEvent _complete;
@@ -41,6 +45,8 @@ class EventController extends ChangeNotifier {
   final PauseEvent _pause;
   final ResumeEvent _resume;
   final StartEvent _start;
+  final EventHierarchyService _hierarchy;
+  final UpdateEventParent _updateParent;
   final Map<String, List<RunSegment>> _segments = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
@@ -80,6 +86,15 @@ class EventController extends ChangeNotifier {
   Future<String?> pause(String id) => _change(() => _pause(id));
   Future<String?> resume(String id) => _change(() => _resume(id));
   Future<String?> complete(String id) => _change(() => _complete(id));
+  Future<JaxEvent?> parentOf(String id) => _repository.getParent(id);
+  Future<List<JaxEvent>> childrenOf(String id) =>
+      _repository.getDirectChildren(id);
+  Future<List<JaxEvent>> parentCandidates(String id) =>
+      _hierarchy.parentCandidates(id);
+  Future<List<JaxEvent>> childCandidates(String id) =>
+      _hierarchy.childCandidates(id);
+  Future<String?> setParent(String id, String? parentId) =>
+      _change(() => _updateParent(id, parentId));
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,
