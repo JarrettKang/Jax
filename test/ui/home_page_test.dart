@@ -76,6 +76,39 @@ void main() {
     expect(find.text('同级事件：整理参考文献'), findsOneWidget);
   });
 
+  testWidgets('home sibling context follows explicit sibling order', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 25, 12);
+    final repository = MemoryRepository([
+      _event('parent', '论文项目', EventStatus.paused, now),
+      _event('running', '修改正文', EventStatus.running, now, parent: 'parent'),
+      _event(
+        'second',
+        '第二顺位',
+        EventStatus.pending,
+        now,
+        parent: 'parent',
+        sortOrder: 1,
+      ),
+      _event(
+        'first',
+        '第一顺位',
+        EventStatus.pending,
+        now,
+        parent: 'parent',
+        sortOrder: 0,
+      ),
+    ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+
+    final context = tester.widget<Text>(
+      find.byKey(const ValueKey('home-running-siblings')),
+    );
+    expect(context.data, '同级事件：第一顺位、第二顺位');
+  });
+
   testWidgets('keeps F1 home when running Event has no other sibling', (
     tester,
   ) async {
@@ -153,6 +186,7 @@ JaxEvent _event(
   EventStatus status,
   DateTime now, {
   String? parent,
+  int? sortOrder,
 }) => JaxEvent(
   id: id,
   name: name,
@@ -162,4 +196,5 @@ JaxEvent _event(
   updatedAt: now,
   firstStartedAt: status == EventStatus.pending ? null : now,
   completedAt: status == EventStatus.completed ? now : null,
+  sortOrder: sortOrder,
 );
