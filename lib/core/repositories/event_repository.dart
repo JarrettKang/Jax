@@ -15,6 +15,7 @@ abstract interface class EventRepository {
   Future<List<JaxEvent>> getDirectChildren(String parentEventId);
   Future<List<JaxEvent>> getOrderedSiblings(String eventId);
   Future<List<JaxEvent>> getOrderedTopLevelEvents();
+  Future<void> reorderSibling(String eventId, int targetIndex);
   Future<void> updateParent(
     String eventId,
     String? parentEventId,

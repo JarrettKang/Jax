@@ -8,7 +8,19 @@ class MemoryRepository implements EventRepository {
   final List<JaxEvent> events;
   final List<RunSegment> segments = [];
   @override
-  Future<void> insertEvent(JaxEvent event) async => events.add(event);
+  Future<void> insertEvent(JaxEvent event) async {
+    final siblings = events.where(
+      (item) => item.parentEventId == event.parentEventId,
+    );
+    final next =
+        siblings.fold<int>(-1, (max, item) {
+          final order = item.sortOrder ?? -1;
+          return order > max ? order : max;
+        }) +
+        1;
+    events.add(event.copyWith(sortOrder: event.sortOrder ?? next));
+  }
+
   @override
   Future<List<JaxEvent>> getIncompleteEvents() async =>
       events.where((event) => event.status.name != 'completed').toList();
@@ -61,6 +73,20 @@ class MemoryRepository implements EventRepository {
   Future<List<JaxEvent>> getOrderedTopLevelEvents() async =>
       _ordered(events.where((event) => event.parentEventId == null));
 
+  @override
+  Future<void> reorderSibling(String eventId, int targetIndex) async {
+    final siblings = await getOrderedSiblings(eventId);
+    final current = siblings.indexWhere((event) => event.id == eventId);
+    if (targetIndex < 0 || targetIndex >= siblings.length) {
+      throw StateError('Invalid target index');
+    }
+    final moved = siblings.removeAt(current);
+    siblings.insert(targetIndex, moved);
+    for (var index = 0; index < siblings.length; index++) {
+      await updateEvent(siblings[index].copyWith(sortOrder: index));
+    }
+  }
+
   List<JaxEvent> _ordered(Iterable<JaxEvent> source) => source.toList()
     ..sort((a, b) {
       final order = (a.sortOrder ?? 1 << 30).compareTo(b.sortOrder ?? 1 << 30);
@@ -77,8 +103,21 @@ class MemoryRepository implements EventRepository {
   ) async {
     final event = await getEvent(eventId);
     if (event == null) throw StateError('Event not found: $eventId');
+    final siblings = events.where(
+      (item) => item.parentEventId == parentEventId,
+    );
+    final next =
+        siblings.fold<int>(-1, (max, item) {
+          final order = item.sortOrder ?? -1;
+          return order > max ? order : max;
+        }) +
+        1;
     await updateEvent(
-      event.copyWith(parentEventId: parentEventId, updatedAt: updatedAt),
+      event.copyWith(
+        parentEventId: parentEventId,
+        sortOrder: next,
+        updatedAt: updatedAt,
+      ),
     );
   }
 

@@ -9,8 +9,15 @@ class SqliteEventRepository implements EventRepository {
   final AppDatabase _appDatabase;
 
   @override
-  Future<void> insertEvent(JaxEvent event) =>
-      _appDatabase.database.insert('events', _toRow(event));
+  Future<void> insertEvent(JaxEvent event) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final row = _toRow(event);
+      row['sort_order'] =
+          event.sortOrder ??
+          await _nextSortOrder(transaction, event.parentEventId);
+      await transaction.insert('events', row);
+    });
+  }
 
   @override
   Future<List<JaxEvent>> getIncompleteEvents() async {
@@ -172,6 +179,46 @@ class SqliteEventRepository implements EventRepository {
       parentEventId == null ? null : [parentEventId],
     );
     return rows.single['next_order']! as int;
+  }
+
+  @override
+  Future<void> reorderSibling(String eventId, int targetIndex) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final eventRows = await transaction.query(
+        'events',
+        columns: ['parent_event_id'],
+        where: 'id = ?',
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (eventRows.isEmpty) throw StateError('Event not found: $eventId');
+      final parent = eventRows.single['parent_event_id'] as String?;
+      final siblings = await transaction.query(
+        'events',
+        columns: ['id'],
+        where: parent == null
+            ? 'parent_event_id IS NULL'
+            : 'parent_event_id = ?',
+        whereArgs: parent == null ? null : [parent],
+        orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+      );
+      if (targetIndex < 0 || targetIndex >= siblings.length) {
+        throw StateError('Invalid target index');
+      }
+      final ids = siblings.map((row) => row['id']! as String).toList();
+      final current = ids.indexOf(eventId);
+      final moved = ids.removeAt(current);
+      ids.insert(targetIndex, moved);
+      for (var index = 0; index < ids.length; index++) {
+        final count = await transaction.update(
+          'events',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [ids[index]],
+        );
+        if (count != 1) throw StateError('Event not found: ${ids[index]}');
+      }
+    });
   }
 
   @override

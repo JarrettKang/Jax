@@ -69,7 +69,9 @@ void main() {
     expect(version.single['user_version'], 4);
     expect(event?.name, '真机旧数据模型');
     expect(event?.parentEventId, isNull);
-    final columns = await upgraded.database.rawQuery('PRAGMA table_info(events)');
+    final columns = await upgraded.database.rawQuery(
+      'PRAGMA table_info(events)',
+    );
     expect(columns.map((row) => row['name']), contains('sort_order'));
 
     JaxEvent pending(String id, {String? parent}) => JaxEvent(
@@ -112,5 +114,21 @@ void main() {
       switchedAt,
     );
     expect((await repository.getRunSegments('child')).single.endedAt, isNull);
+
+    final ordered = [
+      pending('order-a'),
+      pending('order-b'),
+      pending('order-c'),
+    ];
+    for (final item in ordered) {
+      await repository.insertEvent(item);
+    }
+    await repository.reorderSibling('order-c', 0);
+    expect(
+      (await repository.getOrderedTopLevelEvents())
+          .where((item) => item.id.startsWith('order-'))
+          .map((item) => item.id),
+      ['order-c', 'order-a', 'order-b'],
+    );
   });
 }

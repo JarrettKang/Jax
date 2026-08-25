@@ -113,3 +113,4 @@
 - F3.5：全量测试、Windows/Android Debug、migration 和回归验收；完成后形成稳定 Debug 基线，不生成 Release。
 - 当前状态：F3.1 开始前，F2.8 已完成，schema 当前为 v3，Android 真机真实数据库不参与 migration。
 - F3.1 状态：已完成。新增 `sort_order` 模型字段和 v3→v4 migration；旧 v2→v4 数据按 `created_at_utc + id` 建立稳定初始顺序，顶级及任意上层下的同级查询按该顺序返回，reopen 后保持。101 项自动化测试、静态分析、Windows Debug 回归和 Android 模拟器 migration 通过；真机未连接、未执行 migration。
+- F3.2 状态：已完成。Core `ReorderSibling` 与 SQLite/Memory Repository 支持同级内部重排；新建、换上层和解除上层在目标集合末尾，排序与 hierarchy 通过事务一致更新，状态/层级/执行事实不被重排改变。107 项自动化测试、静态分析、Windows Debug 回归和 Android 模拟器 sqflite migration/排序验收通过。

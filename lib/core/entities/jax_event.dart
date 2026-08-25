@@ -62,8 +62,7 @@ class JaxEvent {
         other.updatedAt == updatedAt &&
         other.parentEventId == parentEventId &&
         other.firstStartedAt == firstStartedAt &&
-        other.completedAt == completedAt &&
-        other.sortOrder == sortOrder;
+        other.completedAt == completedAt;
   }
 
   @override
@@ -76,6 +75,5 @@ class JaxEvent {
     parentEventId,
     firstStartedAt,
     completedAt,
-    sortOrder,
   );
 }
