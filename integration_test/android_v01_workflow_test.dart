@@ -51,6 +51,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('manual-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('保存成功'), findsOneWidget);
+    expect(find.textContaining('最后保存：'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+
     Future<void> create(String name) async {
       await tester.tap(find.text('新建事件'));
       await tester.pumpAndSettle();

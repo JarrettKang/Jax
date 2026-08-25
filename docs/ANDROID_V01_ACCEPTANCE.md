@@ -53,3 +53,14 @@ Pixel 7 模拟器 Debug 人工验证确认：保存状态位于手机 AppBar 的
 `integration_test/android_v01_workflow_test.dart` 在 Pixel 7 模拟器的真实 `sqflite` 环境完成创建、单一 `running` 阻止、暂停、编辑、恢复、完成、历史查看、数据库关闭重开、历史持续时间恢复和历史删除。软键盘输入、对话框、底部导航及主要触控操作均通过。
 
 本增量同时修复一个共享恢复问题：Controller 启动时现在会为未完成事件和历史事件都加载执行片段，避免应用重启后历史持续时间显示为 0。该修复复用同一 Repository，不改变 Core 或 schema。
+
+## A6：Android v0.1 全量 Debug 验收
+
+- `flutter analyze`：通过，无问题。
+- 全部 Core、Data、UI/Widget 测试：53 项通过。
+- Windows Debug 集成流程：通过，Windows 正常关闭相关历史测试继续通过。
+- Android `sqflite` 契约集成测试：通过。
+- Android 手机完整 UI 集成测试：通过；包含手动保存及最后保存时间反馈、完整事件流程、数据库重开和历史删除。
+- Android 生产入口 Debug APK：构建、安装和启动通过。
+- 最终生命周期复验：Home 后返回以及 `am force-stop` 后显式重启均恢复 `running`，开放片段 `ended_at_utc` 仍为 `NULL`，界面持续时间包含离开期间。
+- Windows 与 Android 均未生成 Release；等待用户决定 Android Release / 真机验收阶段。
