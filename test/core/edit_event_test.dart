@@ -70,6 +70,17 @@ class _Repository implements EventRepository {
   @override
   Future<void> deleteEvent(String id) async =>
       events.removeWhere((event) => event.id == id);
+  @override
+  Future<JaxEvent?> getParent(String eventId) async => null;
+  @override
+  Future<List<JaxEvent>> getDirectChildren(String parentEventId) async =>
+      const [];
+  @override
+  Future<void> updateParent(
+    String eventId,
+    String? parentEventId,
+    DateTime updatedAt,
+  ) async {}
 
   @override
   Future<void> updateEvent(JaxEvent event) async {

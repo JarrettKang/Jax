@@ -1,5 +1,7 @@
 import 'event_status.dart';
 
+const _unchangedParent = Object();
+
 class JaxEvent {
   const JaxEvent({
     required this.id,
@@ -7,6 +9,7 @@ class JaxEvent {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.parentEventId,
     this.firstStartedAt,
     this.completedAt,
   });
@@ -16,6 +19,7 @@ class JaxEvent {
   final EventStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? parentEventId;
   final DateTime? firstStartedAt;
   final DateTime? completedAt;
 
@@ -25,6 +29,7 @@ class JaxEvent {
     DateTime? updatedAt,
     DateTime? firstStartedAt,
     DateTime? completedAt,
+    Object? parentEventId = _unchangedParent,
   }) {
     return JaxEvent(
       id: id,
@@ -32,6 +37,9 @@ class JaxEvent {
       status: status ?? this.status,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      parentEventId: identical(parentEventId, _unchangedParent)
+          ? this.parentEventId
+          : parentEventId as String?,
       firstStartedAt: firstStartedAt ?? this.firstStartedAt,
       completedAt: completedAt ?? this.completedAt,
     );
@@ -45,6 +53,7 @@ class JaxEvent {
         other.status == status &&
         other.createdAt == createdAt &&
         other.updatedAt == updatedAt &&
+        other.parentEventId == parentEventId &&
         other.firstStartedAt == firstStartedAt &&
         other.completedAt == completedAt;
   }
@@ -56,6 +65,7 @@ class JaxEvent {
     status,
     createdAt,
     updatedAt,
+    parentEventId,
     firstStartedAt,
     completedAt,
   );

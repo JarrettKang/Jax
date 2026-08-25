@@ -37,6 +37,31 @@ class MemoryRepository implements EventRepository {
   }
 
   @override
+  Future<JaxEvent?> getParent(String eventId) async {
+    final event = await getEvent(eventId);
+    return event?.parentEventId == null
+        ? null
+        : getEvent(event!.parentEventId!);
+  }
+
+  @override
+  Future<List<JaxEvent>> getDirectChildren(String parentEventId) async =>
+      events.where((event) => event.parentEventId == parentEventId).toList();
+
+  @override
+  Future<void> updateParent(
+    String eventId,
+    String? parentEventId,
+    DateTime updatedAt,
+  ) async {
+    final event = await getEvent(eventId);
+    if (event == null) throw StateError('Event not found: $eventId');
+    await updateEvent(
+      event.copyWith(parentEventId: parentEventId, updatedAt: updatedAt),
+    );
+  }
+
+  @override
   Future<void> deleteEvent(String id) async {
     events.removeWhere((event) => event.id == id);
     segments.removeWhere((segment) => segment.eventId == id);

@@ -120,6 +120,48 @@ class SqliteEventRepository implements EventRepository {
     });
   }
 
+  @override
+  Future<JaxEvent?> getParent(String eventId) async {
+    final rows = await _appDatabase.database.rawQuery(
+      '''SELECT parent.* FROM events child
+         JOIN events parent ON parent.id = child.parent_event_id
+         WHERE child.id = ? LIMIT 1''',
+      [eventId],
+    );
+    return rows.isEmpty ? null : _fromRow(rows.single);
+  }
+
+  @override
+  Future<List<JaxEvent>> getDirectChildren(String parentEventId) async {
+    final rows = await _appDatabase.database.query(
+      'events',
+      where: 'parent_event_id = ?',
+      whereArgs: [parentEventId],
+      orderBy: 'created_at_utc ASC, id ASC',
+    );
+    return rows.map(_fromRow).toList(growable: false);
+  }
+
+  @override
+  Future<void> updateParent(
+    String eventId,
+    String? parentEventId,
+    DateTime updatedAt,
+  ) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final count = await transaction.update(
+        'events',
+        {
+          'parent_event_id': parentEventId,
+          'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+      if (count != 1) throw StateError('Event not found: $eventId');
+    });
+  }
+
   Map<String, Object?> _segmentToRow(RunSegment segment) => {
     'id': segment.id,
     'event_id': segment.eventId,
@@ -150,6 +192,7 @@ class SqliteEventRepository implements EventRepository {
     'id': event.id,
     'name': event.name,
     'status': event.status.name,
+    'parent_event_id': event.parentEventId,
     'first_started_at_utc': event.firstStartedAt?.millisecondsSinceEpoch,
     'completed_at_utc': event.completedAt?.millisecondsSinceEpoch,
     'created_at_utc': event.createdAt.millisecondsSinceEpoch,
@@ -168,6 +211,7 @@ class SqliteEventRepository implements EventRepository {
       id: row['id']! as String,
       name: row['name']! as String,
       status: EventStatus.fromStorage(row['status']! as String),
+      parentEventId: row['parent_event_id'] as String?,
       firstStartedAt: optional('first_started_at_utc'),
       completedAt: optional('completed_at_utc'),
       createdAt: DateTime.fromMillisecondsSinceEpoch(

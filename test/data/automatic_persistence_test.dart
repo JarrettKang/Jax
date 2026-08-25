@@ -41,6 +41,15 @@ void main() {
       );
       await repository.insertEvent(kept);
       await repository.updateEvent(kept.copyWith(name: '已编辑'));
+      final hierarchyChild = JaxEvent(
+        id: 'hierarchy-child',
+        name: '层级下层',
+        status: EventStatus.pending,
+        parentEventId: kept.id,
+        createdAt: time.add(const Duration(seconds: 1)),
+        updatedAt: time.add(const Duration(seconds: 1)),
+      );
+      await repository.insertEvent(hierarchyChild);
       await repository.insertEvent(removed);
       await repository.deleteEvent(removed.id);
       await repository.insertEvent(completedPending);
@@ -80,7 +89,10 @@ void main() {
       addTearDown(database.close);
       repository = SqliteEventRepository(database);
 
-      expect((await repository.getIncompleteEvents()).single.name, '已编辑');
+      final incomplete = await repository.getIncompleteEvents();
+      expect(incomplete.first.name, '已编辑');
+      expect(incomplete.last.parentEventId, kept.id);
+      expect((await repository.getParent(hierarchyChild.id))?.id, kept.id);
       expect(await repository.getEvent(removed.id), isNull);
       expect((await repository.getCompletedEvents()).single.id, 'completed');
       expect(

@@ -5,8 +5,8 @@
 - 需求基线：`PRD.md`
 - 历史基线：`Development_plan.md`、`Android_v0.1_Development_plan.md`
 - 目标平台：Windows、Android
-- 当前增量：F1：首页
-- 状态：F1 已完成
+- 当前增量：F2.2：层级 Core 规则
+- 状态：F2 开发中
 - 更新日期：2026-08-25
 
 ## 2. 统一执行规则
@@ -54,3 +54,44 @@
 ### 3.6 F1 UI 修复记录
 
 - 2026-08-25：修复 Windows 默认字体发生中文逐字形 fallback、导致同一句文字视觉字重不一致的问题；Windows Theme 统一使用系统自带的 Microsoft YaHei UI，保留 Material 原有字号和字重层级，Android 继续使用平台默认字体。
+
+## 4. F2：事件层级
+
+### F2.1：层级数据模型与 migration
+
+- 验收：Event 支持 nullable 直接上层 ID；schema v2→v3 后旧 Event 全部为顶级事件且事件、状态、时间和片段不变；Repository 可查询直接上层/下层并原子更新关系；Windows SQLite 与 Android sqflite 使用同一 schema。
+- 测试：模型复制/相等、全新 schema、真实 v2 migration、外键、关系更新/解除、reopen 和 Repository 查询；运行全部历史测试及双端数据库契约。
+- 当前状态：已完成。schema 由 v2 升级为 v3；新增 nullable `parent_event_id`、自引用外键、直接上层/下层查询和关系更新。真实 Windows v2→v3 migration、Android 模拟器 sqflite migration、reopen、外键、全部 76 项历史自动化测试、Windows Debug 集成与 Android SQLite 契约均通过；真机真实数据库未执行 migration。
+
+### F2.2：层级 Core 规则
+
+- 设置、移动、解除关系；自身/后代无环硬校验；事件/记录候选范围；有下层时删除保护。Core 与 Repository 双重校验并使用事务。
+
+### F2.3：层级执行状态
+
+- running 切换到后代时自动暂停并开始/恢复后代；未完成祖先转 paused；其他方向仍阻止；下层完成不恢复上层；层级完成规则和单 running 回归。
+
+### F2.4：层级时间统计
+
+- 直接执行时间、任意深度总投入聚合及防重复计算；移动层级后即时重算，不创建重复片段。
+
+### F2.5：事件栏目层级 UI
+
+- 共享逐层详情、上下层查看与关系编辑、候选过滤、移动确认、解除关系；Windows 宽屏、Android 窄屏、大字体和长名称验收。
+
+### F2.6：首页层级上下文
+
+- running Event 有有效上下文时显示直接上层和同级 Event；顶级或无有效同级时保持 F1 首页。
+
+### F2.7：记录栏目层级统计
+
+- 记录首页最高 completed 节点过滤；详情展示总投入、直接时间和下一层总投入；支持逐层浏览与 completed 层级调整。
+
+### F2.8：v0.2 全量验收
+
+- 运行静态分析、全部 Core/Data/Widget/Windows/Android 集成测试；完成 Windows Debug、Android 模拟器 Debug、v2→v3 migration 和必要的经授权真机轻量验收。仅形成稳定 Debug 基线，不生成 Release。
+
+### F2 统一提交与数据安全
+
+- F2.1–F2.7 每项均测试先行、全量回归、双端 Debug 验证、独立 commit 后再继续。migration 先在临时库、Windows 和 Android 模拟器验证；未经单独确认不得在真机真实数据库升级。
+- 额度不足时优先停在测试通过、已提交且工作区干净的增量边界；若中途暂停则维护 `CODEX_RESUME.md`，准确记录测试、schema、migration、Git、平台进程和恢复后的第一个具体动作。
