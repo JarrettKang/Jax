@@ -63,7 +63,7 @@ class EventController extends ChangeNotifier {
   Future<void> _reload() async {
     _events = await _repository.getIncompleteEvents();
     _history = await _repository.getCompletedEvents();
-    for (final event in _events) {
+    for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
     }
     _syncTicker();

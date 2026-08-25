@@ -45,3 +45,11 @@ Home、Android 返回键、锁屏/解锁和 `am force-stop` 后重新进入均�
 Widget 测试覆盖 360×800、2 倍文字缩放和 1200×800 桌面窗口：手机使用底部 `NavigationBar`，桌面继续使用 `NavigationRail`，保存状态和页面切换均无 overflow。
 
 Pixel 7 模拟器 Debug 人工验证确认：保存状态位于手机 AppBar 的独立状态行，保存按钮可触控，事件/记录底部导航显示完整，页面内容和 FAB 位于导航栏上方；现有 `running` 事件继续显示并计时。Windows 集成流程复跑通过。
+
+## A5：事件与记录页面手机适配
+
+320×700、1.5 倍文字缩放 Widget 测试覆盖 pending/running/paused 长名称、全部状态操作、列表滚动、新建对话框返回关闭、长历史名称、时间文本和历史删除入口。手机事件卡片将名称、状态和触控操作纵向排列，历史卡片完整显示时间与持续时长；列表保留底部空间，避免 FAB 遮挡。
+
+`integration_test/android_v01_workflow_test.dart` 在 Pixel 7 模拟器的真实 `sqflite` 环境完成创建、单一 `running` 阻止、暂停、编辑、恢复、完成、历史查看、数据库关闭重开、历史持续时间恢复和历史删除。软键盘输入、对话框、底部导航及主要触控操作均通过。
+
+本增量同时修复一个共享恢复问题：Controller 启动时现在会为未完成事件和历史事件都加载执行片段，避免应用重启后历史持续时间显示为 0。该修复复用同一 Repository，不改变 Core 或 schema。

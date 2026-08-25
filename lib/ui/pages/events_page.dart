@@ -16,78 +16,44 @@ class EventsPage extends StatelessWidget {
           : controller.events.isEmpty
           ? const Center(child: Text('暂无未完成事件'))
           : ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
               children: controller.events
                   .map(
                     (event) => Card(
-                      child: ListTile(
-                        title: Text(event.name),
-                        subtitle: Text(
-                          event.status == EventStatus.running
-                              ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
-                              : event.status == EventStatus.paused
-                              ? '已暂停 · ${_duration(controller.elapsedFor(event))}'
-                              : '未开始',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (event.status == EventStatus.pending)
-                              IconButton(
-                                key: ValueKey('start-${event.id}'),
-                                icon: const Icon(Icons.play_arrow),
-                                tooltip: '开始',
-                                onPressed: () => _run(
-                                  context,
-                                  () => controller.start(event.id),
-                                ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final actions = _actions(context, event);
+                          if (constraints.maxWidth < 600) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    event.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(_statusText(event)),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Wrap(children: actions),
+                                  ),
+                                ],
                               ),
-                            if (event.status == EventStatus.paused)
-                              IconButton(
-                                key: ValueKey('resume-${event.id}'),
-                                icon: const Icon(Icons.play_arrow),
-                                tooltip: '恢复',
-                                onPressed: () => _run(
-                                  context,
-                                  () => controller.resume(event.id),
-                                ),
-                              ),
-                            if (event.status == EventStatus.running)
-                              IconButton(
-                                key: ValueKey('complete-${event.id}'),
-                                icon: const Icon(Icons.check),
-                                tooltip: '完成',
-                                onPressed: () => _run(
-                                  context,
-                                  () => controller.complete(event.id),
-                                ),
-                              ),
-                            if (event.status == EventStatus.running)
-                              IconButton(
-                                key: ValueKey('pause-${event.id}'),
-                                icon: const Icon(Icons.pause),
-                                tooltip: '暂停',
-                                onPressed: () => _run(
-                                  context,
-                                  () => controller.pause(event.id),
-                                ),
-                              ),
-                            if (event.status != EventStatus.running)
-                              IconButton(
-                                key: ValueKey('edit-${event.id}'),
-                                icon: const Icon(Icons.edit),
-                                tooltip: '编辑',
-                                onPressed: () => _showEditor(context, event),
-                              ),
-                            if (event.status != EventStatus.running)
-                              IconButton(
-                                key: ValueKey('delete-${event.id}'),
-                                icon: const Icon(Icons.delete_outline),
-                                tooltip: '删除',
-                                onPressed: () => _confirmDelete(context, event),
-                              ),
-                          ],
-                        ),
+                            );
+                          }
+                          return ListTile(
+                            title: Text(event.name),
+                            subtitle: Text(_statusText(event)),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: actions,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   )
@@ -100,6 +66,57 @@ class EventsPage extends StatelessWidget {
       ),
     ),
   );
+  String _statusText(JaxEvent event) => event.status == EventStatus.running
+      ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
+      : event.status == EventStatus.paused
+      ? '已暂停 · ${_duration(controller.elapsedFor(event))}'
+      : '未开始';
+
+  List<Widget> _actions(BuildContext context, JaxEvent event) => [
+    if (event.status == EventStatus.pending)
+      IconButton(
+        key: ValueKey('start-${event.id}'),
+        icon: const Icon(Icons.play_arrow),
+        tooltip: '开始',
+        onPressed: () => _run(context, () => controller.start(event.id)),
+      ),
+    if (event.status == EventStatus.paused)
+      IconButton(
+        key: ValueKey('resume-${event.id}'),
+        icon: const Icon(Icons.play_arrow),
+        tooltip: '恢复',
+        onPressed: () => _run(context, () => controller.resume(event.id)),
+      ),
+    if (event.status == EventStatus.running)
+      IconButton(
+        key: ValueKey('complete-${event.id}'),
+        icon: const Icon(Icons.check),
+        tooltip: '完成',
+        onPressed: () => _run(context, () => controller.complete(event.id)),
+      ),
+    if (event.status == EventStatus.running)
+      IconButton(
+        key: ValueKey('pause-${event.id}'),
+        icon: const Icon(Icons.pause),
+        tooltip: '暂停',
+        onPressed: () => _run(context, () => controller.pause(event.id)),
+      ),
+    if (event.status != EventStatus.running)
+      IconButton(
+        key: ValueKey('edit-${event.id}'),
+        icon: const Icon(Icons.edit),
+        tooltip: '编辑',
+        onPressed: () => _showEditor(context, event),
+      ),
+    if (event.status != EventStatus.running)
+      IconButton(
+        key: ValueKey('delete-${event.id}'),
+        icon: const Icon(Icons.delete_outline),
+        tooltip: '删除',
+        onPressed: () => _confirmDelete(context, event),
+      ),
+  ];
+
   static String _duration(Duration value) =>
       '${value.inHours.toString().padLeft(2, '0')}:${(value.inMinutes % 60).toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
   Future<void> _run(

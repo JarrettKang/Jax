@@ -12,21 +12,48 @@ class HistoryPage extends StatelessWidget {
     builder: (context, _) => controller.history.isEmpty
         ? const Center(child: Text('暂无历史记录'))
         : ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(12),
             children: controller.history
                 .map(
                   (event) => Card(
-                    child: ListTile(
-                      title: Text(event.name),
-                      subtitle: Text(
-                        '开始：${_time(event.firstStartedAt!.toLocal())}\n结束：${_time(event.completedAt!.toLocal())}\n持续：${controller.elapsedFor(event).inMinutes} 分钟',
-                      ),
-                      trailing: IconButton(
-                        key: ValueKey('delete-history-${event.id}'),
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: '删除记录',
-                        onPressed: () => _confirmDelete(context, event),
-                      ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final details =
+                            '开始：${_time(event.firstStartedAt!.toLocal())}\n结束：${_time(event.completedAt!.toLocal())}\n持续：${controller.elapsedFor(event).inMinutes} 分钟';
+                        final delete = IconButton(
+                          key: ValueKey('delete-history-${event.id}'),
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: '删除记录',
+                          onPressed: () => _confirmDelete(context, event),
+                        );
+                        if (constraints.maxWidth < 600) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  event.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(details),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: delete,
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return ListTile(
+                          title: Text(event.name),
+                          subtitle: Text(details),
+                          trailing: delete,
+                        );
+                      },
                     ),
                   ),
                 )
