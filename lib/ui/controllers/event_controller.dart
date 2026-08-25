@@ -69,8 +69,7 @@ class EventController extends ChangeNotifier {
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
       _events.where((event) => event.status == EventStatus.running).firstOrNull;
-  JaxEvent? get runningParent =>
-      _runningSiblings.isEmpty ? null : _runningParent;
+  JaxEvent? get runningParent => _runningParent;
   List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
 
   Future<void> load() async {

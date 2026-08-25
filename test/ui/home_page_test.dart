@@ -69,6 +69,7 @@ void main() {
       _event('sibling', '整理参考文献', EventStatus.pending, now, parent: 'parent'),
     ]);
 
+    await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
@@ -109,7 +110,37 @@ void main() {
     expect(context.data, '同级事件：第一顺位、第二顺位');
   });
 
-  testWidgets('keeps F1 home when running Event has no other sibling', (
+  testWidgets('deep running event uses its direct parent and siblings', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 25, 12);
+    final repository = MemoryRepository([
+      _event('a', 'A', EventStatus.paused, now),
+      _event('b', 'B', EventStatus.paused, now, parent: 'a'),
+      _event('c', 'C', EventStatus.running, now, parent: 'b'),
+      _event('d', 'D', EventStatus.pending, now, parent: 'b'),
+    ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+
+    expect(find.text('上层：B'), findsOneWidget);
+    expect(find.text('同级事件：D'), findsOneWidget);
+
+    await repository.updateEvent(
+      (await repository.getEvent('c'))!
+          .copyWith(status: EventStatus.paused, updatedAt: now),
+    );
+    await repository.updateEvent(
+      (await repository.getEvent('b'))!
+          .copyWith(status: EventStatus.running, updatedAt: now),
+    );
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    expect(find.text('上层：A'), findsOneWidget);
+  });
+
+  testWidgets('shows direct parent even when running Event has no sibling', (
     tester,
   ) async {
     final now = DateTime(2026, 8, 25, 12);
@@ -121,7 +152,7 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('home-running-parent')), findsNothing);
+    expect(find.text('上层：论文项目'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-running-siblings')), findsNothing);
     expect(find.text('修改正文'), findsOneWidget);
   });

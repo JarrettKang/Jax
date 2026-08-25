@@ -115,11 +115,16 @@ class _HomePageState extends State<HomePage> {
                                 '上层：${widget.controller.runningParent!.name}',
                                 key: const ValueKey('home-running-parent'),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '同级事件：${widget.controller.runningSiblings.map((event) => event.name).join('、')}',
-                                key: const ValueKey('home-running-siblings'),
-                              ),
+                              if (widget
+                                  .controller
+                                  .runningSiblings
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  '同级事件：${widget.controller.runningSiblings.map((event) => event.name).join('、')}',
+                                  key: const ValueKey('home-running-siblings'),
+                                ),
+                              ],
                             ],
                           ],
                         ),
