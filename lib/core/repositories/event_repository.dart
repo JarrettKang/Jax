@@ -18,4 +18,11 @@ abstract interface class EventRepository {
     String? parentEventId,
     DateTime updatedAt,
   );
+  Future<void> switchRunningEvent({
+    required JaxEvent pausedRunning,
+    required RunSegment closedSegment,
+    required JaxEvent runningTarget,
+    required RunSegment newSegment,
+    required List<JaxEvent> pausedAncestors,
+  });
 }

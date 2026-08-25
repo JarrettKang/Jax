@@ -82,7 +82,13 @@ void main() {
     await create('任务 B');
 
     await tester.tap(find.byKey(const ValueKey('start-event-b')));
-    await tester.pump();
+    for (
+      var attempt = 0;
+      attempt < 20 && find.text('请先暂停或完成当前事件').evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     expect(find.text('请先暂停或完成当前事件'), findsOneWidget);
 
     now = now.add(const Duration(minutes: 9));

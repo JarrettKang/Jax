@@ -196,6 +196,49 @@ class SqliteEventRepository implements EventRepository {
     });
   }
 
+  @override
+  Future<void> switchRunningEvent({
+    required JaxEvent pausedRunning,
+    required RunSegment closedSegment,
+    required JaxEvent runningTarget,
+    required RunSegment newSegment,
+    required List<JaxEvent> pausedAncestors,
+  }) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final paused = await transaction.update(
+        'events',
+        _toRow(pausedRunning),
+        where: 'id = ?',
+        whereArgs: [pausedRunning.id],
+      );
+      if (paused != 1) throw StateError('Running event not found');
+      final closed = await transaction.update(
+        'run_segments',
+        _segmentToRow(closedSegment),
+        where: 'id = ? AND ended_at_utc IS NULL',
+        whereArgs: [closedSegment.id],
+      );
+      if (closed != 1) throw StateError('Open run segment not found');
+      for (final ancestor in pausedAncestors) {
+        final updated = await transaction.update(
+          'events',
+          _toRow(ancestor),
+          where: 'id = ?',
+          whereArgs: [ancestor.id],
+        );
+        if (updated != 1) throw StateError('Ancestor event not found');
+      }
+      final started = await transaction.update(
+        'events',
+        _toRow(runningTarget),
+        where: 'id = ?',
+        whereArgs: [runningTarget.id],
+      );
+      if (started != 1) throw StateError('Target event not found');
+      await transaction.insert('run_segments', _segmentToRow(newSegment));
+    });
+  }
+
   Map<String, Object?> _segmentToRow(RunSegment segment) => {
     'id': segment.id,
     'event_id': segment.eventId,

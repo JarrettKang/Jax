@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/use_cases/start_event.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 import 'package:path/path.dart' as path;
@@ -84,5 +86,29 @@ void main() {
       throwsA(anything),
     );
     expect((await repository.getEvent('parent'))?.parentEventId, isNull);
+
+    await repository.startEvent(
+      pending('parent')
+          .copyWith(status: EventStatus.running, firstStartedAt: time),
+      RunSegment(
+        id: 'parent-open',
+        eventId: 'parent',
+        startedAt: time,
+        createdAt: time,
+      ),
+    );
+    final switchedAt = time.add(const Duration(minutes: 2));
+    await StartEvent(
+      repository: repository,
+      newId: () => 'child-open',
+      now: () => switchedAt,
+    )('child');
+    expect((await repository.getEvent('parent'))?.status, EventStatus.paused);
+    expect((await repository.getEvent('child'))?.status, EventStatus.running);
+    expect(
+      (await repository.getRunSegments('parent')).single.endedAt,
+      switchedAt,
+    );
+    expect((await repository.getRunSegments('child')).single.endedAt, isNull);
   });
 }

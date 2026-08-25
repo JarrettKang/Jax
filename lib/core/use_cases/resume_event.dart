@@ -2,6 +2,7 @@ import '../entities/event_status.dart';
 import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
+import '../services/descendant_switch_service.dart';
 import 'create_event.dart';
 
 class ResumeEvent {
@@ -19,22 +20,21 @@ class ResumeEvent {
     if (current.status != EventStatus.paused) {
       throw const DomainFailure('只有已暂停事件可以恢复');
     }
-    final events = await repository.getIncompleteEvents();
-    if (events.any(
-      (event) => event.id != id && event.status == EventStatus.running,
-    )) {
-      throw const DomainFailure('请先暂停或完成当前事件');
-    }
     final timestamp = now().toUtc();
-    final running = current.copyWith(
-      status: EventStatus.running,
-      updatedAt: timestamp,
-    );
+    if (await DescendantSwitchService(repository)
+            .switchIfNeeded(current, timestamp, newId) !=
+        null) {
+      return;
+    }
     final segment = RunSegment(
       id: newId(),
       eventId: id,
       startedAt: timestamp,
       createdAt: timestamp,
+    );
+    final running = current.copyWith(
+      status: EventStatus.running,
+      updatedAt: timestamp,
     );
     await repository.startEvent(running, segment);
   }

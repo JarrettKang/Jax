@@ -81,6 +81,14 @@ class _Repository implements EventRepository {
     String? parentEventId,
     DateTime updatedAt,
   ) async {}
+  @override
+  Future<void> switchRunningEvent({
+    required JaxEvent pausedRunning,
+    required RunSegment closedSegment,
+    required JaxEvent runningTarget,
+    required RunSegment newSegment,
+    required List<JaxEvent> pausedAncestors,
+  }) async {}
 
   @override
   Future<void> updateEvent(JaxEvent event) async {
