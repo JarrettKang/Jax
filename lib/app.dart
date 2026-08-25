@@ -100,6 +100,27 @@ class _JaxAppState extends State<JaxApp> {
     return '最后保存：${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
   }
 
+  Widget _saveStatus() => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, _) => Text(
+      _saving ? '正在保存…' : _formatSaveStatus(_controller.lastSavedAt),
+      key: const ValueKey('save-status'),
+      maxLines: 1,
+    ),
+  );
+
+  Widget _saveButton() => IconButton(
+    key: const ValueKey('manual-save'),
+    tooltip: _saving ? '正在保存' : '保存',
+    onPressed: _saving ? null : _save,
+    icon: _saving
+        ? const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.save_outlined),
+  );
+
   @override
   void dispose() {
     _lifecycleListener?.dispose();
@@ -122,62 +143,87 @@ class _JaxAppState extends State<JaxApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
         useMaterial3: true,
       ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Jax'),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(
-                child: AnimatedBuilder(
-                  animation: _controller,
-                  builder: (context, _) => Text(
-                    _saving
-                        ? '正在保存…'
-                        : _formatSaveStatus(_controller.lastSavedAt),
-                    key: const ValueKey('save-status'),
+      home: Builder(
+        builder: (context) {
+          final compact = MediaQuery.sizeOf(context).width < 600;
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Jax'),
+              actions: [
+                if (!compact)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Center(child: _saveStatus()),
                   ),
-                ),
-              ),
-            ),
-            IconButton(
-              key: const ValueKey('manual-save'),
-              tooltip: _saving ? '正在保存' : '保存',
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined),
-            ),
-          ],
-        ),
-        body: Row(
-          children: [
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              labelType: NavigationRailLabelType.all,
-              onDestinationSelected: (index) {
-                setState(() => _selectedIndex = index);
-              },
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.checklist_outlined),
-                  selectedIcon: Icon(Icons.checklist),
-                  label: Text('事件'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.history_outlined),
-                  selectedIcon: Icon(Icons.history),
-                  label: Text('记录'),
-                ),
+                _saveButton(),
               ],
+              bottom: compact
+                  ? PreferredSize(
+                      preferredSize: const Size.fromHeight(40),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: SizedBox(
+                          height: 32,
+                          width: double.infinity,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: _saveStatus(),
+                          ),
+                        ),
+                      ),
+                    )
+                  : null,
             ),
-            const VerticalDivider(width: 1),
-            Expanded(child: pages[_selectedIndex]),
-          ],
-        ),
+            body: compact
+                ? pages[_selectedIndex]
+                : Row(
+                    children: [
+                      NavigationRail(
+                        selectedIndex: _selectedIndex,
+                        labelType: NavigationRailLabelType.all,
+                        onDestinationSelected: (index) {
+                          setState(() => _selectedIndex = index);
+                        },
+                        destinations: const [
+                          NavigationRailDestination(
+                            icon: Icon(Icons.checklist_outlined),
+                            selectedIcon: Icon(Icons.checklist),
+                            label: Text('事件'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.history_outlined),
+                            selectedIcon: Icon(Icons.history),
+                            label: Text('记录'),
+                          ),
+                        ],
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: pages[_selectedIndex]),
+                    ],
+                  ),
+            bottomNavigationBar: compact
+                ? NavigationBar(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: (index) {
+                      setState(() => _selectedIndex = index);
+                    },
+                    destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.checklist_outlined),
+                        selectedIcon: Icon(Icons.checklist),
+                        label: '事件',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.history_outlined),
+                        selectedIcon: Icon(Icons.history),
+                        label: '记录',
+                      ),
+                    ],
+                  )
+                : null,
+          );
+        },
       ),
     );
   }

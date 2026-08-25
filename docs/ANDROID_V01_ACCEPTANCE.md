@@ -39,3 +39,9 @@ adb shell am start -n com.example.jax/.MainActivity
 Home、Android 返回键、锁屏/解锁和 `am force-stop` 后重新进入均保持 `running`，开放片段未被关闭，界面持续时间从约 `00:00:12` 增长至 `00:01:05`，离开期间被计入。未出现意外 `paused`。
 
 测试边界：`am force-stop` 会终止进程并将应用置为 stopped 状态，只有显式重新启动后才运行；它比一般低内存回收更强，但不等同于系统在缓存进程中进行的正常低内存回收。本验收用于证明 Jax 不依赖退出回调、后台计时器或进程存活，并能从已提交的 SQLite 状态恢复；系统低内存回收无法在一次确定性的模拟器脚本中完全复现。
+
+## A4：手机主框架响应式布局
+
+Widget 测试覆盖 360×800、2 倍文字缩放和 1200×800 桌面窗口：手机使用底部 `NavigationBar`，桌面继续使用 `NavigationRail`，保存状态和页面切换均无 overflow。
+
+Pixel 7 模拟器 Debug 人工验证确认：保存状态位于手机 AppBar 的独立状态行，保存按钮可触控，事件/记录底部导航显示完整，页面内容和 FAB 位于导航栏上方；现有 `running` 事件继续显示并计时。Windows 集成流程复跑通过。
