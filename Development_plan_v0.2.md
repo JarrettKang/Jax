@@ -96,6 +96,7 @@
 ### F2.8：v0.2 全量验收
 
 - 运行静态分析、全部 Core/Data/Widget/Windows/Android 集成测试；完成 Windows Debug、Android 模拟器 Debug、v2→v3 migration 和必要的经授权真机轻量验收。仅形成稳定 Debug 基线，不生成 Release。
+- 当前状态：已完成。100 项 Core/Data/Widget 自动化测试和 `flutter analyze` 全部通过；Windows v0.1 与 v0.2 临时 SQLite 集成、Android `sqflite` 契约、v2→v3 migration、Android v0.1 与 v0.2 临时 sqflite 集成全部通过。Windows/Android 均使用 Debug，F2.1–F2.7 已逐项独立提交；未修改 schema（当前 v3）、未对真机真实数据库执行 migration，未生成 Release。F2.8 形成稳定 Debug 基线。
 
 ### F2 统一提交与数据安全
 
