@@ -11,15 +11,32 @@ class CompleteEvent {
   Future<CompletedRecord> call(String id) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
-    if (current.status != EventStatus.running) {
+    final children = await repository.getDirectChildren(id);
+    if (children.any((child) => child.status != EventStatus.completed)) {
+      throw const DomainFailure('仍存在未完成的下层事件');
+    }
+    final canCompleteFromChildren = children.isNotEmpty;
+    if (current.status != EventStatus.running && !canCompleteFromChildren) {
       throw const DomainFailure('只有正在进行的事件可以完成');
+    }
+    if (current.status == EventStatus.completed) {
+      throw const DomainFailure('事件已经完成');
+    }
+    final timestamp = now().toUtc();
+    if (current.status != EventStatus.running) {
+      final completed = current.copyWith(
+        status: EventStatus.completed,
+        completedAt: timestamp,
+        updatedAt: timestamp,
+      );
+      await repository.updateEvent(completed);
+      return CompletedRecord(event: completed, duration: Duration.zero);
     }
     final segments = await repository.getRunSegments(id);
     final open = segments
         .where((segment) => segment.endedAt == null)
         .firstOrNull;
     if (open == null) throw const DomainFailure('执行计时数据不完整');
-    final timestamp = now().toUtc();
     final completed = current.copyWith(
       status: EventStatus.completed,
       completedAt: timestamp,
