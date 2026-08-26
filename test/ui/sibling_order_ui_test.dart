@@ -32,6 +32,7 @@ void main() {
     double y(String id) => tester.getTopLeft(find.text(id)).dy;
     expect(y('a'), lessThan(y('b')));
     expect(y('b'), lessThan(y('c')));
+    await openEventMenu(tester, 'a');
     await tester.tap(find.byKey(const ValueKey('move-down-a')));
     await tester.pumpAndSettle();
     expect(y('b'), lessThan(y('a')));
@@ -57,7 +58,12 @@ void main() {
       await tester.pumpAndSettle();
       await openEventsPage(tester);
 
-      void expectOrdering(String id, {required bool up, required bool down}) {
+      Future<void> expectOrdering(
+        String id, {
+        required bool up,
+        required bool down,
+      }) async {
+        await openEventMenu(tester, id);
         expect(
           find.byKey(ValueKey('move-up-$id')),
           up ? findsOneWidget : findsNothing,
@@ -66,12 +72,14 @@ void main() {
           find.byKey(ValueKey('move-down-$id')),
           down ? findsOneWidget : findsNothing,
         );
+        await tester.tapAt(Offset.zero);
+        await tester.pumpAndSettle();
       }
 
-      expectOrdering('b', up: false, down: false);
-      expectOrdering('c', up: false, down: true);
-      expectOrdering('d', up: true, down: false);
-      expectOrdering('e', up: false, down: false);
+      await expectOrdering('b', up: false, down: false);
+      await expectOrdering('c', up: false, down: true);
+      await expectOrdering('d', up: true, down: false);
+      await expectOrdering('e', up: false, down: false);
 
       final aLeft = tester.getTopLeft(find.text('a')).dx;
       final bLeft = tester.getTopLeft(find.text('b')).dx;
@@ -101,8 +109,9 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    expect(find.byIcon(Icons.drag_handle), findsNWidgets(2));
+    await openEventMenu(tester, 'long-a');
     expect(find.byKey(const ValueKey('move-down-long-a')), findsOneWidget);
-    expect(find.byKey(const ValueKey('move-up-long-b')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -119,27 +128,36 @@ void main() {
     await tester.pumpAndSettle();
     await openEventsPage(tester);
 
+    await openEventMenu(tester, 'c');
     await tester.tap(find.byKey(const ValueKey('move-up-c')));
     await tester.pumpAndSettle();
+    await openEventMenu(tester, 'c');
     await tester.tap(find.byKey(const ValueKey('move-up-c')));
     await tester.pumpAndSettle();
     expect(
       (await repository.getOrderedTopLevelEvents()).map((event) => event.id),
       ['c', 'a', 'b', 'd'],
     );
+    await openEventMenu(tester, 'c');
     expect(find.byKey(const ValueKey('move-up-c')), findsNothing);
     expect(find.byKey(const ValueKey('move-down-c')), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
 
+    await openEventMenu(tester, 'c');
     await tester.tap(find.byKey(const ValueKey('move-down-c')));
     await tester.pumpAndSettle();
+    await openEventMenu(tester, 'c');
     await tester.tap(find.byKey(const ValueKey('move-down-c')));
     await tester.pumpAndSettle();
+    await openEventMenu(tester, 'c');
     await tester.tap(find.byKey(const ValueKey('move-down-c')));
     await tester.pumpAndSettle();
     expect(
       (await repository.getOrderedTopLevelEvents()).map((event) => event.id),
       ['a', 'b', 'd', 'c'],
     );
+    await openEventMenu(tester, 'c');
     expect(find.byKey(const ValueKey('move-up-c')), findsOneWidget);
     expect(find.byKey(const ValueKey('move-down-c')), findsNothing);
   });

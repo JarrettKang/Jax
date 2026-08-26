@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
-import '../widgets/event_reorder_buttons.dart';
+import '../widgets/event_reorder_drag.dart';
 import 'event_hierarchy_dialog.dart';
 
 Future<void> showHistoryDetailDialog(
@@ -86,32 +86,25 @@ class _HistoryDetailDialogState extends State<_HistoryDetailDialog> {
                   )
                 else
                   ...data.children.map(
-                    (child) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(child.event.name),
-                      subtitle: Text('总投入：${child.total.inMinutes} 分钟'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          EventReorderButtons(
-                            controller: widget.controller,
-                            eventId: child.event.id,
-                            upKey: ValueKey(
-                              'move-up-history-child-${child.event.id}',
+                    (child) => EventReorderDropTarget(
+                      controller: widget.controller,
+                      eventId: child.event.id,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(child.event.name),
+                        subtitle: Text('总投入：${child.total.inMinutes} 分钟'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            EventReorderHandle(
+                              controller: widget.controller,
+                              eventId: child.event.id,
                             ),
-                            downKey: ValueKey(
-                              'move-down-history-child-${child.event.id}',
-                            ),
-                            onReordered: () {
-                              setState(() {
-                                _data = _load();
-                              });
-                            },
-                          ),
-                          const Icon(Icons.chevron_right),
-                        ],
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: () => _open(child.event),
                       ),
-                      onTap: () => _open(child.event),
                     ),
                   ),
               ],

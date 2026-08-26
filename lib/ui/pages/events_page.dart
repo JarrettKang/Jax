@@ -4,7 +4,7 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
-import '../widgets/event_reorder_buttons.dart';
+import '../widgets/event_reorder_drag.dart';
 import 'event_hierarchy_dialog.dart';
 
 class EventsPage extends StatelessWidget {
@@ -22,64 +22,68 @@ class EventsPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
               children: controller.events
                   .map(
-                    (event) => Padding(
-                      padding: EdgeInsets.only(
-                        left: (controller.hierarchyDepthFor(event.id) * 24.0)
-                            .clamp(0.0, 72.0),
-                      ),
-                      child: Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant,
-                                width: 2,
+                    (event) => EventReorderDropTarget(
+                      controller: controller,
+                      eventId: event.id,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          left: (controller.hierarchyDepthFor(event.id) * 24.0)
+                              .clamp(0.0, 72.0),
+                        ),
+                        child: Card(
+                          clipBehavior: Clip.antiAlias,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant,
+                                  width: 2,
+                                ),
                               ),
                             ),
-                          ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final actions = _actions(context, event);
-                              if (constraints.maxWidth < 600) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    12,
-                                    8,
-                                    8,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        event.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(_statusText(event)),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: Wrap(children: actions),
-                                      ),
-                                    ],
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final actions = _actions(context, event);
+                                if (constraints.maxWidth < 600) {
+                                  return Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      12,
+                                      8,
+                                      8,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          event.name,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(_statusText(event)),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Wrap(children: actions),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                                return ListTile(
+                                  title: Text(event.name),
+                                  subtitle: Text(_statusText(event)),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: actions,
                                   ),
                                 );
-                              }
-                              return ListTile(
-                                title: Text(event.name),
-                                subtitle: Text(_statusText(event)),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: actions,
-                                ),
-                              );
-                            },
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -103,12 +107,6 @@ class EventsPage extends StatelessWidget {
       : '未开始';
 
   List<Widget> _actions(BuildContext context, JaxEvent event) => [
-    EventReorderButtons(
-      controller: controller,
-      eventId: event.id,
-      upKey: ValueKey('move-up-${event.id}'),
-      downKey: ValueKey('move-down-${event.id}'),
-    ),
     if (event.status == EventStatus.pending)
       IconButton(
         key: ValueKey('start-${event.id}'),
@@ -158,6 +156,7 @@ class EventsPage extends StatelessWidget {
       onSelected: (action) => _selectMenuAction(context, event, action),
       itemBuilder: (context) => _menuItems(event),
     ),
+    EventReorderHandle(controller: controller, eventId: event.id),
   ];
 
   List<PopupMenuEntry<_EventMenuAction>> _menuItems(JaxEvent event) => [
@@ -185,6 +184,25 @@ class EventsPage extends StatelessWidget {
         title: Text('层级详情'),
       ),
     ),
+    if (controller.siblingIndexFor(event.id) > 0)
+      PopupMenuItem(
+        key: ValueKey('move-up-${event.id}'),
+        value: _EventMenuAction.moveUp,
+        child: const ListTile(
+          leading: Icon(Icons.arrow_upward),
+          title: Text('上移'),
+        ),
+      ),
+    if (controller.siblingIndexFor(event.id) <
+        controller.siblingCountFor(event.id) - 1)
+      PopupMenuItem(
+        key: ValueKey('move-down-${event.id}'),
+        value: _EventMenuAction.moveDown,
+        child: const ListTile(
+          leading: Icon(Icons.arrow_downward),
+          title: Text('下移'),
+        ),
+      ),
     if (event.status != EventStatus.running)
       PopupMenuItem(
         key: ValueKey('edit-${event.id}'),
@@ -217,6 +235,12 @@ class EventsPage extends StatelessWidget {
         return;
       case _EventMenuAction.hierarchy:
         showEventHierarchyDialog(context, controller: controller, event: event);
+        return;
+      case _EventMenuAction.moveUp:
+        _run(context, () => controller.moveUp(event.id));
+        return;
+      case _EventMenuAction.moveDown:
+        _run(context, () => controller.moveDown(event.id));
         return;
       case _EventMenuAction.edit:
         _showEditor(context, event);
@@ -268,7 +292,7 @@ class EventsPage extends StatelessWidget {
   }
 }
 
-enum _EventMenuAction { wait, pause, hierarchy, edit, delete }
+enum _EventMenuAction { wait, pause, hierarchy, moveUp, moveDown, edit, delete }
 
 class _EventEditor extends StatefulWidget {
   const _EventEditor({required this.controller, this.event});
