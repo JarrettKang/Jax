@@ -128,6 +128,37 @@ class SqliteEventRepository implements EventRepository {
   }
 
   @override
+  Future<void> restoreCompletedEvents(List<JaxEvent> events) async {
+    if (events.isEmpty) throw StateError('No events to restore');
+    await _appDatabase.database.transaction((transaction) async {
+      for (final event in events) {
+        final rows = await transaction.query(
+          'events',
+          columns: ['status'],
+          where: 'id = ?',
+          whereArgs: [event.id],
+          limit: 1,
+        );
+        if (rows.isEmpty) throw StateError('Event not found: ${event.id}');
+        if (rows.single['status'] != EventStatus.completed.name ||
+            event.status != EventStatus.paused ||
+            event.completedAt != null) {
+          throw StateError('Invalid completed Event restoration');
+        }
+      }
+      for (final event in events) {
+        final count = await transaction.update(
+          'events',
+          _toRow(event),
+          where: 'id = ? AND status = ?',
+          whereArgs: [event.id, EventStatus.completed.name],
+        );
+        if (count != 1) throw StateError('Event restore conflict: ${event.id}');
+      }
+    });
+  }
+
+  @override
   Future<JaxEvent?> getParent(String eventId) async {
     final rows = await _appDatabase.database.rawQuery(
       '''SELECT parent.* FROM events child

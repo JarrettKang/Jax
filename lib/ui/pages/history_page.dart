@@ -33,6 +33,21 @@ class HistoryPage extends StatelessWidget {
                               event: event,
                             ),
                           ),
+                          PopupMenuButton<_HistoryMenuAction>(
+                            key: ValueKey('more-history-${event.id}'),
+                            tooltip: '更多操作',
+                            onSelected: (_) => _confirmRestore(context, event),
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                key: ValueKey('restore-history-${event.id}'),
+                                value: _HistoryMenuAction.restore,
+                                child: const ListTile(
+                                  leading: Icon(Icons.restore),
+                                  title: Text('恢复事件'),
+                                ),
+                              ),
+                            ],
+                          ),
                           IconButton(
                             key: ValueKey('history-hierarchy-${event.id}'),
                             icon: const Icon(Icons.account_tree_outlined),
@@ -126,6 +141,32 @@ class HistoryPage extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmRestore(BuildContext context, JaxEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('恢复事件'),
+        content: Text('恢复“${event.name}”后，该事件将重新进入事件列表，原有执行记录会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('恢复事件'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final error = await controller.restore(event.id);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
   Future<void> _reorder(BuildContext context, JaxEvent event, bool up) async {
     final error = up
         ? await controller.moveUp(event.id)
@@ -139,3 +180,5 @@ class HistoryPage extends StatelessWidget {
   static String _time(DateTime value) =>
       '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 }
+
+enum _HistoryMenuAction { restore }

@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/use_cases/restore_event.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 import 'package:jax/data/services/sqlite_save_service.dart';
@@ -31,9 +32,7 @@ void main() {
     var repository = SqliteEventRepository(database);
     final start = DateTime.utc(2026, 8, 25, 8);
 
-    final foreignKeys = await database.database.rawQuery(
-      'PRAGMA foreign_keys',
-    );
+    final foreignKeys = await database.database.rawQuery('PRAGMA foreign_keys');
     expect(foreignKeys.single.values.single, 1);
 
     JaxEvent pending(String id, String name) => JaxEvent(
@@ -71,10 +70,7 @@ void main() {
 
     await expectLater(
       repository.startEvent(
-        second.copyWith(
-          status: EventStatus.running,
-          firstStartedAt: start,
-        ),
+        second.copyWith(status: EventStatus.running, firstStartedAt: start),
         RunSegment(
           id: 'blocked-segment',
           eventId: second.id,
@@ -89,10 +85,8 @@ void main() {
 
     final pausedAt = start.add(const Duration(minutes: 10));
     await repository.pauseEvent(
-      (await repository.getEvent(first.id))!.copyWith(
-        status: EventStatus.paused,
-        updatedAt: pausedAt,
-      ),
+      (await repository.getEvent(first.id))!
+          .copyWith(status: EventStatus.paused, updatedAt: pausedAt),
       firstSegment.copyWith(endedAt: pausedAt),
     );
     final resumedAt = pausedAt.add(const Duration(minutes: 5));
@@ -103,10 +97,8 @@ void main() {
       createdAt: resumedAt,
     );
     await repository.startEvent(
-      (await repository.getEvent(first.id))!.copyWith(
-        status: EventStatus.running,
-        updatedAt: resumedAt,
-      ),
+      (await repository.getEvent(first.id))!
+          .copyWith(status: EventStatus.running, updatedAt: resumedAt),
       resumedSegment,
     );
     final completedAt = resumedAt.add(const Duration(minutes: 5));
@@ -136,6 +128,14 @@ void main() {
 
     expect((await repository.getEvent(second.id))!.status, EventStatus.pending);
     expect((await repository.getCompletedEvents()).single.name, '第一项（已编辑）');
+    expect(await repository.getRunSegments(first.id), hasLength(2));
+
+    await RestoreEvent(repository: repository, now: () => completedAt)(
+      first.id,
+    );
+    final restored = (await repository.getEvent(first.id))!;
+    expect(restored.status, EventStatus.paused);
+    expect(restored.completedAt, isNull);
     expect(await repository.getRunSegments(first.id), hasLength(2));
 
     final rollback = pending('rollback', '事务回滚');

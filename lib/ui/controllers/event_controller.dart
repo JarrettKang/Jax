@@ -16,6 +16,7 @@ import '../../core/use_cases/delete_history_record.dart';
 import '../../core/use_cases/edit_event.dart';
 import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/resume_event.dart';
+import '../../core/use_cases/restore_event.dart';
 import '../../core/use_cases/start_event.dart';
 import '../../core/use_cases/update_event_parent.dart';
 import '../../core/use_cases/reorder_sibling.dart';
@@ -34,6 +35,7 @@ class EventController extends ChangeNotifier {
        _deleteHistory = DeleteHistoryRecord(repository),
        _pause = PauseEvent(repository: repository, now: now),
        _resume = ResumeEvent(repository: repository, newId: newId, now: now),
+       _restore = RestoreEvent(repository: repository, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now),
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
@@ -48,6 +50,7 @@ class EventController extends ChangeNotifier {
   final DeleteHistoryRecord _deleteHistory;
   final PauseEvent _pause;
   final ResumeEvent _resume;
+  final RestoreEvent _restore;
   final StartEvent _start;
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
@@ -153,6 +156,7 @@ class EventController extends ChangeNotifier {
   Future<String?> pause(String id) => _change(() => _pause(id));
   Future<String?> resume(String id) => _change(() => _resume(id));
   Future<String?> complete(String id) => _change(() => _complete(id));
+  Future<String?> restore(String id) => _change(() => _restore(id));
   Future<JaxEvent?> parentOf(String id) => _repository.getParent(id);
   Future<List<JaxEvent>> childrenOf(String id) =>
       _repository.getDirectChildren(id);

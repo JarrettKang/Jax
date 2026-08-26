@@ -134,5 +134,25 @@ void main() {
     expect(find.text('总投入：10 分钟'), findsOneWidget);
     expect(find.text('直接执行：2 分钟'), findsOneWidget);
     expect(find.text('已完成步骤'), findsOneWidget);
+
+    await tester.tap(find.text('关闭'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('more-history-history-root')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('restore-history-history-root')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '恢复事件'));
+    await tester.pumpAndSettle();
+    final restoredRoot = (await repository.getEvent('history-root'))!;
+    expect(restoredRoot.status, EventStatus.paused);
+    expect(restoredRoot.completedAt, isNull);
+    expect(
+      (await repository.getEvent('history-child'))!.status,
+      EventStatus.completed,
+    );
+    expect(await repository.getRunSegments('history-root'), hasLength(1));
+    expect((await repository.getParent('history-child'))!.id, 'history-root');
   });
 }

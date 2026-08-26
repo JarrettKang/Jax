@@ -68,6 +68,13 @@ class _Repository implements EventRepository {
   Future<void> pauseEvent(JaxEvent event, RunSegment segment) async =>
       updateEvent(event);
   @override
+  Future<void> restoreCompletedEvents(List<JaxEvent> restored) async {
+    for (final event in restored) {
+      await updateEvent(event);
+    }
+  }
+
+  @override
   Future<void> deleteEvent(String id) async =>
       events.removeWhere((event) => event.id == id);
   @override

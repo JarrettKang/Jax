@@ -49,6 +49,19 @@ class MemoryRepository implements EventRepository {
   }
 
   @override
+  Future<void> restoreCompletedEvents(List<JaxEvent> restored) async {
+    for (final event in restored) {
+      final current = await getEvent(event.id);
+      if (current == null || current.status.name != 'completed') {
+        throw StateError('Invalid completed Event restoration');
+      }
+    }
+    for (final event in restored) {
+      await updateEvent(event);
+    }
+  }
+
+  @override
   Future<JaxEvent?> getParent(String eventId) async {
     final event = await getEvent(eventId);
     return event?.parentEventId == null

@@ -11,6 +11,7 @@ abstract interface class EventRepository {
   Future<void> startEvent(JaxEvent event, RunSegment segment);
   Future<List<RunSegment>> getRunSegments(String eventId);
   Future<void> pauseEvent(JaxEvent event, RunSegment segment);
+  Future<void> restoreCompletedEvents(List<JaxEvent> events);
   Future<JaxEvent?> getParent(String eventId);
   Future<List<JaxEvent>> getDirectChildren(String parentEventId);
   Future<List<JaxEvent>> getOrderedSiblings(String eventId);

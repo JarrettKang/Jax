@@ -2,6 +2,7 @@ import 'event_status.dart';
 
 const _unchangedParent = Object();
 const _unchangedSortOrder = Object();
+const _unchangedCompletedAt = Object();
 
 class JaxEvent {
   const JaxEvent({
@@ -31,7 +32,7 @@ class JaxEvent {
     EventStatus? status,
     DateTime? updatedAt,
     DateTime? firstStartedAt,
-    DateTime? completedAt,
+    Object? completedAt = _unchangedCompletedAt,
     Object? parentEventId = _unchangedParent,
     Object? sortOrder = _unchangedSortOrder,
   }) {
@@ -45,7 +46,9 @@ class JaxEvent {
           ? this.parentEventId
           : parentEventId as String?,
       firstStartedAt: firstStartedAt ?? this.firstStartedAt,
-      completedAt: completedAt ?? this.completedAt,
+      completedAt: identical(completedAt, _unchangedCompletedAt)
+          ? this.completedAt
+          : completedAt as DateTime?,
       sortOrder: identical(sortOrder, _unchangedSortOrder)
           ? this.sortOrder
           : sortOrder as int?,

@@ -124,4 +124,5 @@
 - F4.2：completed Event 可从记录栏目恢复为 paused，保留执行片段、层级与排序，不自动 running；必要的 completed 祖先在同一事务中同步恢复，completed 下层不递归恢复。
 - F4 完成验收：全部自动化测试与静态分析、Windows Debug、Android 模拟器 Debug 及 F1/F2/F3 回归通过；不连接或迁移 Android 真机，不生成 Release。
 - F4.1 状态：已完成。事件卡片仅常驻开始/恢复或明确区分的暂停与完成，层级、同级排序、编辑和合法删除进入动态更多菜单；父事件及 running Event 不显示非法删除，running 不显示编辑。115 项 Core/Data/Widget 自动化测试、`flutter analyze`、Windows v0.1/v0.2 Debug 工作流和 Android 模拟器 v0.1/v0.2 Debug 工作流通过；schema 仍为 v4，未连接真机，未生成 Release。
-- 当前状态：F4.2 开始前稳定增量边界；schema 仍为 v4。
+- F4.2 状态：已完成。记录栏目通过低频菜单和简短确认恢复 completed Event；共享 Core 将目标及连续 completed 祖先恢复为 paused、清除当前完成时间且不恢复下层、不启动计时、不影响 running，SQLite 在单事务内持久化整条恢复链并保留 run_segments、层级和排序。122 项 Core/Data/Widget 自动化测试、`flutter analyze`、Windows v0.1/v0.2 Debug、Android 模拟器真实 sqflite 契约及 v0.2 Debug 工作流通过；schema 仍为 v4，未连接真机，未生成 Release。
+- 当前状态：F4.3 全量回归前稳定增量边界；schema 仍为 v4。
