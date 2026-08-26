@@ -106,22 +106,20 @@ class EventController extends ChangeNotifier {
   int siblingIndexFor(String eventId) {
     final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
     if (event == null) return -1;
-    return _reorderGroupFor(event).indexWhere((item) => item.id == eventId);
+    return _worldEvents
+        .where((item) => item.parentEventId == event.parentEventId)
+        .toList()
+        .indexWhere((item) => item.id == eventId);
   }
 
   int siblingCountFor(String eventId) {
     final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
-    return event == null ? 0 : _reorderGroupFor(event).length;
+    return event == null
+        ? 0
+        : _worldEvents
+              .where((item) => item.parentEventId == event.parentEventId)
+              .length;
   }
-
-  List<JaxEvent> _reorderGroupFor(JaxEvent event) => _worldEvents
-      .where(
-        (item) =>
-            item.parentEventId == event.parentEventId &&
-            (event.parentEventId != null ||
-                item.categoryId == event.categoryId),
-      )
-      .toList(growable: false);
 
   bool sameReorderGroup(String firstId, String secondId) {
     final first = _worldEvents

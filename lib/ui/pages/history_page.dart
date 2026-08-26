@@ -72,8 +72,6 @@ class HistoryPage extends StatelessWidget {
                             EventReorderHandle(
                               controller: controller,
                               eventId: event.id,
-                              title: event.name,
-                              subtitle: details,
                             ),
                           ];
                           if (constraints.maxWidth < 600) {
