@@ -280,6 +280,13 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - waiting 属于未完成状态，completed 上层不得包含 waiting 下层；waiting 不向上层或下层自动传播。completed Event 的恢复仍回到 `paused`。
 - 首页以“当前正在做”保留既有完整 running 上下文，并以次级的“同时在等待”列表展示所有 waiting Event 及简洁祖先路径；列表沿用现有 hierarchy/sibling 稳定顺序。
 
+### 10.8 v0.2 F6：世界结构视图
+
+- 新增“世界”主栏目，与“事件”（当前未完成工作）和“记录”（已完成历史）职责区分；世界展示全部 pending、paused、running、waiting、completed Event。
+- 世界直接复用现有 hierarchy 与 sibling ordering 构造树状视图；completed Event 只改变 status，不从树中移走、不自动沉底、不打散层级或历史事实。
+- 有下层的节点支持世界页 session 内展开/折叠；折叠状态不持久化，不新增数据库字段。状态图标沿用事件页和首页的状态视觉语言。
+- 世界以结构浏览为主，操作为辅；层级详情、上移、下移、编辑继续调用既有 Core/UI 业务入口，不能绕过层级、排序、删除和单 running 约束。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步

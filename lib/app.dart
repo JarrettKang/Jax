@@ -15,6 +15,7 @@ import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
 import 'ui/pages/history_page.dart';
 import 'ui/pages/home_page.dart';
+import 'ui/pages/world_page.dart';
 
 ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
@@ -146,6 +147,7 @@ class _JaxAppState extends State<JaxApp> {
         onOpenEvents: () => setState(() => _selectedIndex = 1),
       ),
       EventsPage(controller: _controller),
+      WorldPage(controller: _controller),
       HistoryPage(controller: _controller),
     ];
 
@@ -208,6 +210,11 @@ class _JaxAppState extends State<JaxApp> {
                             label: Text('事件'),
                           ),
                           NavigationRailDestination(
+                            icon: Icon(Icons.account_tree_outlined),
+                            selectedIcon: Icon(Icons.account_tree),
+                            label: Text('世界'),
+                          ),
+                          NavigationRailDestination(
                             icon: Icon(Icons.history_outlined),
                             selectedIcon: Icon(Icons.history),
                             label: Text('记录'),
@@ -234,6 +241,11 @@ class _JaxAppState extends State<JaxApp> {
                         icon: Icon(Icons.checklist_outlined),
                         selectedIcon: Icon(Icons.checklist),
                         label: '事件',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.account_tree_outlined),
+                        selectedIcon: Icon(Icons.account_tree),
+                        label: '世界',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.history_outlined),

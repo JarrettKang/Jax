@@ -64,6 +64,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
   List<JaxEvent> _historyRoots = const [];
+  List<JaxEvent> _worldEvents = const [];
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
@@ -74,6 +75,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
+  List<JaxEvent> get worldEvents => List.unmodifiable(_worldEvents);
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
@@ -84,19 +86,19 @@ class EventController extends ChangeNotifier {
   List<HomeWaitingItem> get homeWaitingItems =>
       List.unmodifiable(_homeWaitingItems);
   int siblingIndexFor(String eventId) {
-    final event = _events.where((item) => item.id == eventId).firstOrNull;
+    final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
     if (event == null) return -1;
-    return _events
+    return _worldEvents
         .where((item) => item.parentEventId == event.parentEventId)
         .toList()
         .indexWhere((item) => item.id == eventId);
   }
 
   int siblingCountFor(String eventId) {
-    final event = _events.where((item) => item.id == eventId).firstOrNull;
+    final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
     return event == null
         ? 0
-        : _events
+        : _worldEvents
               .where((item) => item.parentEventId == event.parentEventId)
               .length;
   }
@@ -105,7 +107,7 @@ class EventController extends ChangeNotifier {
       _hasDirectChildren[eventId] ?? false;
 
   int hierarchyDepthFor(String eventId) {
-    final byId = {for (final event in _events) event.id: event};
+    final byId = {for (final event in _worldEvents) event.id: event};
     var depth = 0;
     var current = byId[eventId];
     final visited = <String>{};
@@ -137,6 +139,7 @@ class EventController extends ChangeNotifier {
       }
     }
     _historyRoots = _sortByOrder(roots);
+    _worldEvents = _orderTree([..._events, ..._history]);
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
       _hasDirectChildren[event.id] = (await _repository.getDirectChildren(
