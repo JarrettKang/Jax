@@ -18,9 +18,13 @@ flutter run -d windows
 ```powershell
 flutter analyze
 flutter test
-flutter test integration_test
+pwsh -File tool/windows_debug_acceptance.ps1
 flutter build windows --release
 ```
+
+Windows integration test 会临时把共享 Debug 目录写成测试入口。请通过上述验收脚本运行
+Windows 端到端测试；脚本会清理本次测试进程、恢复普通 Debug 入口并确认 `jax.exe`
+未被锁定，避免直接双击 Debug 产物时再次启动测试宿主。
 
 Release 可执行文件生成在 `build\windows\x64\runner\Release\jax.exe`。
 
