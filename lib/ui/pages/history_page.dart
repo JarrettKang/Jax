@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/event_more_menu_button.dart';
 import 'event_hierarchy_dialog.dart';
 import 'history_detail_dialog.dart';
 
@@ -33,9 +34,8 @@ class HistoryPage extends StatelessWidget {
                               event: event,
                             ),
                           ),
-                          PopupMenuButton<_HistoryMenuAction>(
+                          EventMoreMenuButton<_HistoryMenuAction>(
                             key: ValueKey('more-history-${event.id}'),
-                            tooltip: '更多操作',
                             onSelected: (_) => _confirmRestore(context, event),
                             itemBuilder: (_) => [
                               PopupMenuItem(

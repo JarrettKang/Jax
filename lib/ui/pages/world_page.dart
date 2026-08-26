@@ -4,6 +4,7 @@ import '../../core/entities/category.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/event_more_menu_button.dart';
 import 'event_hierarchy_dialog.dart';
 
 class WorldPage extends StatefulWidget {
@@ -25,7 +26,8 @@ class _WorldPageState extends State<WorldPage> {
           .where((e) => e.parentEventId == null)
           .toList();
       final categoriesById = {
-        for (final category in widget.controller.categories) category.id: category,
+        for (final category in widget.controller.categories)
+          category.id: category,
       };
       final groups = <String?, List<JaxEvent>>{};
       for (final event in roots) {
@@ -75,6 +77,7 @@ class _WorldPageState extends State<WorldPage> {
       contentPadding: const EdgeInsets.fromLTRB(4, 20, 0, 4),
       leading: IconButton(
         key: ValueKey('world-category-toggle-$id'),
+        tooltip: _collapsed.contains(k) ? '展开分类' : '折叠分类',
         icon: Icon(
           _collapsed.contains(k) ? Icons.chevron_right : Icons.expand_more,
         ),
@@ -83,30 +86,43 @@ class _WorldPageState extends State<WorldPage> {
               _collapsed.contains(k) ? _collapsed.remove(k) : _collapsed.add(k),
         ),
       ),
-      title: Text(
-        cat?.name ?? '未分类',
-        style: Theme.of(c).textTheme.titleLarge,
-      ),
+      title: Text(cat?.name ?? '未分类', style: Theme.of(c).textTheme.titleLarge),
       trailing: cat == null
           ? null
           : PopupMenuButton<_CatAction>(
               key: ValueKey('world-category-more-$id'),
+              tooltip: '分类操作',
               onSelected: (a) => _catAction(c, cat, i, a),
               itemBuilder: (_) => [
                 const PopupMenuItem(
                   value: _CatAction.rename,
-                  child: Text('重命名'),
+                  child: ListTile(
+                    leading: Icon(Icons.edit),
+                    title: Text('重命名'),
+                  ),
                 ),
                 if (i > 0)
-                  const PopupMenuItem(value: _CatAction.up, child: Text('上移')),
+                  const PopupMenuItem(
+                    value: _CatAction.up,
+                    child: ListTile(
+                      leading: Icon(Icons.arrow_upward),
+                      title: Text('上移'),
+                    ),
+                  ),
                 if (i < widget.controller.categories.length - 1)
                   const PopupMenuItem(
                     value: _CatAction.down,
-                    child: Text('下移'),
+                    child: ListTile(
+                      leading: Icon(Icons.arrow_downward),
+                      title: Text('下移'),
+                    ),
                   ),
                 const PopupMenuItem(
                   value: _CatAction.delete,
-                  child: Text('删除分类'),
+                  child: ListTile(
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('删除分类'),
+                  ),
                 ),
               ],
             ),
@@ -146,15 +162,39 @@ class _WorldPageState extends State<WorldPage> {
     final child = widget.controller.hasDirectChildren(e.id);
     final state = _state(widget.controller.worldDisplayStateFor(e.id));
     final actions = <PopupMenuEntry<_WorldAction>>[
-      const PopupMenuItem(value: _WorldAction.hierarchy, child: Text('层级详情')),
+      const PopupMenuItem(
+        value: _WorldAction.hierarchy,
+        child: ListTile(
+          leading: Icon(Icons.account_tree_outlined),
+          title: Text('层级详情'),
+        ),
+      ),
       if (widget.controller.siblingIndexFor(e.id) > 0)
-        const PopupMenuItem(value: _WorldAction.up, child: Text('上移')),
+        const PopupMenuItem(
+          value: _WorldAction.up,
+          child: ListTile(leading: Icon(Icons.arrow_upward), title: Text('上移')),
+        ),
       if (widget.controller.siblingIndexFor(e.id) <
           widget.controller.siblingCountFor(e.id) - 1)
-        const PopupMenuItem(value: _WorldAction.down, child: Text('下移')),
-      const PopupMenuItem(value: _WorldAction.edit, child: Text('编辑事件')),
+        const PopupMenuItem(
+          value: _WorldAction.down,
+          child: ListTile(
+            leading: Icon(Icons.arrow_downward),
+            title: Text('下移'),
+          ),
+        ),
+      const PopupMenuItem(
+        value: _WorldAction.edit,
+        child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
+      ),
       if (e.parentEventId == null)
-        const PopupMenuItem(value: _WorldAction.category, child: Text('设置分类')),
+        const PopupMenuItem(
+          value: _WorldAction.category,
+          child: ListTile(
+            leading: Icon(Icons.folder_outlined),
+            title: Text('设置分类'),
+          ),
+        ),
     ];
     return Padding(
       key: ValueKey('world-node-${e.id}'),
@@ -169,6 +209,7 @@ class _WorldPageState extends State<WorldPage> {
         leading: child
             ? IconButton(
                 key: ValueKey('world-toggle-${e.id}'),
+                tooltip: _collapsed.contains(e.id) ? '展开下层事件' : '折叠下层事件',
                 icon: Icon(
                   _collapsed.contains(e.id)
                       ? Icons.chevron_right
@@ -190,7 +231,7 @@ class _WorldPageState extends State<WorldPage> {
             Text(state.$2),
           ],
         ),
-        trailing: PopupMenuButton<_WorldAction>(
+        trailing: EventMoreMenuButton<_WorldAction>(
           key: ValueKey('world-more-${e.id}'),
           onSelected: (a) => _select(c, e, a),
           itemBuilder: (_) => actions,

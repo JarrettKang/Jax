@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/event_more_menu_button.dart';
 import 'event_hierarchy_dialog.dart';
 
 class EventsPage extends StatelessWidget {
@@ -145,9 +146,8 @@ class EventsPage extends StatelessWidget {
         label: const Text('完成'),
         onPressed: () => _run(context, () => controller.complete(event.id)),
       ),
-    PopupMenuButton<_EventMenuAction>(
+    EventMoreMenuButton<_EventMenuAction>(
       key: ValueKey('more-${event.id}'),
-      tooltip: '更多操作',
       onSelected: (action) => _selectMenuAction(context, event, action),
       itemBuilder: (context) => _menuItems(event),
     ),

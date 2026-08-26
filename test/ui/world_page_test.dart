@@ -15,17 +15,16 @@ void main() {
     String? parent,
     String? categoryId,
     int? order,
-  }) =>
-      JaxEvent(
-        id: id,
-        name: id,
-        status: status,
-        parentEventId: parent,
-        categoryId: categoryId,
-        sortOrder: order,
-        createdAt: now,
-        updatedAt: now,
-      );
+  }) => JaxEvent(
+    id: id,
+    name: id,
+    status: status,
+    parentEventId: parent,
+    categoryId: categoryId,
+    sortOrder: order,
+    createdAt: now,
+    updatedAt: now,
+  );
 
   testWidgets('world shows all statuses in hierarchy order', (tester) async {
     final repository = MemoryRepository([
@@ -41,6 +40,13 @@ void main() {
     await tester.pumpAndSettle();
     for (final id in ['A', 'B', 'C', 'D', 'E']) {
       expect(find.byKey(ValueKey('world-node-$id')), findsOneWidget);
+      final tooltip = tester.widget<Tooltip>(
+        find.descendant(
+          of: find.byKey(ValueKey('world-more-$id')),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(tooltip.message, '更多操作');
     }
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('world-node-B'))).dy,
@@ -116,19 +122,20 @@ void main() {
   testWidgets('World safely shows categorized and unclassified roots', (
     tester,
   ) async {
-    final repository = MemoryRepository([
-      event('A', EventStatus.pending, categoryId: 'dev', order: 0),
-      event('B', EventStatus.pending, order: 1),
-    ])
-      ..categories.add(
-        Category(
-          id: 'dev',
-          name: '开发项目',
-          sortOrder: 0,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
+    final repository =
+        MemoryRepository([
+            event('A', EventStatus.pending, categoryId: 'dev', order: 0),
+            event('B', EventStatus.pending, order: 1),
+          ])
+          ..categories.add(
+            Category(
+              id: 'dev',
+              name: '开发项目',
+              sortOrder: 0,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
     await tester.tap(find.text('世界'));
@@ -143,22 +150,30 @@ void main() {
   testWidgets('deleting a category returns its root to 未分类 safely', (
     tester,
   ) async {
-    final repository = MemoryRepository([
-      event('A', EventStatus.pending, categoryId: 'dev', order: 0),
-    ])
-      ..categories.add(
-        Category(
-          id: 'dev',
-          name: '开发项目',
-          sortOrder: 0,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
+    final repository =
+        MemoryRepository([
+            event('A', EventStatus.pending, categoryId: 'dev', order: 0),
+          ])
+          ..categories.add(
+            Category(
+              id: 'dev',
+              name: '开发项目',
+              sortOrder: 0,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
     await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
+    final categoryTooltip = tester.widget<Tooltip>(
+      find.descendant(
+        of: find.byKey(const ValueKey('world-category-more-dev')),
+        matching: find.byType(Tooltip),
+      ),
+    );
+    expect(categoryTooltip.message, '分类操作');
     await tester.tap(find.byKey(const ValueKey('world-category-more-dev')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除分类'));

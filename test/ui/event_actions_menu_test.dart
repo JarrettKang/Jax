@@ -55,6 +55,13 @@ void main() {
     expect(find.byKey(const ValueKey('pause-waiting')), findsNothing);
     for (final id in ['pending', 'paused', 'running']) {
       expect(find.byKey(ValueKey('more-$id')), findsOneWidget);
+      final tooltip = tester.widget<Tooltip>(
+        find.descendant(
+          of: find.byKey(ValueKey('more-$id')),
+          matching: find.byType(Tooltip),
+        ),
+      );
+      expect(tooltip.message, '更多操作');
       expect(find.byKey(ValueKey('hierarchy-$id')), findsNothing);
       expect(find.byKey(ValueKey('edit-$id')), findsNothing);
       expect(find.byKey(ValueKey('delete-$id')), findsNothing);
