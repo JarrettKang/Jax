@@ -21,7 +21,7 @@ void main() {
 
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
-    expect(find.text('暂无历史记录'), findsOneWidget);
+    expect(find.text('这一天没有记录到执行时间'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

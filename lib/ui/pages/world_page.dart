@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../core/entities/category.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
+import '../../core/entities/event_status.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
 import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
+import 'history_detail_dialog.dart';
 
 class WorldPage extends StatefulWidget {
   const WorldPage({required this.controller, super.key});
@@ -21,8 +23,9 @@ class _WorldPageState extends State<WorldPage> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
-      if (widget.controller.loading)
+      if (widget.controller.loading) {
         return const Center(child: CircularProgressIndicator());
+      }
       final roots = widget.controller.worldEvents
           .where((e) => e.parentEventId == null)
           .toList();
@@ -185,6 +188,21 @@ class _WorldPageState extends State<WorldPage> {
         displayState == WorldDisplayState.progressing;
     final completed = displayState == WorldDisplayState.completed;
     final actions = <PopupMenuEntry<_WorldAction>>[
+      if (e.status == EventStatus.completed)
+        PopupMenuItem(
+          key: ValueKey('world-restore-${e.id}'),
+          value: _WorldAction.restore,
+          child: ListTile(leading: Icon(Icons.restore), title: Text('恢复事件')),
+        ),
+      if (e.status == EventStatus.completed)
+        PopupMenuItem(
+          key: ValueKey('world-investment-${e.id}'),
+          value: _WorldAction.investment,
+          child: ListTile(
+            leading: Icon(Icons.analytics_outlined),
+            title: Text('投入详情'),
+          ),
+        ),
       const PopupMenuItem(
         value: _WorldAction.hierarchy,
         child: ListTile(
@@ -202,6 +220,15 @@ class _WorldPageState extends State<WorldPage> {
           child: ListTile(
             leading: Icon(Icons.folder_outlined),
             title: Text('设置分类'),
+          ),
+        ),
+      if (e.status == EventStatus.completed && !child)
+        PopupMenuItem(
+          key: ValueKey('world-delete-history-${e.id}'),
+          value: _WorldAction.deleteHistory,
+          child: ListTile(
+            leading: Icon(Icons.delete_outline),
+            title: Text('删除历史记录'),
           ),
         ),
     ];
@@ -282,6 +309,64 @@ class _WorldPageState extends State<WorldPage> {
         _edit(c, e);
       case _WorldAction.category:
         _assign(c, e);
+      case _WorldAction.restore:
+        _confirmRestore(c, e);
+      case _WorldAction.investment:
+        showHistoryDetailDialog(c, controller: widget.controller, event: e);
+      case _WorldAction.deleteHistory:
+        _confirmDeleteHistory(c, e);
+    }
+  }
+
+  Future<void> _confirmRestore(BuildContext c, JaxEvent e) async {
+    final confirmed = await showDialog<bool>(
+      context: c,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('恢复事件'),
+        content: Text('恢复“${e.name}”后，该事件将重新进入事件列表，原有执行记录会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('恢复事件'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final error = await widget.controller.restore(e.id);
+      if (error != null && c.mounted) {
+        ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(error)));
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteHistory(BuildContext c, JaxEvent e) async {
+    final confirmed = await showDialog<bool>(
+      context: c,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除历史记录'),
+        content: Text('确定删除“${e.name}”及其执行记录吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final error = await widget.controller.deleteHistory(e.id);
+      if (error != null && c.mounted) {
+        ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(error)));
+      }
     }
   }
 
@@ -332,8 +417,9 @@ class _WorldPageState extends State<WorldPage> {
         ],
       ),
     );
-    if (id != null)
+    if (id != null) {
       await widget.controller.assignCategory(e.id, id.isEmpty ? null : id);
+    }
   }
 
   Future<String?> _name(BuildContext c, String title, String? initial) async {
@@ -359,7 +445,14 @@ class _WorldPageState extends State<WorldPage> {
   }
 }
 
-enum _WorldAction { hierarchy, edit, category }
+enum _WorldAction {
+  hierarchy,
+  edit,
+  category,
+  restore,
+  investment,
+  deleteHistory,
+}
 
 enum _CatAction { rename, up, down, delete }
 

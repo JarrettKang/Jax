@@ -13,7 +13,7 @@ import 'core/use_cases/create_event.dart';
 import 'core/use_cases/prepare_for_shutdown.dart';
 import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
-import 'ui/pages/history_page.dart';
+import 'ui/pages/summary_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/world_page.dart';
 
@@ -148,7 +148,7 @@ class _JaxAppState extends State<JaxApp> {
       ),
       EventsPage(controller: _controller),
       WorldPage(controller: _controller),
-      HistoryPage(controller: _controller),
+      SummaryPage(controller: _controller),
     ];
 
     return MaterialApp(

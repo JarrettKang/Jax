@@ -33,7 +33,7 @@ void main() {
     createdAt: time,
   );
 
-  testWidgets('history shows highest completed nodes and drills into totals', (
+  testWidgets('World shows completed hierarchy and drills into investment', (
     tester,
   ) async {
     final incompleteParent = JaxEvent(
@@ -61,30 +61,42 @@ void main() {
           ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('记录'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
 
     expect(find.text('完成项目'), findsOneWidget);
     expect(find.text('先完成项目'), findsOneWidget);
     expect(find.text('已完成但上层未完成'), findsOneWidget);
-    expect(find.text('完成阶段'), findsNothing);
-    expect(find.text('完成步骤'), findsNothing);
+    expect(find.text('完成阶段'), findsOneWidget);
+    expect(find.text('完成步骤'), findsOneWidget);
     final firstY = tester.getTopLeft(find.text('先完成项目')).dy;
     final secondY = tester.getTopLeft(find.text('完成项目')).dy;
     expect(firstY, lessThan(secondY));
 
-    await tester.tap(find.byKey(const ValueKey('history-detail-root')));
+    await tester.tap(find.byKey(const ValueKey('world-more-root')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('world-investment-root')));
     await tester.pumpAndSettle();
     expect(find.text('总投入：14 分钟'), findsOneWidget);
     expect(find.text('直接执行：2 分钟'), findsOneWidget);
-    expect(find.text('完成阶段'), findsOneWidget);
+    final detailChild = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.text('完成阶段'),
+    );
+    expect(detailChild, findsOneWidget);
     expect(find.text('总投入：12 分钟'), findsOneWidget);
 
-    await tester.tap(find.text('完成阶段'));
+    await tester.tap(detailChild);
     await tester.pumpAndSettle();
     expect(find.text('总投入：12 分钟'), findsOneWidget);
     expect(find.text('直接执行：3 分钟'), findsOneWidget);
-    expect(find.text('完成步骤'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('完成步骤'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('总投入：9 分钟'), findsOneWidget);
 
     await tester.tap(find.text('调整层级'));

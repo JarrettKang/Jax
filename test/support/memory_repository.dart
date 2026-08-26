@@ -183,11 +183,13 @@ class MemoryRepository implements EventRepository {
   @override
   Future<void> deleteCategory(String id) async {
     categories.removeWhere((item) => item.id == id);
-    for (var i = 0; i < categories.length; i++)
+    for (var i = 0; i < categories.length; i++) {
       categories[i] = categories[i].copyWith(sortOrder: i);
+    }
     for (var i = 0; i < events.length; i++) {
-      if (events[i].categoryId == id)
+      if (events[i].categoryId == id) {
         events[i] = events[i].copyWith(categoryId: null);
+      }
     }
   }
 
@@ -195,23 +197,28 @@ class MemoryRepository implements EventRepository {
   Future<void> reorderCategory(String id, int targetIndex) async {
     final ordered = _orderedCategories();
     final current = ordered.indexWhere((item) => item.id == id);
-    if (current < 0 || targetIndex < 0 || targetIndex >= ordered.length)
+    if (current < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
       throw StateError('Invalid category order');
+    }
     final moved = ordered.removeAt(current);
     ordered.insert(targetIndex, moved);
-    for (var i = 0; i < ordered.length; i++)
+    for (var i = 0; i < ordered.length; i++) {
       categories[categories.indexWhere((item) => item.id == ordered[i].id)] =
           ordered[i].copyWith(sortOrder: i);
+    }
   }
 
   @override
   Future<void> setRootCategory(String eventId, String? categoryId) async {
     final event = await getEvent(eventId);
     if (event == null) throw StateError('Event not found: $eventId');
-    if (event.parentEventId != null)
+    if (event.parentEventId != null) {
       throw StateError('Only root events can have a category');
-    if (categoryId != null && !categories.any((item) => item.id == categoryId))
+    }
+    if (categoryId != null &&
+        !categories.any((item) => item.id == categoryId)) {
       throw StateError('Category not found');
+    }
     await updateEvent(event.copyWith(categoryId: categoryId));
   }
 }

@@ -132,3 +132,10 @@
 - Category Core 规则包括名称校验、唯一名称、CRUD、独立排序、删除归还未分类、root assignment，以及 child→root 继承 / root→child 清除直接 category。World UI 只派生 descendants 的所属 Category，不复制 category_id。
 - F6.2 测试策略新增 Category Core/Data/migration/World Widget 覆盖；继续执行完整自动化回归、`flutter analyze`、Windows Debug 和 Android Emulator Debug，真机不参与 migration，不生成 Release。
 - F4.3 状态：已完成。提交后 `flutter analyze` 和全部 122 项 Core/Data/Widget 自动化测试通过；Windows v0.1/v0.2 Debug 验收通过且普通 Debug 产物已恢复、无进程或文件锁残留；Android 模拟器 v0.1、真实 sqflite 恢复契约、v2→v4 migration 和 v0.2 层级/恢复 Debug 工作流全部通过。schema 保持 v4，未连接或修改 Android 真机，未生成任何 Release。F4 形成新的稳定 Debug 基线。
+
+## 8. F7：日/周时间复盘
+
+- F7.1：Core `TimeSummaryService` 以现有 run_segments 动态计算本地 23:00 日界线的日/周窗口 overlap，并按当前 root Category 聚合；不新增 summary 表或 schema。
+- F7.2：记录栏目改为日总结/周总结；日视图使用 Category 横向时间条，周视图使用七日真实时长 Category 堆叠柱及周汇总。
+- F7.3：completed 全量结构、层级与排序由 World 承担；恢复、投入详情和删除历史记录迁移到 World completed Event 菜单。
+- F7 测试覆盖跨 23:00、跨周、open segment、多 Category/未分类、动态 Category 归属、零记录、周日合计，以及 Summary/World Widget 与双平台 Debug 回归。

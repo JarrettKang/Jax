@@ -263,11 +263,11 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 顺序表示用户计划推进顺序，与 Event ID、层级、状态、创建/完成时间、执行时间和优先级独立；状态变化和实际执行顺序不改变用户定义顺序，也不强制前置条件。
 - 用户可以在同级集合内手动重排序；排序不能直接改变上层关系。completed Event 也可排序，排序不改变任何执行记录或时间事实。
 - 新建 Event、移动到新上层或解除上层关系时，进入目标同级集合末尾；删除 Event 后其余 Event 保持相对顺序。
-- 事件、记录和首页按同级排序展示；首页继续读取真实 Event 状态，不维护独立步骤数据。
+- 事件、世界和首页按同级排序展示；首页继续读取真实 Event 状态，不维护独立步骤数据。
 
 ### 10.6 v0.2 F4：恢复已完成事件
 
-- completed Event 可以从记录栏目执行“恢复事件”，恢复后状态为 `paused` 并重新进入事件栏目；恢复不自动开始计时、不抢占或改变当前 running Event。
+- completed Event 可以从世界页的更多菜单执行“恢复事件”，恢复后状态为 `paused` 并重新进入事件栏目；恢复不自动开始计时、不抢占或改变当前 running Event。
 - 恢复保留 Event ID、既有 run_segments、直接与聚合时间事实、层级关系和同级顺序；取消当前完成结论，完成时间随之清除。
 - 恢复 Event 时，其向上的连续 completed 祖先同步恢复为 `paused`，直到没有上层或遇到本来未完成的祖先，避免 completed 上层包含未完成下层。
 - 恢复只向上维护一致性，不自动恢复 completed 下层；恢复后再次完成仍遵守既有下层完成约束。
@@ -300,6 +300,13 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - hierarchy 移动到下层时清除旧的直接 Category；下层解除关系成为新 root 时继承原 root Category。Category 不拥有 status、duration、run_segments、completion 或 Category 状态。
 - World 按 Category 顺序展示 root trees，分类折叠与 Event tree 折叠分别为 UI session 状态，不持久化；Event sibling ordering 在每个分类内保持原有相对顺序。
 
+### 10.11 v0.2 F7：时间复盘
+
+- “记录”栏目以日总结与周总结复盘真实主动执行时间；事实来源仅为 Event 的 direct run_segments，不使用 aggregate duration，waiting、paused、pending 和 completed 状态本身不产生统计时间。
+- Jax 统计日为本地时间前一日 23:00 至当日 23:00；segment 以与统计窗口的 overlap 裁剪，未结束的 running segment 截止当前时间。周从周一开始，至周日 23:00 结束；当前日/周可显示进行中数据。
+- 时间按 Event 的当前 hierarchy 向上找到 root，并按 root 当前 Category 动态归属；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
+- 日总结显示按时长降序的 Category 横向条与占比；周总结显示七天真实时长的 Category 堆叠柱和全周 Category 汇总。Category identity 基于 id，未分类使用中性样式。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步
@@ -308,7 +315,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 循环事件、子任务、提醒、标签、分类和优先级
 - 多个事件同时处于 `running`
 - 编辑历史记录
-- 统计报表和数据分析
+- F7 时间复盘以外的统计报表和数据分析
 - 最终视觉设计和复杂 UI 动效
 - 对断电、系统崩溃或强制结束进程场景下的绝对精确计时恢复保证
 

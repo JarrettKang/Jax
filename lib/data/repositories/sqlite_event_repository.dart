@@ -477,8 +477,9 @@ class SqliteEventRepository implements EventRepository {
       );
       final ids = rows.map((row) => row['id']! as String).toList();
       final current = ids.indexOf(id);
-      if (current < 0 || targetIndex < 0 || targetIndex >= ids.length)
+      if (current < 0 || targetIndex < 0 || targetIndex >= ids.length) {
         throw StateError('Invalid category order');
+      }
       final moved = ids.removeAt(current);
       ids.insert(targetIndex, moved);
       for (var i = 0; i < ids.length; i++) {
@@ -502,9 +503,12 @@ class SqliteEventRepository implements EventRepository {
         whereArgs: [eventId],
         limit: 1,
       );
-      if (event.isEmpty) throw StateError('Event not found: $eventId');
-      if (event.single['parent_event_id'] != null)
+      if (event.isEmpty) {
+        throw StateError('Event not found: $eventId');
+      }
+      if (event.single['parent_event_id'] != null) {
         throw StateError('Only root events can have a category');
+      }
       if (categoryId != null) {
         final category = await transaction.query(
           'categories',
@@ -512,8 +516,9 @@ class SqliteEventRepository implements EventRepository {
           whereArgs: [categoryId],
           limit: 1,
         );
-        if (category.isEmpty)
+        if (category.isEmpty) {
           throw StateError('Category not found: $categoryId');
+        }
       }
       await transaction.update(
         'events',

@@ -112,11 +112,8 @@ void main() {
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('持续：120 分钟'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('delete-history-completed')),
-      findsOneWidget,
-    );
+    expect(find.text('日总结'), findsOneWidget);
+    expect(find.text('周总结'), findsOneWidget);
     expect(find.byType(Scrollable), findsWidgets);
     expect(tester.takeException(), isNull);
   });

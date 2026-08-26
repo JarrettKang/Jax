@@ -8,7 +8,7 @@ import 'package:jax/core/entities/run_segment.dart';
 import '../support/memory_repository.dart';
 
 void main() {
-  testWidgets('history confirms restore and returns event to events page', (
+  testWidgets('World confirms restore and returns event to Events', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -43,19 +43,19 @@ void main() {
           );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('记录'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('more-history-root')));
+    await tester.tap(find.byKey(const ValueKey('world-more-root')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('restore-history-root')));
+    await tester.tap(find.byKey(const ValueKey('world-restore-root')));
     await tester.pumpAndSettle();
     expect(find.text('恢复事件'), findsWidgets);
     expect(find.textContaining('原有执行记录会保留'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '恢复事件'));
     await tester.pumpAndSettle();
 
-    expect(find.text('root 的长事件名称'), findsNothing);
+    expect(find.text('root 的长事件名称'), findsOneWidget);
     expect(find.text('leaf 的长事件名称'), findsOneWidget);
     await tester.tap(find.text('事件'));
     await tester.pumpAndSettle();

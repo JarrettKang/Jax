@@ -9,7 +9,7 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('moves completed event from events to history', (tester) async {
+  testWidgets('moves completed event from Events into World', (tester) async {
     final start = DateTime.utc(2026);
     final end = start.add(const Duration(minutes: 5));
     final repository =
@@ -37,9 +37,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('complete-one')));
     await tester.pumpAndSettle();
     expect(find.text('完成任务'), findsNothing);
-    await tester.tap(find.text('记录'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
     expect(find.text('完成任务'), findsOneWidget);
-    expect(find.textContaining('持续：5 分钟'), findsOneWidget);
+    expect(find.text('已完成'), findsOneWidget);
   });
 }

@@ -11,6 +11,8 @@ import '../../core/repositories/event_repository.dart';
 import '../../core/services/event_hierarchy_service.dart';
 import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/services/world_display_state_service.dart';
+import '../../core/services/time_summary_service.dart';
+import '../../core/entities/time_summary.dart';
 import '../../core/services/category_service.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
@@ -46,6 +48,7 @@ class EventController extends ChangeNotifier {
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
        _worldDisplayStates = const WorldDisplayStateService(),
+       _summaries = TimeSummaryService(repository, now),
        _categories = CategoryService(
          repository: repository,
          newId: newId,
@@ -68,6 +71,7 @@ class EventController extends ChangeNotifier {
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
   final WorldDisplayStateService _worldDisplayStates;
+  final TimeSummaryService _summaries;
   final CategoryService _categories;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
@@ -289,6 +293,9 @@ class EventController extends ChangeNotifier {
 
   Future<Duration> directDuration(String id) => _durations.directDuration(id);
   Future<Duration> totalDuration(String id) => _durations.totalDuration(id);
+  Future<TimeSummary> dailySummary(DateTime date) => _summaries.day(date);
+  Future<WeeklyTimeSummary> weeklySummary(DateTime date) =>
+      _summaries.week(date);
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,
