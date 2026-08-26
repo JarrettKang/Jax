@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 import 'package:jax/core/use_cases/edit_event.dart';
@@ -108,4 +109,17 @@ class _Repository implements EventRepository {
   Future<void> updateEvent(JaxEvent event) async {
     events[events.indexWhere((item) => item.id == event.id)] = event;
   }
+
+  @override
+  Future<List<Category>> getCategories() async => const [];
+  @override
+  Future<void> insertCategory(Category category) async {}
+  @override
+  Future<void> updateCategory(Category category) async {}
+  @override
+  Future<void> deleteCategory(String id) async {}
+  @override
+  Future<void> reorderCategory(String id, int targetIndex) async {}
+  @override
+  Future<void> setRootCategory(String eventId, String? categoryId) async {}
 }

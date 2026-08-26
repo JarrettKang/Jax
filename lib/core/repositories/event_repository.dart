@@ -1,5 +1,6 @@
 import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
+import '../entities/category.dart';
 
 abstract interface class EventRepository {
   Future<void> insertEvent(JaxEvent event);
@@ -29,4 +30,10 @@ abstract interface class EventRepository {
     required RunSegment newSegment,
     required List<JaxEvent> pausedAncestors,
   });
+  Future<List<Category>> getCategories();
+  Future<void> insertCategory(Category category);
+  Future<void> updateCategory(Category category);
+  Future<void> deleteCategory(String id);
+  Future<void> reorderCategory(String id, int targetIndex);
+  Future<void> setRootCategory(String eventId, String? categoryId);
 }

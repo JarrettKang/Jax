@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 5;
+  static const schemaVersion = 6;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -29,12 +29,20 @@ class AppDatabase {
   }
 
   static Future<void> _createSchema(Database database, int version) async {
+    await database.execute('''CREATE TABLE categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+      sort_order INTEGER NOT NULL,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL
+    )''');
     await database.execute('''CREATE TABLE events (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
       status TEXT NOT NULL CHECK(status IN ('pending','running','paused','waiting','completed')),
       parent_event_id TEXT REFERENCES events(id) ON DELETE RESTRICT,
       sort_order INTEGER,
+      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
       first_started_at_utc INTEGER,
       completed_at_utc INTEGER,
       created_at_utc INTEGER NOT NULL,
@@ -68,6 +76,18 @@ class AppDatabase {
         )''');
     }
     if (oldVersion < 5) await _migrateToWaitingStatus(database);
+    if (oldVersion < 6) {
+      await database.execute('''CREATE TABLE categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+        sort_order INTEGER NOT NULL,
+        created_at_utc INTEGER NOT NULL,
+        updated_at_utc INTEGER NOT NULL
+      )''');
+      await database.execute(
+        'ALTER TABLE events ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
+      );
+    }
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {

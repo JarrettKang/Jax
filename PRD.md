@@ -293,6 +293,13 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - Event 自己为 running 时世界显示“正在执行”；否则任意深度后代存在 running 时显示“推进中”。没有 running 但自己或后代存在 waiting 时显示“等待中”；其余显示真实的 paused、pending 或 completed 语义。
 - 结构状态由当前 hierarchy 与真实 status 实时派生，不持久化、不产生迁移、不修改 Event 状态，也不因展开/折叠改变。running 后代优先于 waiting 后代，completed hierarchy 约束继续由 Core 保证。
 
+### 10.10 v0.2 F6.2：世界分类
+
+- Category 是独立于 Event hierarchy 的一级世界分区；只有顶级 Event 直接拥有一个 nullable Category，所有 descendants 通过当前顶级祖先继承分类。
+- 系统提供不可编辑的虚拟“未分类”分组；用户 Category 支持创建、重命名、删除和独立排序。删除 Category 只将所属 roots 归入未分类，不删除 Event 或破坏 hierarchy。
+- hierarchy 移动到下层时清除旧的直接 Category；下层解除关系成为新 root 时继承原 root Category。Category 不拥有 status、duration、run_segments、completion 或 Category 状态。
+- World 按 Category 顺序展示 root trees，分类折叠与 Event tree 折叠分别为 UI session 状态，不持久化；Event sibling ordering 在每个分类内保持原有相对顺序。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步

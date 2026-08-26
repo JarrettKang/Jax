@@ -1,6 +1,7 @@
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
+import '../../core/entities/category.dart';
 import '../../core/repositories/event_repository.dart';
 import '../database/app_database.dart';
 
@@ -261,7 +262,7 @@ class SqliteEventRepository implements EventRepository {
     await _appDatabase.database.transaction((transaction) async {
       final childRows = await transaction.query(
         'events',
-        columns: ['status'],
+        columns: ['status', 'category_id'],
         where: 'id = ?',
         whereArgs: [eventId],
         limit: 1,
@@ -293,12 +294,28 @@ class SqliteEventRepository implements EventRepository {
         );
         if (cycle.isNotEmpty) throw StateError('Hierarchy cycle detected');
       }
+      String? categoryId;
+      if (parentEventId == null) {
+        final root = await transaction.rawQuery(
+          '''WITH RECURSIVE ancestors(id, parent_event_id, category_id) AS (
+          SELECT id, parent_event_id, category_id FROM events WHERE id = ?
+          UNION ALL
+          SELECT e.id, e.parent_event_id, e.category_id FROM events e
+          JOIN ancestors a ON e.id = a.parent_event_id
+        ) SELECT category_id FROM ancestors WHERE parent_event_id IS NULL LIMIT 1''',
+          [eventId],
+        );
+        categoryId = root.isEmpty
+            ? null
+            : root.single['category_id'] as String?;
+      }
       final count = await transaction.update(
         'events',
         {
           'parent_event_id': parentEventId,
           'sort_order': await _nextSortOrder(transaction, parentEventId),
           'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
+          'category_id': categoryId,
         },
         where: 'id = ?',
         whereArgs: [eventId],
@@ -382,6 +399,7 @@ class SqliteEventRepository implements EventRepository {
     'status': event.status.name,
     'parent_event_id': event.parentEventId,
     'sort_order': event.sortOrder,
+    'category_id': event.categoryId,
     'first_started_at_utc': event.firstStartedAt?.millisecondsSinceEpoch,
     'completed_at_utc': event.completedAt?.millisecondsSinceEpoch,
     'created_at_utc': event.createdAt.millisecondsSinceEpoch,
@@ -401,6 +419,7 @@ class SqliteEventRepository implements EventRepository {
       name: row['name']! as String,
       status: EventStatus.fromStorage(row['status']! as String),
       parentEventId: row['parent_event_id'] as String?,
+      categoryId: row['category_id'] as String?,
       sortOrder: row['sort_order'] as int?,
       firstStartedAt: optional('first_started_at_utc'),
       completedAt: optional('completed_at_utc'),
@@ -414,4 +433,116 @@ class SqliteEventRepository implements EventRepository {
       ),
     );
   }
+
+  @override
+  Future<List<Category>> getCategories() async {
+    final rows = await _appDatabase.database.query(
+      'categories',
+      orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+    );
+    return rows.map(_categoryFromRow).toList(growable: false);
+  }
+
+  @override
+  Future<void> insertCategory(Category category) async {
+    await _appDatabase.database.insert('categories', _categoryToRow(category));
+  }
+
+  @override
+  Future<void> updateCategory(Category category) async {
+    final count = await _appDatabase.database.update(
+      'categories',
+      _categoryToRow(category),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+    if (count != 1) throw StateError('Category not found: ${category.id}');
+  }
+
+  @override
+  Future<void> deleteCategory(String id) async {
+    await _appDatabase.database.delete(
+      'categories',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  @override
+  Future<void> reorderCategory(String id, int targetIndex) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'categories',
+        orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+      );
+      final ids = rows.map((row) => row['id']! as String).toList();
+      final current = ids.indexOf(id);
+      if (current < 0 || targetIndex < 0 || targetIndex >= ids.length)
+        throw StateError('Invalid category order');
+      final moved = ids.removeAt(current);
+      ids.insert(targetIndex, moved);
+      for (var i = 0; i < ids.length; i++) {
+        await transaction.update(
+          'categories',
+          {'sort_order': i},
+          where: 'id = ?',
+          whereArgs: [ids[i]],
+        );
+      }
+    });
+  }
+
+  @override
+  Future<void> setRootCategory(String eventId, String? categoryId) async {
+    await _appDatabase.database.transaction((transaction) async {
+      final event = await transaction.query(
+        'events',
+        columns: ['parent_event_id'],
+        where: 'id = ?',
+        whereArgs: [eventId],
+        limit: 1,
+      );
+      if (event.isEmpty) throw StateError('Event not found: $eventId');
+      if (event.single['parent_event_id'] != null)
+        throw StateError('Only root events can have a category');
+      if (categoryId != null) {
+        final category = await transaction.query(
+          'categories',
+          where: 'id = ?',
+          whereArgs: [categoryId],
+          limit: 1,
+        );
+        if (category.isEmpty)
+          throw StateError('Category not found: $categoryId');
+      }
+      await transaction.update(
+        'events',
+        {'category_id': categoryId},
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+    });
+  }
+
+  Map<String, Object?> _categoryToRow(Category category) => {
+    'id': category.id,
+    'name': category.name,
+    'sort_order': category.sortOrder,
+    'created_at_utc': category.createdAt.millisecondsSinceEpoch,
+    'updated_at_utc': category.updatedAt.millisecondsSinceEpoch,
+  };
+
+  Category _categoryFromRow(Map<String, Object?> row) => Category(
+    id: row['id']! as String,
+    name: row['name']! as String,
+    sortOrder: row['sort_order']! as int,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      row['created_at_utc']! as int,
+      isUtc: true,
+    ),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(
+      row['updated_at_utc']! as int,
+      isUtc: true,
+    ),
+  );
 }

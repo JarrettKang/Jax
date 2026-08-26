@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 
 import '../../core/entities/event_status.dart';
+import '../../core/entities/category.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
@@ -10,6 +11,7 @@ import '../../core/repositories/event_repository.dart';
 import '../../core/services/event_hierarchy_service.dart';
 import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/services/world_display_state_service.dart';
+import '../../core/services/category_service.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
@@ -44,6 +46,11 @@ class EventController extends ChangeNotifier {
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
        _worldDisplayStates = const WorldDisplayStateService(),
+       _categories = CategoryService(
+         repository: repository,
+         newId: newId,
+         now: now,
+       ),
        _updateParent = UpdateEventParent(repository: repository, now: now),
        _reorder = ReorderSibling(repository);
   final EventRepository _repository;
@@ -61,6 +68,7 @@ class EventController extends ChangeNotifier {
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
   final WorldDisplayStateService _worldDisplayStates;
+  final CategoryService _categories;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
   final Map<String, List<RunSegment>> _segments = {};
@@ -70,6 +78,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _historyRoots = const [];
   List<JaxEvent> _worldEvents = const [];
   Map<String, WorldDisplayState> _worldStates = const {};
+  List<Category> _categoryItems = const [];
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
@@ -83,6 +92,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> get worldEvents => List.unmodifiable(_worldEvents);
   WorldDisplayState worldDisplayStateFor(String eventId) =>
       _worldStates[eventId] ?? WorldDisplayState.pending;
+  List<Category> get categories => List.unmodifiable(_categoryItems);
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
@@ -148,6 +158,7 @@ class EventController extends ChangeNotifier {
     _historyRoots = _sortByOrder(roots);
     _worldEvents = _orderTree([..._events, ..._history]);
     _worldStates = _worldDisplayStates.derive(_worldEvents);
+    _categoryItems = await _repository.getCategories();
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
       _hasDirectChildren[event.id] = (await _repository.getDirectChildren(
@@ -226,6 +237,16 @@ class EventController extends ChangeNotifier {
   Future<String?> create(String name) => _change(() => _create(name));
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
+  Future<String?> createCategory(String name) =>
+      _change(() => _categories.create(name));
+  Future<String?> renameCategory(String id, String name) =>
+      _change(() => _categories.rename(id, name));
+  Future<String?> deleteCategory(String id) =>
+      _change(() => _categories.delete(id));
+  Future<String?> reorderCategory(String id, int index) =>
+      _change(() => _categories.reorder(id, index));
+  Future<String?> assignCategory(String eventId, String? categoryId) =>
+      _change(() => _categories.assign(eventId, categoryId));
   Future<String?> delete(String id) => _change(() => _delete(id));
   Future<String?> deleteHistory(String id) => _change(() => _deleteHistory(id));
   Future<String?> start(String id) => _change(() => _start(id));

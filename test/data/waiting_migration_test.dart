@@ -63,6 +63,10 @@ void main() {
     final upgraded = await AppDatabase.open(path);
     addTearDown(upgraded.close);
     final repository = SqliteEventRepository(upgraded);
+    final columns = await upgraded.database.rawQuery(
+      'PRAGMA table_info(events)',
+    );
+    expect(columns.map((row) => row['name']), contains('category_id'));
     final child = await repository.getEvent('c');
     expect(child!.parentEventId, 'p');
     expect(child.sortOrder, 4);
@@ -70,6 +74,6 @@ void main() {
     await repository.updateEvent(child.copyWith(status: EventStatus.waiting));
     expect((await repository.getEvent('c'))!.status, EventStatus.waiting);
     final version = await upgraded.database.rawQuery('PRAGMA user_version');
-    expect(version.single['user_version'], 5);
+    expect(version.single['user_version'], 6);
   });
 }

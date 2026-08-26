@@ -2,6 +2,7 @@ import 'event_status.dart';
 
 const _unchangedParent = Object();
 const _unchangedSortOrder = Object();
+const _unchangedCategory = Object();
 const _unchangedCompletedAt = Object();
 
 class JaxEvent {
@@ -15,6 +16,7 @@ class JaxEvent {
     this.firstStartedAt,
     this.completedAt,
     this.sortOrder,
+    this.categoryId,
   });
 
   final String id;
@@ -26,6 +28,7 @@ class JaxEvent {
   final DateTime? firstStartedAt;
   final DateTime? completedAt;
   final int? sortOrder;
+  final String? categoryId;
 
   JaxEvent copyWith({
     String? name,
@@ -35,6 +38,7 @@ class JaxEvent {
     Object? completedAt = _unchangedCompletedAt,
     Object? parentEventId = _unchangedParent,
     Object? sortOrder = _unchangedSortOrder,
+    Object? categoryId = _unchangedCategory,
   }) {
     return JaxEvent(
       id: id,
@@ -52,6 +56,9 @@ class JaxEvent {
       sortOrder: identical(sortOrder, _unchangedSortOrder)
           ? this.sortOrder
           : sortOrder as int?,
+      categoryId: identical(categoryId, _unchangedCategory)
+          ? this.categoryId
+          : categoryId as String?,
     );
   }
 
@@ -65,7 +72,8 @@ class JaxEvent {
         other.updatedAt == updatedAt &&
         other.parentEventId == parentEventId &&
         other.firstStartedAt == firstStartedAt &&
-        other.completedAt == completedAt;
+        other.completedAt == completedAt &&
+        other.categoryId == categoryId;
   }
 
   @override
@@ -78,5 +86,6 @@ class JaxEvent {
     parentEventId,
     firstStartedAt,
     completedAt,
+    categoryId,
   );
 }

@@ -1,5 +1,6 @@
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 
 class MemoryRepository implements EventRepository {
@@ -7,6 +8,7 @@ class MemoryRepository implements EventRepository {
     : events = List.of(seed);
   final List<JaxEvent> events;
   final List<RunSegment> segments = [];
+  final List<Category> categories = [];
   @override
   Future<void> insertEvent(JaxEvent event) async {
     final siblings = events.where(
@@ -125,11 +127,20 @@ class MemoryRepository implements EventRepository {
           return order > max ? order : max;
         }) +
         1;
+    String? categoryId;
+    if (parentEventId == null) {
+      var root = event;
+      while (root.parentEventId != null) {
+        root = (await getEvent(root.parentEventId!))!;
+      }
+      categoryId = root.categoryId;
+    }
     await updateEvent(
       event.copyWith(
         parentEventId: parentEventId,
         sortOrder: next,
         updatedAt: updatedAt,
+        categoryId: categoryId,
       ),
     );
   }
@@ -156,5 +167,51 @@ class MemoryRepository implements EventRepository {
   Future<void> deleteEvent(String id) async {
     events.removeWhere((event) => event.id == id);
     segments.removeWhere((segment) => segment.eventId == id);
+  }
+
+  @override
+  Future<List<Category>> getCategories() async => _orderedCategories();
+  List<Category> _orderedCategories() =>
+      categories.toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  @override
+  Future<void> insertCategory(Category category) async =>
+      categories.add(category);
+  @override
+  Future<void> updateCategory(Category category) async =>
+      categories[categories.indexWhere((item) => item.id == category.id)] =
+          category;
+  @override
+  Future<void> deleteCategory(String id) async {
+    categories.removeWhere((item) => item.id == id);
+    for (var i = 0; i < categories.length; i++)
+      categories[i] = categories[i].copyWith(sortOrder: i);
+    for (var i = 0; i < events.length; i++) {
+      if (events[i].categoryId == id)
+        events[i] = events[i].copyWith(categoryId: null);
+    }
+  }
+
+  @override
+  Future<void> reorderCategory(String id, int targetIndex) async {
+    final ordered = _orderedCategories();
+    final current = ordered.indexWhere((item) => item.id == id);
+    if (current < 0 || targetIndex < 0 || targetIndex >= ordered.length)
+      throw StateError('Invalid category order');
+    final moved = ordered.removeAt(current);
+    ordered.insert(targetIndex, moved);
+    for (var i = 0; i < ordered.length; i++)
+      categories[categories.indexWhere((item) => item.id == ordered[i].id)] =
+          ordered[i].copyWith(sortOrder: i);
+  }
+
+  @override
+  Future<void> setRootCategory(String eventId, String? categoryId) async {
+    final event = await getEvent(eventId);
+    if (event == null) throw StateError('Event not found: $eventId');
+    if (event.parentEventId != null)
+      throw StateError('Only root events can have a category');
+    if (categoryId != null && !categories.any((item) => item.id == categoryId))
+      throw StateError('Category not found');
+    await updateEvent(event.copyWith(categoryId: categoryId));
   }
 }
