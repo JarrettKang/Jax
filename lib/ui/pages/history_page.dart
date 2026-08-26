@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
+import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
 import 'history_detail_dialog.dart';
 
@@ -64,17 +65,11 @@ class HistoryPage extends StatelessWidget {
                             tooltip: '删除记录',
                             onPressed: () => _confirmDelete(context, event),
                           ),
-                          IconButton(
-                            key: ValueKey('move-up-history-${event.id}'),
-                            icon: const Icon(Icons.arrow_upward),
-                            tooltip: '上移',
-                            onPressed: () => _reorder(context, event, true),
-                          ),
-                          IconButton(
-                            key: ValueKey('move-down-history-${event.id}'),
-                            icon: const Icon(Icons.arrow_downward),
-                            tooltip: '下移',
-                            onPressed: () => _reorder(context, event, false),
+                          EventReorderButtons(
+                            controller: controller,
+                            eventId: event.id,
+                            upKey: ValueKey('move-up-history-${event.id}'),
+                            downKey: ValueKey('move-down-history-${event.id}'),
                           ),
                         ];
                         if (constraints.maxWidth < 600) {
@@ -161,16 +156,6 @@ class HistoryPage extends StatelessWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final error = await controller.restore(event.id);
-    if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
-  Future<void> _reorder(BuildContext context, JaxEvent event, bool up) async {
-    final error = up
-        ? await controller.moveUp(event.id)
-        : await controller.moveDown(event.id);
     if (error != null && context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error)));

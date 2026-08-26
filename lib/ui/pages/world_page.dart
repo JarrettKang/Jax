@@ -5,6 +5,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
+import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
 
 class WorldPage extends StatefulWidget {
@@ -169,20 +170,6 @@ class _WorldPageState extends State<WorldPage> {
           title: Text('层级详情'),
         ),
       ),
-      if (widget.controller.siblingIndexFor(e.id) > 0)
-        const PopupMenuItem(
-          value: _WorldAction.up,
-          child: ListTile(leading: Icon(Icons.arrow_upward), title: Text('上移')),
-        ),
-      if (widget.controller.siblingIndexFor(e.id) <
-          widget.controller.siblingCountFor(e.id) - 1)
-        const PopupMenuItem(
-          value: _WorldAction.down,
-          child: ListTile(
-            leading: Icon(Icons.arrow_downward),
-            title: Text('下移'),
-          ),
-        ),
       const PopupMenuItem(
         value: _WorldAction.edit,
         child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
@@ -231,10 +218,21 @@ class _WorldPageState extends State<WorldPage> {
             Text(state.$2),
           ],
         ),
-        trailing: EventMoreMenuButton<_WorldAction>(
-          key: ValueKey('world-more-${e.id}'),
-          onSelected: (a) => _select(c, e, a),
-          itemBuilder: (_) => actions,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            EventReorderButtons(
+              controller: widget.controller,
+              eventId: e.id,
+              upKey: ValueKey('world-move-up-${e.id}'),
+              downKey: ValueKey('world-move-down-${e.id}'),
+            ),
+            EventMoreMenuButton<_WorldAction>(
+              key: ValueKey('world-more-${e.id}'),
+              onSelected: (a) => _select(c, e, a),
+              itemBuilder: (_) => actions,
+            ),
+          ],
         ),
       ),
     );
@@ -252,10 +250,6 @@ class _WorldPageState extends State<WorldPage> {
     switch (a) {
       case _WorldAction.hierarchy:
         showEventHierarchyDialog(c, controller: widget.controller, event: e);
-      case _WorldAction.up:
-        widget.controller.moveUp(e.id);
-      case _WorldAction.down:
-        widget.controller.moveDown(e.id);
       case _WorldAction.edit:
         _edit(c, e);
       case _WorldAction.category:
@@ -337,6 +331,6 @@ class _WorldPageState extends State<WorldPage> {
   }
 }
 
-enum _WorldAction { hierarchy, up, down, edit, category }
+enum _WorldAction { hierarchy, edit, category }
 
 enum _CatAction { rename, up, down, delete }

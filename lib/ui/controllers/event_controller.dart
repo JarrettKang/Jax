@@ -86,6 +86,7 @@ class EventController extends ChangeNotifier {
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
+  Future<void> _reorderTail = Future.value();
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
@@ -266,18 +267,24 @@ class EventController extends ChangeNotifier {
       _change(() => _updateParent(id, parentId));
   Future<String?> reorder(String id, int targetIndex) =>
       _change(() => _reorder(id, targetIndex));
-  Future<String?> moveUp(String id) async {
+  Future<String?> moveUp(String id) => _enqueueReorder(() async {
     final siblings = await _repository.getOrderedSiblings(id);
     final index = siblings.indexWhere((event) => event.id == id);
     return index <= 0 ? null : reorder(id, index - 1);
-  }
+  });
 
-  Future<String?> moveDown(String id) async {
+  Future<String?> moveDown(String id) => _enqueueReorder(() async {
     final siblings = await _repository.getOrderedSiblings(id);
     final index = siblings.indexWhere((event) => event.id == id);
     return index < 0 || index >= siblings.length - 1
         ? null
         : reorder(id, index + 1);
+  });
+
+  Future<String?> _enqueueReorder(Future<String?> Function() action) {
+    final queued = _reorderTail.then((_) => action());
+    _reorderTail = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
   }
 
   Future<Duration> directDuration(String id) => _durations.directDuration(id);

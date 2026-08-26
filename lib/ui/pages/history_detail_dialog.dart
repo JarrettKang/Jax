@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
 
 Future<void> showHistoryDetailDialog(
@@ -92,21 +93,20 @@ class _HistoryDetailDialogState extends State<_HistoryDetailDialog> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            key: ValueKey(
+                          EventReorderButtons(
+                            controller: widget.controller,
+                            eventId: child.event.id,
+                            upKey: ValueKey(
                               'move-up-history-child-${child.event.id}',
                             ),
-                            icon: const Icon(Icons.arrow_upward),
-                            tooltip: '上移',
-                            onPressed: () => _reorder(child.event.id, true),
-                          ),
-                          IconButton(
-                            key: ValueKey(
+                            downKey: ValueKey(
                               'move-down-history-child-${child.event.id}',
                             ),
-                            icon: const Icon(Icons.arrow_downward),
-                            tooltip: '下移',
-                            onPressed: () => _reorder(child.event.id, false),
+                            onReordered: () {
+                              setState(() {
+                                _data = _load();
+                              });
+                            },
                           ),
                           const Icon(Icons.chevron_right),
                         ],
@@ -141,21 +141,6 @@ class _HistoryDetailDialogState extends State<_HistoryDetailDialog> {
       ),
     ],
   );
-
-  Future<void> _reorder(String eventId, bool up) async {
-    final error = up
-        ? await widget.controller.moveUp(eventId)
-        : await widget.controller.moveDown(eventId);
-    if (!mounted) return;
-    if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
-    } else {
-      setState(() {
-        _data = _load();
-      });
-    }
-  }
 }
 
 class _HistoryDetailData {
