@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/entities/event_status.dart';
+import '../../core/entities/jax_event.dart';
 import '../../core/services/greeting_resolver.dart';
 import '../../core/use_cases/create_event.dart';
 import '../controllers/event_controller.dart';
@@ -62,6 +64,7 @@ class _HomePageState extends State<HomePage> {
     animation: widget.controller,
     builder: (context, _) {
       final running = widget.controller.runningEvent;
+      final work = widget.controller.homeRunningContext;
       return SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -92,7 +95,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                     )
-                  else
+                  else if (work != null)
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -100,32 +103,48 @@ class _HomePageState extends State<HomePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '当前正在执行：',
+                              '正在推进',
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              running.name,
-                              key: const ValueKey('home-running-event'),
+                              work.subject.name,
+                              key: const ValueKey('home-work-subject'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
-                            if (widget.controller.runningParent != null) ...[
-                              const Divider(height: 32),
+                            if (work.ancestors.isNotEmpty) ...[
+                              const SizedBox(height: 6),
                               Text(
-                                '上层：${widget.controller.runningParent!.name}',
-                                key: const ValueKey('home-running-parent'),
+                                work.ancestors
+                                    .map((event) => event.name)
+                                    .join(' › '),
+                                key: const ValueKey('home-ancestor-path'),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
                               ),
-                              if (widget
-                                  .controller
-                                  .runningSiblings
-                                  .isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  '同级事件：${widget.controller.runningSiblings.map((event) => event.name).join('、')}',
-                                  key: const ValueKey('home-running-siblings'),
-                                ),
-                              ],
                             ],
+                            const Divider(height: 32),
+                            if (work.omittedBefore)
+                              const _OmissionRow(
+                                key: ValueKey('home-omitted-before'),
+                              ),
+                            for (final step in work.visibleSteps)
+                              _StepRow(
+                                event: step,
+                                elapsed: widget.controller.elapsedFor(step),
+                              ),
+                            if (work.omittedAfter)
+                              const _OmissionRow(
+                                key: ValueKey('home-omitted-after'),
+                              ),
                           ],
                         ),
                       ),
@@ -137,5 +156,78 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     },
+  );
+}
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.event, required this.elapsed});
+
+  final JaxEvent event;
+  final Duration elapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = switch (event.status) {
+      EventStatus.completed => (Icons.check_circle_outline, '已完成'),
+      EventStatus.running => (
+        Icons.radio_button_checked,
+        '进行中 · ${_duration(elapsed)}',
+      ),
+      EventStatus.paused => (Icons.pause_circle_outline, '已暂停'),
+      EventStatus.pending => (Icons.radio_button_unchecked, '未开始'),
+    };
+    return Padding(
+      key: ValueKey('home-step-${event.id}'),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              icon,
+              key: ValueKey('home-step-${event.status.name}-${event.id}'),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(event.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _duration(Duration value) =>
+      '${value.inHours.toString().padLeft(2, '0')}:'
+      '${(value.inMinutes % 60).toString().padLeft(2, '0')}:'
+      '${(value.inSeconds % 60).toString().padLeft(2, '0')}';
+}
+
+class _OmissionRow extends StatelessWidget {
+  const _OmissionRow({super.key});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Text(
+      '⋮',
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.titleMedium
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
   );
 }

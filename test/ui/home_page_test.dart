@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
 
@@ -24,24 +25,65 @@ void main() {
     expect(find.text('暂无未完成事件'), findsOneWidget);
   });
 
-  testWidgets('shows only the running event', (tester) async {
-    final now = DateTime(2026, 8, 25, 12);
-    final repository = MemoryRepository([
-      _event('pending', '待开始', EventStatus.pending, now),
-      _event('paused', '已暂停', EventStatus.paused, now),
-      _event('running', '修改论文', EventStatus.running, now),
-      _event('completed', '已完成', EventStatus.completed, now),
-    ]);
+  testWidgets('shows work subject, ancestor and ordered step states', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 8, 25, 12);
+    final repository =
+        MemoryRepository([
+            _event('a', 'A', EventStatus.paused, now),
+            _event('b', 'B', EventStatus.paused, now, parent: 'a'),
+            _event(
+              'c',
+              'C',
+              EventStatus.completed,
+              now,
+              parent: 'b',
+              sortOrder: 0,
+            ),
+            _event(
+              'd',
+              'D',
+              EventStatus.running,
+              now,
+              parent: 'b',
+              sortOrder: 1,
+            ),
+            _event(
+              'e',
+              'E',
+              EventStatus.pending,
+              now,
+              parent: 'b',
+              sortOrder: 2,
+            ),
+          ])
+          ..segments.add(
+            RunSegment(
+              id: 'd-run',
+              eventId: 'd',
+              startedAt: now,
+              createdAt: now,
+            ),
+          );
 
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    expect(find.text('当前正在执行：'), findsOneWidget);
-    expect(find.text('修改论文'), findsOneWidget);
-    expect(find.text('待开始'), findsNothing);
-    expect(find.text('已暂停'), findsNothing);
-    expect(find.text('已完成'), findsNothing);
-    expect(find.text('我们来做点什么？'), findsNothing);
+    expect(find.text('正在推进'), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-work-subject')), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-ancestor-path')), findsOneWidget);
+    expect(find.text('A'), findsOneWidget);
+    expect(_stepY(tester, 'c'), lessThan(_stepY(tester, 'd')));
+    expect(_stepY(tester, 'd'), lessThan(_stepY(tester, 'e')));
+    expect(find.byKey(const ValueKey('home-step-completed-c')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-running-d')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-pending-e')), findsOneWidget);
+    expect(find.text('进行中 · 00:00:00'), findsOneWidget);
+    now = now.add(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('进行中 · 00:00:01'), findsOneWidget);
   });
 
   testWidgets('refreshes the greeting after crossing a time boundary', (
@@ -59,88 +101,112 @@ void main() {
     expect(find.text('上午好，我是 Jax'), findsOneWidget);
   });
 
-  testWidgets('shows parent and siblings only with meaningful context', (
-    tester,
-  ) async {
+  testWidgets('supports an arbitrary-depth ancestor path', (tester) async {
     final now = DateTime(2026, 8, 25, 12);
     final repository = MemoryRepository([
-      _event('parent', '论文项目', EventStatus.paused, now),
-      _event('running', '修改正文', EventStatus.running, now, parent: 'parent'),
-      _event('sibling', '整理参考文献', EventStatus.pending, now, parent: 'parent'),
+      _event('a', 'A', EventStatus.paused, now),
+      _event('b', 'B', EventStatus.paused, now, parent: 'a'),
+      _event('c', 'C', EventStatus.paused, now, parent: 'b'),
+      _event('d', 'D', EventStatus.paused, now, parent: 'c'),
+      _event('e', 'E', EventStatus.running, now, parent: 'd'),
+      _event('f', 'F', EventStatus.pending, now, parent: 'd'),
     ]);
 
-    await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    expect(find.text('上层：论文项目'), findsOneWidget);
-    expect(find.text('同级事件：整理参考文献'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('home-work-subject'))).data,
+      'D',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('home-ancestor-path')))
+          .data,
+      'A › B › C',
+    );
+    expect(find.byKey(const ValueKey('home-step-e')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-f')), findsOneWidget);
   });
 
-  testWidgets('home sibling context follows explicit sibling order', (
+  testWidgets('top-level running Event is its own subject and step', (
     tester,
   ) async {
     final now = DateTime(2026, 8, 25, 12);
     final repository = MemoryRepository([
-      _event('parent', '论文项目', EventStatus.paused, now),
-      _event('running', '修改正文', EventStatus.running, now, parent: 'parent'),
+      _event('a', 'A', EventStatus.running, now),
+      _event('b', 'B', EventStatus.pending, now),
+    ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('home-work-subject'))).data,
+      'A',
+    );
+    expect(find.byKey(const ValueKey('home-ancestor-path')), findsNothing);
+    expect(find.byKey(const ValueKey('home-step-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-b')), findsNothing);
+  });
+
+  testWidgets('keeps non-standard statuses in explicit sibling order', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 25, 12);
+    final repository = MemoryRepository([
+      _event('parent', 'Parent', EventStatus.paused, now),
       _event(
-        'second',
-        '第二顺位',
-        EventStatus.pending,
-        now,
-        parent: 'parent',
-        sortOrder: 1,
-      ),
-      _event(
-        'first',
-        '第一顺位',
+        'a',
+        'A',
         EventStatus.pending,
         now,
         parent: 'parent',
         sortOrder: 0,
       ),
+      _event(
+        'b',
+        'B',
+        EventStatus.completed,
+        now,
+        parent: 'parent',
+        sortOrder: 1,
+      ),
+      _event(
+        'c',
+        'C',
+        EventStatus.running,
+        now,
+        parent: 'parent',
+        sortOrder: 2,
+      ),
+      _event('d', 'D', EventStatus.paused, now, parent: 'parent', sortOrder: 3),
+      _event(
+        'e',
+        'E',
+        EventStatus.pending,
+        now,
+        parent: 'parent',
+        sortOrder: 4,
+      ),
     ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    final context = tester.widget<Text>(
-      find.byKey(const ValueKey('home-running-siblings')),
-    );
-    expect(context.data, '同级事件：第一顺位、第二顺位');
+    final positions = [
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+    ].map((id) => _stepY(tester, id)).toList();
+    expect(positions, orderedEquals([...positions]..sort()));
+    expect(find.byKey(const ValueKey('home-step-pending-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-completed-b')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-running-c')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-paused-d')), findsOneWidget);
   });
 
-  testWidgets('deep running event uses its direct parent and siblings', (
-    tester,
-  ) async {
-    final now = DateTime(2026, 8, 25, 12);
-    final repository = MemoryRepository([
-      _event('a', 'A', EventStatus.paused, now),
-      _event('b', 'B', EventStatus.paused, now, parent: 'a'),
-      _event('c', 'C', EventStatus.running, now, parent: 'b'),
-      _event('d', 'D', EventStatus.pending, now, parent: 'b'),
-    ]);
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-
-    expect(find.text('上层：B'), findsOneWidget);
-    expect(find.text('同级事件：D'), findsOneWidget);
-
-    await repository.updateEvent(
-      (await repository.getEvent('c'))!
-          .copyWith(status: EventStatus.paused, updatedAt: now),
-    );
-    await repository.updateEvent(
-      (await repository.getEvent('b'))!
-          .copyWith(status: EventStatus.running, updatedAt: now),
-    );
-    await tester.pumpWidget(const SizedBox());
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    expect(find.text('上层：A'), findsOneWidget);
-  });
-
-  testWidgets('shows direct parent even when running Event has no sibling', (
+  testWidgets('shows the running step when it is the only child', (
     tester,
   ) async {
     final now = DateTime(2026, 8, 25, 12);
@@ -152,9 +218,47 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    expect(find.text('上层：论文项目'), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-running-siblings')), findsNothing);
-    expect(find.text('修改正文'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('home-work-subject'))).data,
+      '论文项目',
+    );
+    expect(find.byKey(const ValueKey('home-step-running')), findsOneWidget);
+  });
+
+  testWidgets('many siblings use a local window and never hide running', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+    final now = DateTime(2026, 8, 25, 12);
+    final events = <JaxEvent>[
+      _event('parent', '很长的工作主体名称用于验证手机布局', EventStatus.paused, now),
+      for (var index = 0; index < 12; index++)
+        _event(
+          'step-$index',
+          '很长的步骤名称 $index',
+          index == 6 ? EventStatus.running : EventStatus.pending,
+          now,
+          parent: 'parent',
+          sortOrder: index,
+        ),
+    ];
+    await tester.pumpWidget(
+      JaxApp(repository: MemoryRepository(events), now: () => now),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('home-step-step-6')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-step-0')), findsNothing);
+    expect(find.byKey(const ValueKey('home-omitted-before')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-omitted-after')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('tracks start pause resume and complete state changes', (
@@ -180,7 +284,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('首页'));
     await tester.pump();
-    expect(find.text('状态同步任务'), findsOneWidget);
+    expect(find.text('状态同步任务'), findsWidgets);
 
     await tester.tap(find.text('事件'));
     await tester.pump();
@@ -198,7 +302,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('首页'));
     await tester.pump();
-    expect(find.text('状态同步任务'), findsOneWidget);
+    expect(find.text('状态同步任务'), findsWidgets);
 
     await tester.tap(find.text('事件'));
     await tester.pump();
@@ -210,6 +314,9 @@ void main() {
     expect(find.text('我们来做点什么？'), findsOneWidget);
   });
 }
+
+double _stepY(WidgetTester tester, String id) =>
+    tester.getTopLeft(find.byKey(ValueKey('home-step-$id'))).dy;
 
 JaxEvent _event(
   String id,

@@ -112,8 +112,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('上层：开发项目'), findsOneWidget);
-    expect(find.text('同级事件：编写说明'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('home-work-subject'))).data,
+      '开发项目',
+    );
+    expect(find.byKey(const ValueKey('home-step-running')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-step-sibling')), findsOneWidget);
 
     await tester.tap(find.text('事件'));
     await tester.pumpAndSettle();

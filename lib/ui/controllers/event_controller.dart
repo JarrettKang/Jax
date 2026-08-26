@@ -63,6 +63,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _historyRoots = const [];
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
+  HomeRunningContext? _homeRunningContext;
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
@@ -75,6 +76,7 @@ class EventController extends ChangeNotifier {
       _events.where((event) => event.status == EventStatus.running).firstOrNull;
   JaxEvent? get runningParent => _runningParent;
   List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
+  HomeRunningContext? get homeRunningContext => _homeRunningContext;
   int siblingIndexFor(String eventId) {
     final event = _events.where((item) => item.id == eventId).firstOrNull;
     if (event == null) return -1;
@@ -144,7 +146,48 @@ class EventController extends ChangeNotifier {
         : (await _repository.getDirectChildren(_runningParent!.id))
               .where((event) => event.id != running.id)
               .toList(growable: false);
+    _homeRunningContext = running == null
+        ? null
+        : await _buildHomeRunningContext(running, _runningParent);
     _syncTicker();
+  }
+
+  Future<HomeRunningContext> _buildHomeRunningContext(
+    JaxEvent running,
+    JaxEvent? parent,
+  ) async {
+    final subject = parent ?? running;
+    final ancestors = <JaxEvent>[];
+    final visited = <String>{subject.id};
+    var ancestor = await _repository.getParent(subject.id);
+    while (ancestor != null && visited.add(ancestor.id)) {
+      ancestors.add(ancestor);
+      ancestor = await _repository.getParent(ancestor.id);
+    }
+    final orderedAncestors = ancestors.reversed.toList(growable: false);
+    final steps = parent == null
+        ? <JaxEvent>[running]
+        : await _repository.getDirectChildren(parent.id);
+    const windowSize = 7;
+    if (steps.length <= windowSize) {
+      return HomeRunningContext(
+        subject: subject,
+        ancestors: orderedAncestors,
+        visibleSteps: steps,
+      );
+    }
+    final runningIndex = steps.indexWhere((event) => event.id == running.id);
+    var start = runningIndex - 3;
+    if (start < 0) start = 0;
+    if (start > steps.length - windowSize) start = steps.length - windowSize;
+    final end = start + windowSize;
+    return HomeRunningContext(
+      subject: subject,
+      ancestors: orderedAncestors,
+      visibleSteps: steps.sublist(start, end),
+      omittedBefore: start > 0,
+      omittedAfter: end < steps.length,
+    );
   }
 
   Future<String?> create(String name) => _change(() => _create(name));
@@ -255,4 +298,20 @@ class EventController extends ChangeNotifier {
     _ticker?.cancel();
     super.dispose();
   }
+}
+
+class HomeRunningContext {
+  const HomeRunningContext({
+    required this.subject,
+    required this.ancestors,
+    required this.visibleSteps,
+    this.omittedBefore = false,
+    this.omittedAfter = false,
+  });
+
+  final JaxEvent subject;
+  final List<JaxEvent> ancestors;
+  final List<JaxEvent> visibleSteps;
+  final bool omittedBefore;
+  final bool omittedAfter;
 }
