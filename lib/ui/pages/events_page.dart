@@ -156,7 +156,12 @@ class EventsPage extends StatelessWidget {
       onSelected: (action) => _selectMenuAction(context, event, action),
       itemBuilder: (context) => _menuItems(event),
     ),
-    EventReorderHandle(controller: controller, eventId: event.id),
+    EventReorderHandle(
+      controller: controller,
+      eventId: event.id,
+      title: event.name,
+      subtitle: _statusText(event),
+    ),
   ];
 
   List<PopupMenuEntry<_EventMenuAction>> _menuItems(JaxEvent event) => [

@@ -99,6 +99,9 @@ class _HistoryDetailDialogState extends State<_HistoryDetailDialog> {
                             EventReorderHandle(
                               controller: widget.controller,
                               eventId: child.event.id,
+                              title: child.event.name,
+                              subtitle: '总投入：${child.total.inMinutes} 分钟',
+                              rowStyle: true,
                             ),
                             const Icon(Icons.chevron_right),
                           ],
