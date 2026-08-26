@@ -43,6 +43,39 @@ void main() {
     ]);
   });
 
+  testWidgets(
+    'hides boundary reorder controls and caps deep hierarchy indent',
+    (tester) async {
+      final repository = MemoryRepository([
+        event('a', 0),
+        event('b', 0, parent: 'a'),
+        event('c', 0, parent: 'b'),
+        event('e', 0, parent: 'c'),
+        event('d', 1, parent: 'b'),
+      ]);
+      await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
+      await tester.pumpAndSettle();
+      await openEventsPage(tester);
+
+      expect(find.byKey(const ValueKey('move-up-b')), findsNothing);
+      expect(find.byKey(const ValueKey('move-down-b')), findsNothing);
+      expect(find.byKey(const ValueKey('move-up-c')), findsNothing);
+      expect(find.byKey(const ValueKey('move-down-c')), findsOneWidget);
+      expect(find.byKey(const ValueKey('move-up-d')), findsOneWidget);
+      expect(find.byKey(const ValueKey('move-down-d')), findsNothing);
+      expect(find.byKey(const ValueKey('move-up-e')), findsNothing);
+      expect(find.byKey(const ValueKey('move-down-e')), findsNothing);
+
+      final aLeft = tester.getTopLeft(find.text('a')).dx;
+      final bLeft = tester.getTopLeft(find.text('b')).dx;
+      final cLeft = tester.getTopLeft(find.text('c')).dx;
+      final eLeft = tester.getTopLeft(find.text('e')).dx;
+      expect(bLeft, greaterThan(aLeft));
+      expect(cLeft, greaterThan(bLeft));
+      expect(eLeft, greaterThan(cLeft));
+    },
+  );
+
   testWidgets('ordering controls remain usable on narrow large-text phone', (
     tester,
   ) async {

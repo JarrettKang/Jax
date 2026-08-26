@@ -71,6 +71,37 @@ class EventController extends ChangeNotifier {
       _events.where((event) => event.status == EventStatus.running).firstOrNull;
   JaxEvent? get runningParent => _runningParent;
   List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
+  int siblingIndexFor(String eventId) {
+    final event = _events.where((item) => item.id == eventId).firstOrNull;
+    if (event == null) return -1;
+    return _events
+        .where((item) => item.parentEventId == event.parentEventId)
+        .toList()
+        .indexWhere((item) => item.id == eventId);
+  }
+
+  int siblingCountFor(String eventId) {
+    final event = _events.where((item) => item.id == eventId).firstOrNull;
+    return event == null
+        ? 0
+        : _events
+              .where((item) => item.parentEventId == event.parentEventId)
+              .length;
+  }
+
+  int hierarchyDepthFor(String eventId) {
+    final byId = {for (final event in _events) event.id: event};
+    var depth = 0;
+    var current = byId[eventId];
+    final visited = <String>{};
+    while (current?.parentEventId != null &&
+        visited.add(current!.id) &&
+        byId.containsKey(current.parentEventId)) {
+      depth++;
+      current = byId[current.parentEventId];
+    }
+    return depth;
+  }
 
   Future<void> load() async {
     _loading = true;
