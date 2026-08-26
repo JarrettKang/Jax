@@ -5,7 +5,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
-import '../widgets/event_reorder_drag.dart';
+import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
 
 class WorldPage extends StatefulWidget {
@@ -170,20 +170,6 @@ class _WorldPageState extends State<WorldPage> {
           title: Text('层级详情'),
         ),
       ),
-      if (widget.controller.siblingIndexFor(e.id) > 0)
-        const PopupMenuItem(
-          value: _WorldAction.moveUp,
-          child: ListTile(leading: Icon(Icons.arrow_upward), title: Text('上移')),
-        ),
-      if (widget.controller.siblingIndexFor(e.id) <
-          widget.controller.siblingCountFor(e.id) - 1)
-        const PopupMenuItem(
-          value: _WorldAction.moveDown,
-          child: ListTile(
-            leading: Icon(Icons.arrow_downward),
-            title: Text('下移'),
-          ),
-        ),
       const PopupMenuItem(
         value: _WorldAction.edit,
         child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
@@ -197,55 +183,56 @@ class _WorldPageState extends State<WorldPage> {
           ),
         ),
     ];
-    return EventReorderDropTarget(
-      controller: widget.controller,
-      eventId: e.id,
-      child: Padding(
-        key: ValueKey('world-node-${e.id}'),
-        padding: EdgeInsets.only(
-          left: (widget.controller.hierarchyDepthFor(e.id) * 24.0).clamp(
-            0.0,
-            120.0,
-          ),
+    return Padding(
+      key: ValueKey('world-node-${e.id}'),
+      padding: EdgeInsets.only(
+        left: (widget.controller.hierarchyDepthFor(e.id) * 24.0).clamp(
+          0.0,
+          120.0,
         ),
-        child: ListTile(
-          dense: true,
-          leading: child
-              ? IconButton(
-                  key: ValueKey('world-toggle-${e.id}'),
-                  tooltip: _collapsed.contains(e.id) ? '展开下层事件' : '折叠下层事件',
-                  icon: Icon(
-                    _collapsed.contains(e.id)
-                        ? Icons.chevron_right
-                        : Icons.expand_more,
-                  ),
-                  onPressed: () => setState(
-                    () => _collapsed.contains(e.id)
-                        ? _collapsed.remove(e.id)
-                        : _collapsed.add(e.id),
-                  ),
-                )
-              : const SizedBox(width: 48),
-          title: Text(e.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(state.$1, size: 16),
-              const SizedBox(width: 4),
-              Text(state.$2),
-            ],
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              EventMoreMenuButton<_WorldAction>(
-                key: ValueKey('world-more-${e.id}'),
-                onSelected: (a) => _select(c, e, a),
-                itemBuilder: (_) => actions,
-              ),
-              EventReorderHandle(controller: widget.controller, eventId: e.id),
-            ],
-          ),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: child
+            ? IconButton(
+                key: ValueKey('world-toggle-${e.id}'),
+                tooltip: _collapsed.contains(e.id) ? '展开下层事件' : '折叠下层事件',
+                icon: Icon(
+                  _collapsed.contains(e.id)
+                      ? Icons.chevron_right
+                      : Icons.expand_more,
+                ),
+                onPressed: () => setState(
+                  () => _collapsed.contains(e.id)
+                      ? _collapsed.remove(e.id)
+                      : _collapsed.add(e.id),
+                ),
+              )
+            : const SizedBox(width: 48),
+        title: Text(e.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(state.$1, size: 16),
+            const SizedBox(width: 4),
+            Text(state.$2),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            EventReorderButtons(
+              controller: widget.controller,
+              eventId: e.id,
+              upKey: ValueKey('world-move-up-${e.id}'),
+              downKey: ValueKey('world-move-down-${e.id}'),
+            ),
+            EventMoreMenuButton<_WorldAction>(
+              key: ValueKey('world-more-${e.id}'),
+              onSelected: (a) => _select(c, e, a),
+              itemBuilder: (_) => actions,
+            ),
+          ],
         ),
       ),
     );
@@ -267,10 +254,6 @@ class _WorldPageState extends State<WorldPage> {
         _edit(c, e);
       case _WorldAction.category:
         _assign(c, e);
-      case _WorldAction.moveUp:
-        widget.controller.moveUp(e.id);
-      case _WorldAction.moveDown:
-        widget.controller.moveDown(e.id);
     }
   }
 
@@ -348,6 +331,6 @@ class _WorldPageState extends State<WorldPage> {
   }
 }
 
-enum _WorldAction { hierarchy, edit, category, moveUp, moveDown }
+enum _WorldAction { hierarchy, edit, category }
 
 enum _CatAction { rename, up, down, delete }

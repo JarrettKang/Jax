@@ -121,21 +121,6 @@ class EventController extends ChangeNotifier {
               .length;
   }
 
-  bool sameReorderGroup(String firstId, String secondId) {
-    final first = _worldEvents
-        .where((event) => event.id == firstId)
-        .firstOrNull;
-    final second = _worldEvents
-        .where((event) => event.id == secondId)
-        .firstOrNull;
-    if (first == null ||
-        second == null ||
-        first.parentEventId != second.parentEventId) {
-      return false;
-    }
-    return first.parentEventId != null || first.categoryId == second.categoryId;
-  }
-
   bool hasDirectChildren(String eventId) =>
       _hasDirectChildren[eventId] ?? false;
 
@@ -281,11 +266,11 @@ class EventController extends ChangeNotifier {
   Future<String?> setParent(String id, String? parentId) =>
       _change(() => _updateParent(id, parentId));
   Future<String?> reorder(String id, int targetIndex) =>
-      _enqueueReorder(() => _change(() => _reorder(id, targetIndex)));
+      _change(() => _reorder(id, targetIndex));
   Future<String?> moveUp(String id) => _enqueueReorder(() async {
     final siblings = await _repository.getOrderedSiblings(id);
     final index = siblings.indexWhere((event) => event.id == id);
-    return index <= 0 ? null : _change(() => _reorder(id, index - 1));
+    return index <= 0 ? null : reorder(id, index - 1);
   });
 
   Future<String?> moveDown(String id) => _enqueueReorder(() async {
@@ -293,7 +278,7 @@ class EventController extends ChangeNotifier {
     final index = siblings.indexWhere((event) => event.id == id);
     return index < 0 || index >= siblings.length - 1
         ? null
-        : _change(() => _reorder(id, index + 1));
+        : reorder(id, index + 1);
   });
 
   Future<String?> _enqueueReorder(Future<String?> Function() action) {

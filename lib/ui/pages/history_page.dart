@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/jax_event.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/event_more_menu_button.dart';
-import '../widgets/event_reorder_drag.dart';
+import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
 import 'history_detail_dialog.dart';
 
@@ -19,93 +19,90 @@ class HistoryPage extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             children: controller.historyRoots
                 .map(
-                  (event) => EventReorderDropTarget(
-                    controller: controller,
-                    eventId: event.id,
-                    child: Card(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final details =
-                              '开始：${_time(event.firstStartedAt!.toLocal())}\n结束：${_time(event.completedAt!.toLocal())}\n持续：${controller.elapsedFor(event).inMinutes} 分钟';
-                          final actions = <Widget>[
-                            IconButton(
-                              key: ValueKey('history-detail-${event.id}'),
-                              icon: const Icon(Icons.analytics_outlined),
-                              tooltip: '投入详情',
-                              onPressed: () => showHistoryDetailDialog(
-                                context,
-                                controller: controller,
-                                event: event,
-                              ),
+                  (event) => Card(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final details =
+                            '开始：${_time(event.firstStartedAt!.toLocal())}\n结束：${_time(event.completedAt!.toLocal())}\n持续：${controller.elapsedFor(event).inMinutes} 分钟';
+                        final actions = <Widget>[
+                          IconButton(
+                            key: ValueKey('history-detail-${event.id}'),
+                            icon: const Icon(Icons.analytics_outlined),
+                            tooltip: '投入详情',
+                            onPressed: () => showHistoryDetailDialog(
+                              context,
+                              controller: controller,
+                              event: event,
                             ),
-                            EventMoreMenuButton<_HistoryMenuAction>(
-                              key: ValueKey('more-history-${event.id}'),
-                              onSelected: (_) =>
-                                  _confirmRestore(context, event),
-                              itemBuilder: (_) => [
-                                PopupMenuItem(
-                                  key: ValueKey('restore-history-${event.id}'),
-                                  value: _HistoryMenuAction.restore,
-                                  child: const ListTile(
-                                    leading: Icon(Icons.restore),
-                                    title: Text('恢复事件'),
-                                  ),
+                          ),
+                          EventMoreMenuButton<_HistoryMenuAction>(
+                            key: ValueKey('more-history-${event.id}'),
+                            onSelected: (_) => _confirmRestore(context, event),
+                            itemBuilder: (_) => [
+                              PopupMenuItem(
+                                key: ValueKey('restore-history-${event.id}'),
+                                value: _HistoryMenuAction.restore,
+                                child: const ListTile(
+                                  leading: Icon(Icons.restore),
+                                  title: Text('恢复事件'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            key: ValueKey('history-hierarchy-${event.id}'),
+                            icon: const Icon(Icons.account_tree_outlined),
+                            tooltip: '调整层级',
+                            onPressed: () => showEventHierarchyDialog(
+                              context,
+                              controller: controller,
+                              event: event,
+                            ),
+                          ),
+                          IconButton(
+                            key: ValueKey('delete-history-${event.id}'),
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: '删除记录',
+                            onPressed: () => _confirmDelete(context, event),
+                          ),
+                          EventReorderButtons(
+                            controller: controller,
+                            eventId: event.id,
+                            upKey: ValueKey('move-up-history-${event.id}'),
+                            downKey: ValueKey('move-down-history-${event.id}'),
+                          ),
+                        ];
+                        if (constraints.maxWidth < 600) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  event.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(details),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Wrap(children: actions),
                                 ),
                               ],
                             ),
-                            IconButton(
-                              key: ValueKey('history-hierarchy-${event.id}'),
-                              icon: const Icon(Icons.account_tree_outlined),
-                              tooltip: '调整层级',
-                              onPressed: () => showEventHierarchyDialog(
-                                context,
-                                controller: controller,
-                                event: event,
-                              ),
-                            ),
-                            IconButton(
-                              key: ValueKey('delete-history-${event.id}'),
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: '删除记录',
-                              onPressed: () => _confirmDelete(context, event),
-                            ),
-                            EventReorderHandle(
-                              controller: controller,
-                              eventId: event.id,
-                            ),
-                          ];
-                          if (constraints.maxWidth < 600) {
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    event.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(details),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Wrap(children: actions),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          return ListTile(
-                            title: Text(event.name),
-                            subtitle: Text(details),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: actions,
-                            ),
                           );
-                        },
-                      ),
+                        }
+                        return ListTile(
+                          title: Text(event.name),
+                          subtitle: Text(details),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: actions,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 )
