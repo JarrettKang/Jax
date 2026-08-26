@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -64,6 +65,7 @@ void main() {
 
     expect(AppDatabase.schemaVersion, 6);
     expect(event?.parentEventId, isNull);
+    expect(event?.categoryId, isNull);
     expect(event?.status.name, 'completed');
     expect(event?.firstStartedAt, started);
     expect(event?.completedAt, ended);
@@ -74,5 +76,19 @@ void main() {
     );
     expect(columns.map((row) => row['name']), contains('parent_event_id'));
     expect(columns.map((row) => row['name']), contains('sort_order'));
+    expect(columns.map((row) => row['name']), contains('category_id'));
+
+    final category = Category(
+      id: 'development',
+      name: '开发项目',
+      sortOrder: 0,
+      createdAt: started,
+      updatedAt: started,
+    );
+    await repository.insertCategory(category);
+    await repository.setRootCategory('existing', category.id);
+    expect((await repository.getEvent('existing'))?.categoryId, category.id);
+    await repository.deleteCategory(category.id);
+    expect((await repository.getEvent('existing'))?.categoryId, isNull);
   });
 }

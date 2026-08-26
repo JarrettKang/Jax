@@ -24,8 +24,20 @@ class _WorldPageState extends State<WorldPage> {
       final roots = widget.controller.worldEvents
           .where((e) => e.parentEventId == null)
           .toList();
+      final categoriesById = {
+        for (final category in widget.controller.categories) category.id: category,
+      };
       final groups = <String?, List<JaxEvent>>{};
-      for (final e in roots) groups.putIfAbsent(e.categoryId, () => []).add(e);
+      for (final event in roots) {
+        // `null` is the deliberate representation of the virtual
+        // "未分类" section.  A stale category reference is also displayed
+        // there: it must never make a World rebuild depend on a record that
+        // no longer exists (for example while a category deletion reloads).
+        final groupId = categoriesById.containsKey(event.categoryId)
+            ? event.categoryId
+            : null;
+        groups.putIfAbsent(groupId, () => []).add(event);
+      }
       final keys = <String?>[
         ...widget.controller.categories.map((c) => c.id),
         if (groups.containsKey(null)) null,
@@ -44,8 +56,8 @@ class _WorldPageState extends State<WorldPage> {
             ),
           ),
           for (final key in keys)
-            if ((groups[key] ?? const <JaxEvent>[]).isNotEmpty) ...[
-              _header(context, key),
+            if (key != null || groups[key]?.isNotEmpty == true) ...[
+              _header(context, key, categoriesById[key]),
               if (!_collapsed.contains('cat:$key'))
                 for (final root in groups[key] ?? const <JaxEvent>[])
                   ..._tree(context, root),
@@ -55,10 +67,7 @@ class _WorldPageState extends State<WorldPage> {
     },
   );
 
-  Widget _header(BuildContext c, String? id) {
-    final cat = id == null
-        ? null
-        : widget.controller.categories.where((x) => x.id == id).firstOrNull;
+  Widget _header(BuildContext c, String? id, Category? cat) {
     final i = cat == null ? -1 : widget.controller.categories.indexOf(cat);
     final k = 'cat:$id';
     return ListTile(
@@ -75,7 +84,7 @@ class _WorldPageState extends State<WorldPage> {
         ),
       ),
       title: Text(
-        id == null ? '未分类' : cat!.name,
+        cat?.name ?? '未分类',
         style: Theme.of(c).textTheme.titleLarge,
       ),
       trailing: cat == null
