@@ -65,4 +65,21 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('world-node-C')), findsOneWidget);
   });
+
+  testWidgets('creating an empty category does not crash World', (
+    tester,
+  ) async {
+    final repository = MemoryRepository();
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('世界'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('world-new-category')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '科研工作');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(repository.categories.single.name, '科研工作');
+  });
 }

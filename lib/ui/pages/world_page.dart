@@ -44,10 +44,11 @@ class _WorldPageState extends State<WorldPage> {
             ),
           ),
           for (final key in keys)
-            if (groups[key]!.isNotEmpty) ...[
+            if ((groups[key] ?? const <JaxEvent>[]).isNotEmpty) ...[
               _header(context, key),
               if (!_collapsed.contains('cat:$key'))
-                for (final root in groups[key]!) ..._tree(context, root),
+                for (final root in groups[key] ?? const <JaxEvent>[])
+                  ..._tree(context, root),
             ],
         ],
       );
@@ -267,22 +268,21 @@ class _WorldPageState extends State<WorldPage> {
     final t = TextEditingController(text: initial);
     final r = await showDialog<String>(
       context: c,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(title),
         content: TextField(controller: t, autofocus: true),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(c),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(c, t.text),
+            onPressed: () => Navigator.pop(dialogContext, t.text),
             child: const Text('保存'),
           ),
         ],
       ),
     );
-    t.dispose();
     return r;
   }
 }
