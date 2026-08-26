@@ -73,60 +73,75 @@ class _WorldPageState extends State<WorldPage> {
   Widget _header(BuildContext c, String? id, Category? cat) {
     final i = cat == null ? -1 : widget.controller.categories.indexOf(cat);
     final k = 'cat:$id';
-    return ListTile(
+    final colors = Theme.of(c).colorScheme;
+    return Container(
       key: ValueKey('world-category-$id'),
-      contentPadding: const EdgeInsets.fromLTRB(4, 20, 0, 4),
-      leading: IconButton(
-        key: ValueKey('world-category-toggle-$id'),
-        tooltip: _collapsed.contains(k) ? '展开分类' : '折叠分类',
-        icon: Icon(
-          _collapsed.contains(k) ? Icons.chevron_right : Icons.expand_more,
-        ),
-        onPressed: () => setState(
-          () =>
-              _collapsed.contains(k) ? _collapsed.remove(k) : _collapsed.add(k),
-        ),
+      margin: const EdgeInsets.only(top: 24, bottom: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
-      title: Text(cat?.name ?? '未分类', style: Theme.of(c).textTheme.titleLarge),
-      trailing: cat == null
-          ? null
-          : PopupMenuButton<_CatAction>(
-              key: ValueKey('world-category-more-$id'),
-              tooltip: '分类操作',
-              onSelected: (a) => _catAction(c, cat, i, a),
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: _CatAction.rename,
-                  child: ListTile(
-                    leading: Icon(Icons.edit),
-                    title: Text('重命名'),
-                  ),
-                ),
-                if (i > 0)
-                  const PopupMenuItem(
-                    value: _CatAction.up,
-                    child: ListTile(
-                      leading: Icon(Icons.arrow_upward),
-                      title: Text('上移'),
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(4, 4, 0, 6),
+        leading: IconButton(
+          key: ValueKey('world-category-toggle-$id'),
+          tooltip: _collapsed.contains(k) ? '展开分类' : '折叠分类',
+          icon: Icon(
+            _collapsed.contains(k) ? Icons.chevron_right : Icons.expand_more,
+          ),
+          onPressed: () => setState(
+            () => _collapsed.contains(k)
+                ? _collapsed.remove(k)
+                : _collapsed.add(k),
+          ),
+        ),
+        title: Text(
+          cat?.name ?? '未分类',
+          style: Theme.of(c).textTheme.titleLarge
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        trailing: cat == null
+            ? null
+            : Opacity(
+                opacity: .62,
+                child: PopupMenuButton<_CatAction>(
+                  key: ValueKey('world-category-more-$id'),
+                  tooltip: '分类操作',
+                  onSelected: (a) => _catAction(c, cat, i, a),
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: _CatAction.rename,
+                      child: ListTile(
+                        leading: Icon(Icons.edit),
+                        title: Text('重命名'),
+                      ),
                     ),
-                  ),
-                if (i < widget.controller.categories.length - 1)
-                  const PopupMenuItem(
-                    value: _CatAction.down,
-                    child: ListTile(
-                      leading: Icon(Icons.arrow_downward),
-                      title: Text('下移'),
+                    if (i > 0)
+                      const PopupMenuItem(
+                        value: _CatAction.up,
+                        child: ListTile(
+                          leading: Icon(Icons.arrow_upward),
+                          title: Text('上移'),
+                        ),
+                      ),
+                    if (i < widget.controller.categories.length - 1)
+                      const PopupMenuItem(
+                        value: _CatAction.down,
+                        child: ListTile(
+                          leading: Icon(Icons.arrow_downward),
+                          title: Text('下移'),
+                        ),
+                      ),
+                    const PopupMenuItem(
+                      value: _CatAction.delete,
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('删除分类'),
+                      ),
                     ),
-                  ),
-                const PopupMenuItem(
-                  value: _CatAction.delete,
-                  child: ListTile(
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('删除分类'),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+      ),
     );
   }
 
@@ -161,7 +176,14 @@ class _WorldPageState extends State<WorldPage> {
 
   Widget _node(BuildContext c, JaxEvent e) {
     final child = widget.controller.hasDirectChildren(e.id);
-    final state = _state(widget.controller.worldDisplayStateFor(e.id));
+    final displayState = widget.controller.worldDisplayStateFor(e.id);
+    final state = _state(displayState);
+    final depth = widget.controller.hierarchyDepthFor(e.id);
+    final root = e.parentEventId == null;
+    final active =
+        displayState == WorldDisplayState.running ||
+        displayState == WorldDisplayState.progressing;
+    final completed = displayState == WorldDisplayState.completed;
     final actions = <PopupMenuEntry<_WorldAction>>[
       const PopupMenuItem(
         value: _WorldAction.hierarchy,
@@ -183,16 +205,15 @@ class _WorldPageState extends State<WorldPage> {
           ),
         ),
     ];
-    return Padding(
+    return _WorldEventNode(
       key: ValueKey('world-node-${e.id}'),
-      padding: EdgeInsets.only(
-        left: (widget.controller.hierarchyDepthFor(e.id) * 24.0).clamp(
-          0.0,
-          120.0,
-        ),
-      ),
+      depth: depth,
+      root: root,
+      active: active,
+      completed: completed,
       child: ListTile(
-        dense: true,
+        dense: !root,
+        minVerticalPadding: root ? 8 : 2,
         leading: child
             ? IconButton(
                 key: ValueKey('world-toggle-${e.id}'),
@@ -209,13 +230,20 @@ class _WorldPageState extends State<WorldPage> {
                 ),
               )
             : const SizedBox(width: 48),
-        title: Text(e.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        title: Text(
+          e.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(c).textTheme.bodyLarge?.copyWith(
+            fontWeight: active || root ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
         subtitle: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(state.$1, size: 16),
+            Icon(state.$1, size: 15),
             const SizedBox(width: 4),
-            Text(state.$2),
+            Text(state.$2, style: Theme.of(c).textTheme.bodySmall),
           ],
         ),
         trailing: Row(
@@ -334,3 +362,66 @@ class _WorldPageState extends State<WorldPage> {
 enum _WorldAction { hierarchy, edit, category }
 
 enum _CatAction { rename, up, down, delete }
+
+class _WorldEventNode extends StatefulWidget {
+  const _WorldEventNode({
+    required super.key,
+    required this.depth,
+    required this.root,
+    required this.active,
+    required this.completed,
+    required this.child,
+  });
+
+  final int depth;
+  final bool root;
+  final bool active;
+  final bool completed;
+  final Widget child;
+
+  @override
+  State<_WorldEventNode> createState() => _WorldEventNodeState();
+}
+
+class _WorldEventNodeState extends State<_WorldEventNode> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final emphasis = widget.active
+        ? colors.primary
+        : widget.completed
+        ? colors.outlineVariant
+        : colors.outlineVariant;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Opacity(
+        opacity: widget.completed ? .58 : 1,
+        child: Container(
+          margin: EdgeInsets.only(top: widget.root ? 6 : 0),
+          padding: EdgeInsets.only(
+            left: (widget.depth * 24.0).clamp(0.0, 120.0),
+          ),
+          decoration: BoxDecoration(
+            color: widget.active
+                ? colors.primary.withValues(alpha: .06)
+                : _hovering
+                ? colors.onSurface.withValues(alpha: .025)
+                : null,
+            border: widget.depth == 0 && !widget.active
+                ? null
+                : Border(
+                    left: BorderSide(
+                      color: emphasis,
+                      width: widget.active ? 2 : 1,
+                    ),
+                  ),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
