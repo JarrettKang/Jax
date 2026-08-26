@@ -50,9 +50,9 @@ void main() {
     expect(find.byKey(const ValueKey('pause-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('complete-running')), findsOneWidget);
     expect(find.text('等待中'), findsOneWidget);
-    expect(find.byKey(const ValueKey('resume-waiting')), findsOneWidget);
-    expect(find.byKey(const ValueKey('pause-waiting')), findsOneWidget);
-    expect(find.byKey(const ValueKey('complete-waiting')), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '完成'), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('pause-waiting')), findsNothing);
     for (final id in ['pending', 'paused', 'running']) {
       expect(find.byKey(ValueKey('more-$id')), findsOneWidget);
       expect(find.byKey(ValueKey('hierarchy-$id')), findsNothing);
@@ -74,6 +74,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('hierarchy-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('wait-running')), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('more-waiting')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('pause-waiting')), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-running')), findsNothing);
     expect(find.byKey(const ValueKey('delete-running')), findsNothing);
   });
@@ -131,6 +137,30 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '暂停'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
     expect(find.byKey(const ValueKey('more-running')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('waiting text actions do not overflow on a narrow phone', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+    final repository = MemoryRepository([
+      event('waiting', EventStatus.waiting),
+    ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
+    await tester.pumpAndSettle();
+    await openEventsPage(tester);
+
+    expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
+    expect(find.byKey(const ValueKey('more-waiting')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
