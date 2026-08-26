@@ -9,6 +9,8 @@ import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/services/event_hierarchy_service.dart';
 import '../../core/services/hierarchy_duration_service.dart';
+import '../../core/services/world_display_state_service.dart';
+import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
@@ -41,6 +43,7 @@ class EventController extends ChangeNotifier {
        _wait = WaitEvent(repository: repository, now: now),
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
+       _worldDisplayStates = const WorldDisplayStateService(),
        _updateParent = UpdateEventParent(repository: repository, now: now),
        _reorder = ReorderSibling(repository);
   final EventRepository _repository;
@@ -57,6 +60,7 @@ class EventController extends ChangeNotifier {
   final WaitEvent _wait;
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
+  final WorldDisplayStateService _worldDisplayStates;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
   final Map<String, List<RunSegment>> _segments = {};
@@ -65,6 +69,7 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _history = const [];
   List<JaxEvent> _historyRoots = const [];
   List<JaxEvent> _worldEvents = const [];
+  Map<String, WorldDisplayState> _worldStates = const {};
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
@@ -76,6 +81,8 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
   List<JaxEvent> get worldEvents => List.unmodifiable(_worldEvents);
+  WorldDisplayState worldDisplayStateFor(String eventId) =>
+      _worldStates[eventId] ?? WorldDisplayState.pending;
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
@@ -140,6 +147,7 @@ class EventController extends ChangeNotifier {
     }
     _historyRoots = _sortByOrder(roots);
     _worldEvents = _orderTree([..._events, ..._history]);
+    _worldStates = _worldDisplayStates.derive(_worldEvents);
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
       _hasDirectChildren[event.id] = (await _repository.getDirectChildren(

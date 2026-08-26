@@ -287,6 +287,12 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 有下层的节点支持世界页 session 内展开/折叠；折叠状态不持久化，不新增数据库字段。状态图标沿用事件页和首页的状态视觉语言。
 - 世界以结构浏览为主，操作为辅；层级详情、上移、下移、编辑继续调用既有 Core/UI 业务入口，不能绕过层级、排序、删除和单 running 约束。
 
+### 10.9 v0.2 F6.1：世界结构状态
+
+- 世界同时保留 Event 的真实 status 与仅用于展示的结构状态；真实 status 不向祖先传播，唯一 running、direct/aggregate duration、run_segments 和生命周期规则不变。
+- Event 自己为 running 时世界显示“正在执行”；否则任意深度后代存在 running 时显示“推进中”。没有 running 但自己或后代存在 waiting 时显示“等待中”；其余显示真实的 paused、pending 或 completed 语义。
+- 结构状态由当前 hierarchy 与真实 status 实时派生，不持久化、不产生迁移、不修改 Event 状态，也不因展开/折叠改变。running 后代优先于 waiting 后代，completed hierarchy 约束继续由 Core 保证。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步

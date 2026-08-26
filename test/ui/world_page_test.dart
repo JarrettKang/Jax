@@ -42,6 +42,7 @@ void main() {
     );
     expect(find.text('已完成'), findsOneWidget);
     expect(find.text('等待中'), findsOneWidget);
+    expect(find.text('推进中'), findsOneWidget);
   });
 
   testWidgets('world collapse hides descendants and restores them', (

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
+import '../../core/entities/world_display_state.dart';
 import '../controllers/event_controller.dart';
 import 'event_hierarchy_dialog.dart';
 
@@ -45,7 +45,7 @@ class _WorldPageState extends State<WorldPage> {
     final hasChildren = widget.controller.hasDirectChildren(event.id);
     final collapsed = _collapsed.contains(event.id);
     final depth = widget.controller.hierarchyDepthFor(event.id);
-    final status = _status(event.status);
+    final status = _status(widget.controller.worldDisplayStateFor(event.id));
     return Padding(
       key: ValueKey('world-node-${event.id}'),
       padding: EdgeInsets.only(left: (depth * 24.0).clamp(0.0, 120.0)),
@@ -97,12 +97,13 @@ class _WorldPageState extends State<WorldPage> {
     );
   }
 
-  (IconData, String) _status(EventStatus status) => switch (status) {
-    EventStatus.pending => (Icons.radio_button_unchecked, '未开始'),
-    EventStatus.paused => (Icons.pause_circle_outline, '已暂停'),
-    EventStatus.running => (Icons.radio_button_checked, '进行中'),
-    EventStatus.waiting => (Icons.hourglass_empty, '等待中'),
-    EventStatus.completed => (Icons.check_circle_outline, '已完成'),
+  (IconData, String) _status(WorldDisplayState status) => switch (status) {
+    WorldDisplayState.pending => (Icons.radio_button_unchecked, '未开始'),
+    WorldDisplayState.paused => (Icons.pause_circle_outline, '已暂停'),
+    WorldDisplayState.running => (Icons.radio_button_checked, '正在执行'),
+    WorldDisplayState.progressing => (Icons.adjust, '推进中'),
+    WorldDisplayState.waiting => (Icons.hourglass_empty, '等待中'),
+    WorldDisplayState.completed => (Icons.check_circle_outline, '已完成'),
   };
 
   void _select(BuildContext context, JaxEvent event, _WorldAction action) {
