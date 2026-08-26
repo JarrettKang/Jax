@@ -37,6 +37,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('pause-one')));
     await tester.pumpAndSettle();
     expect(find.textContaining('已暂停'), findsOneWidget);
+    expect(find.byKey(const ValueKey('edit-one')), findsNothing);
+    expect(find.byKey(const ValueKey('delete-one')), findsNothing);
+    await openEventMenu(tester, 'one');
     expect(find.byKey(const ValueKey('edit-one')), findsOneWidget);
     expect(find.byKey(const ValueKey('delete-one')), findsOneWidget);
   });

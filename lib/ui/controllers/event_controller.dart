@@ -54,6 +54,7 @@ class EventController extends ChangeNotifier {
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
   final Map<String, List<RunSegment>> _segments = {};
+  final Map<String, bool> _hasDirectChildren = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
   List<JaxEvent> _historyRoots = const [];
@@ -88,6 +89,9 @@ class EventController extends ChangeNotifier {
               .where((item) => item.parentEventId == event.parentEventId)
               .length;
   }
+
+  bool hasDirectChildren(String eventId) =>
+      _hasDirectChildren[eventId] ?? false;
 
   int hierarchyDepthFor(String eventId) {
     final byId = {for (final event in _events) event.id: event};
@@ -124,6 +128,9 @@ class EventController extends ChangeNotifier {
     _historyRoots = _sortByOrder(roots);
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
+      _hasDirectChildren[event.id] = (await _repository.getDirectChildren(
+        event.id,
+      )).isNotEmpty;
     }
     final running = runningEvent;
     _runningParent = running == null

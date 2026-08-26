@@ -58,18 +58,22 @@ void main() {
 
     for (final key in [
       'start-pending',
-      'edit-pending',
-      'delete-pending',
+      'more-pending',
       'resume-paused',
-      'edit-paused',
-      'delete-paused',
+      'more-paused',
       'complete-running',
       'pause-running',
+      'more-running',
     ]) {
       final action = find.byKey(ValueKey(key));
       await tester.scrollUntilVisible(action, 100);
       expect(action, findsOneWidget);
     }
+    await openEventMenu(tester, 'pending');
+    expect(find.byKey(const ValueKey('edit-pending')), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-pending')), findsOneWidget);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('新建事件'));

@@ -99,32 +99,6 @@ class EventsPage extends StatelessWidget {
       : '未开始';
 
   List<Widget> _actions(BuildContext context, JaxEvent event) => [
-    IconButton(
-      key: ValueKey('hierarchy-${event.id}'),
-      icon: const Icon(Icons.account_tree_outlined),
-      tooltip: '层级详情',
-      onPressed: () => showEventHierarchyDialog(
-        context,
-        controller: controller,
-        event: event,
-      ),
-    ),
-    if (controller.siblingIndexFor(event.id) > 0)
-      IconButton(
-        key: ValueKey('move-up-${event.id}'),
-        icon: const Icon(Icons.arrow_upward),
-        tooltip: '上移',
-        onPressed: () => _run(context, () => controller.moveUp(event.id)),
-      ),
-    if (controller.siblingIndexFor(event.id) >= 0 &&
-        controller.siblingIndexFor(event.id) <
-            controller.siblingCountFor(event.id) - 1)
-      IconButton(
-        key: ValueKey('move-down-${event.id}'),
-        icon: const Icon(Icons.arrow_downward),
-        tooltip: '下移',
-        onPressed: () => _run(context, () => controller.moveDown(event.id)),
-      ),
     if (event.status == EventStatus.pending)
       IconButton(
         key: ValueKey('start-${event.id}'),
@@ -140,34 +114,98 @@ class EventsPage extends StatelessWidget {
         onPressed: () => _run(context, () => controller.resume(event.id)),
       ),
     if (event.status == EventStatus.running)
-      IconButton(
-        key: ValueKey('complete-${event.id}'),
-        icon: const Icon(Icons.check),
-        tooltip: '完成',
-        onPressed: () => _run(context, () => controller.complete(event.id)),
-      ),
-    if (event.status == EventStatus.running)
-      IconButton(
+      OutlinedButton.icon(
         key: ValueKey('pause-${event.id}'),
         icon: const Icon(Icons.pause),
-        tooltip: '暂停',
+        label: const Text('暂停'),
         onPressed: () => _run(context, () => controller.pause(event.id)),
       ),
-    if (event.status != EventStatus.running)
-      IconButton(
-        key: ValueKey('edit-${event.id}'),
-        icon: const Icon(Icons.edit),
-        tooltip: '编辑',
-        onPressed: () => _showEditor(context, event),
+    if (event.status == EventStatus.running) const SizedBox(width: 16),
+    if (event.status == EventStatus.running)
+      FilledButton.tonalIcon(
+        key: ValueKey('complete-${event.id}'),
+        icon: const Icon(Icons.check),
+        label: const Text('完成'),
+        onPressed: () => _run(context, () => controller.complete(event.id)),
+      ),
+    PopupMenuButton<_EventMenuAction>(
+      key: ValueKey('more-${event.id}'),
+      tooltip: '更多操作',
+      onSelected: (action) => _selectMenuAction(context, event, action),
+      itemBuilder: (context) => _menuItems(event),
+    ),
+  ];
+
+  List<PopupMenuEntry<_EventMenuAction>> _menuItems(JaxEvent event) => [
+    PopupMenuItem(
+      key: ValueKey('hierarchy-${event.id}'),
+      value: _EventMenuAction.hierarchy,
+      child: const ListTile(
+        leading: Icon(Icons.account_tree_outlined),
+        title: Text('层级详情'),
+      ),
+    ),
+    if (controller.siblingIndexFor(event.id) > 0)
+      PopupMenuItem(
+        key: ValueKey('move-up-${event.id}'),
+        value: _EventMenuAction.moveUp,
+        child: const ListTile(
+          leading: Icon(Icons.arrow_upward),
+          title: Text('上移'),
+        ),
+      ),
+    if (controller.siblingIndexFor(event.id) >= 0 &&
+        controller.siblingIndexFor(event.id) <
+            controller.siblingCountFor(event.id) - 1)
+      PopupMenuItem(
+        key: ValueKey('move-down-${event.id}'),
+        value: _EventMenuAction.moveDown,
+        child: const ListTile(
+          leading: Icon(Icons.arrow_downward),
+          title: Text('下移'),
+        ),
       ),
     if (event.status != EventStatus.running)
-      IconButton(
+      PopupMenuItem(
+        key: ValueKey('edit-${event.id}'),
+        value: _EventMenuAction.edit,
+        child: const ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
+      ),
+    if (event.status != EventStatus.running &&
+        !controller.hasDirectChildren(event.id))
+      PopupMenuItem(
         key: ValueKey('delete-${event.id}'),
-        icon: const Icon(Icons.delete_outline),
-        tooltip: '删除',
-        onPressed: () => _confirmDelete(context, event),
+        value: _EventMenuAction.delete,
+        child: const ListTile(
+          leading: Icon(Icons.delete_outline),
+          title: Text('删除事件'),
+        ),
       ),
   ];
+
+  void _selectMenuAction(
+    BuildContext context,
+    JaxEvent event,
+    _EventMenuAction action,
+  ) {
+    switch (action) {
+      case _EventMenuAction.hierarchy:
+        showEventHierarchyDialog(context, controller: controller, event: event);
+        return;
+      case _EventMenuAction.moveUp:
+        _run(context, () => controller.moveUp(event.id));
+        return;
+      case _EventMenuAction.moveDown:
+        _run(context, () => controller.moveDown(event.id));
+        return;
+      case _EventMenuAction.edit:
+        _showEditor(context, event);
+        return;
+      case _EventMenuAction.delete:
+        _confirmDelete(context, event);
+        return;
+    }
+  }
 
   static String _duration(Duration value) =>
       '${value.inHours.toString().padLeft(2, '0')}:${(value.inMinutes % 60).toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
@@ -209,6 +247,8 @@ class EventsPage extends StatelessWidget {
     }
   }
 }
+
+enum _EventMenuAction { hierarchy, moveUp, moveDown, edit, delete }
 
 class _EventEditor extends StatefulWidget {
   const _EventEditor({required this.controller, this.event});

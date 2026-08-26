@@ -24,11 +24,13 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('delete-one')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(repository.events, hasLength(1));
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('delete-one')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));

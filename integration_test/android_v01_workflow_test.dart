@@ -94,6 +94,8 @@ void main() {
     now = now.add(const Duration(minutes: 9));
     await tester.tap(find.byKey(const ValueKey('pause-event-a')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('more-event-a')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('edit-event-a')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '任务 A（已编辑）');

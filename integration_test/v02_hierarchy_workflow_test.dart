@@ -117,6 +117,8 @@ void main() {
 
     await tester.tap(find.text('事件'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('more-running')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('hierarchy-running')));
     await tester.pumpAndSettle();
     expect(find.text('开发项目'), findsWidgets);

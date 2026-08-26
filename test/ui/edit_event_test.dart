@@ -22,6 +22,7 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('edit-one')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '新名称');

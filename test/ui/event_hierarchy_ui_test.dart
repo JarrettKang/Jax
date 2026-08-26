@@ -30,6 +30,7 @@ void main() {
     await tester.pumpAndSettle();
     await openEventsPage(tester);
 
+    await openEventMenu(tester, 'child');
     await tester.tap(find.byKey(const ValueKey('hierarchy-child')));
     await tester.pumpAndSettle();
     expect(find.text('上层事件'), findsOneWidget);
@@ -72,10 +73,7 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('hierarchy-root')),
-      100,
-    );
+    await openEventMenu(tester, 'root');
     await tester.tap(find.byKey(const ValueKey('hierarchy-root')));
     await tester.pumpAndSettle();
 

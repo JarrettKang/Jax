@@ -117,3 +117,11 @@
 - F3.3 状态：已完成。事件页、记录页及记录详情复用共享排序控制，逐层展示同级顺序；新增上移/下移操作不改变状态、层级或执行事实，并覆盖窄屏与大字体布局。109 项自动化测试、`flutter analyze`、Windows Debug 层级工作流和 Android 模拟器 Debug 层级工作流通过；未修改 SQLite schema，真机未连接。
 - F3.4 状态：已完成。首页复用现有有序 Repository 同级查询展示上下文，同级事件名称保持用户定义顺序，未增加首页专用状态或数据；新增首页顺序 Widget 测试通过。110 项自动化测试、`flutter analyze`、Windows/Android Debug 回归通过；未修改 SQLite schema，真机未连接。
 - F3.5 状态：已完成。全量 110 项 Core/Data/Widget 自动化测试、`flutter analyze`、Windows v0.1/v0.2 Debug 工作流、Android 模拟器 v0.1 工作流及 v2→v4 sqflite migration/排序回归全部通过；schema 当前为 v4，未连接或修改 Android 真机，未生成 Release。F3 形成稳定 Debug 基线。
+
+## 6. F4：事件操作区整理与恢复 completed Event
+
+- F4.1：事件卡片仅常驻状态相关操作，层级、同级排序、编辑和删除移入按现有规则动态显示的更多菜单；running 的暂停与完成须在视觉和空间上清晰区分。仅调整共享 UI，不修改 Core、Data 或 schema。
+- F4.2：completed Event 可从记录栏目恢复为 paused，保留执行片段、层级与排序，不自动 running；必要的 completed 祖先在同一事务中同步恢复，completed 下层不递归恢复。
+- F4 完成验收：全部自动化测试与静态分析、Windows Debug、Android 模拟器 Debug 及 F1/F2/F3 回归通过；不连接或迁移 Android 真机，不生成 Release。
+- F4.1 状态：已完成。事件卡片仅常驻开始/恢复或明确区分的暂停与完成，层级、同级排序、编辑和合法删除进入动态更多菜单；父事件及 running Event 不显示非法删除，running 不显示编辑。115 项 Core/Data/Widget 自动化测试、`flutter analyze`、Windows v0.1/v0.2 Debug 工作流和 Android 模拟器 v0.1/v0.2 Debug 工作流通过；schema 仍为 v4，未连接真机，未生成 Release。
+- 当前状态：F4.2 开始前稳定增量边界；schema 仍为 v4。
