@@ -272,6 +272,14 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 恢复 Event 时，其向上的连续 completed 祖先同步恢复为 `paused`，直到没有上层或遇到本来未完成的祖先，避免 completed 上层包含未完成下层。
 - 恢复只向上维护一致性，不自动恢复 completed 下层；恢复后再次完成仍遵守既有下层完成约束。
 
+### 10.7 v0.2 F5：等待中事件
+
+- `waiting` 表示 Event 仍在推进、但正等待外部过程或结果；`paused` 表示用户主动中断且当前未继续推进，两者是不同产品状态。
+- 全局仍最多一个 `running`，但可同时存在多个 `waiting`。waiting 不创建等待片段、不累计 direct duration，也不改变 aggregate duration 的既有定义。
+- 支持 `running → waiting`、`paused → waiting`、`waiting → running`、`waiting → paused` 和 `waiting → completed`。进入 waiting 时关闭已打开的 running segment，恢复为 running 时创建新 segment 并沿用单 running 冲突规则。
+- waiting 属于未完成状态，completed 上层不得包含 waiting 下层；waiting 不向上层或下层自动传播。completed Event 的恢复仍回到 `paused`。
+- 首页以“当前正在做”保留既有完整 running 上下文，并以次级的“同时在等待”列表展示所有 waiting Event 及简洁祖先路径；列表沿用现有 hierarchy/sibling 稳定顺序。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步

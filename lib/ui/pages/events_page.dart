@@ -96,6 +96,8 @@ class EventsPage extends StatelessWidget {
       ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
       : event.status == EventStatus.paused
       ? '已暂停 · ${_duration(controller.elapsedFor(event))}'
+      : event.status == EventStatus.waiting
+      ? '等待中'
       : '未开始';
 
   List<Widget> _actions(BuildContext context, JaxEvent event) => [
@@ -113,6 +115,26 @@ class EventsPage extends StatelessWidget {
         tooltip: '恢复',
         onPressed: () => _run(context, () => controller.resume(event.id)),
       ),
+    if (event.status == EventStatus.waiting) ...[
+      IconButton(
+        key: ValueKey('resume-${event.id}'),
+        icon: const Icon(Icons.play_arrow),
+        tooltip: '恢复',
+        onPressed: () => _run(context, () => controller.resume(event.id)),
+      ),
+      IconButton(
+        key: ValueKey('pause-${event.id}'),
+        icon: const Icon(Icons.pause),
+        tooltip: '暂停',
+        onPressed: () => _run(context, () => controller.pause(event.id)),
+      ),
+      IconButton(
+        key: ValueKey('complete-${event.id}'),
+        icon: const Icon(Icons.check),
+        tooltip: '完成',
+        onPressed: () => _run(context, () => controller.complete(event.id)),
+      ),
+    ],
     if (event.status == EventStatus.running)
       OutlinedButton.icon(
         key: ValueKey('pause-${event.id}'),
@@ -137,6 +159,16 @@ class EventsPage extends StatelessWidget {
   ];
 
   List<PopupMenuEntry<_EventMenuAction>> _menuItems(JaxEvent event) => [
+    if (event.status == EventStatus.running ||
+        event.status == EventStatus.paused)
+      PopupMenuItem(
+        key: ValueKey('wait-${event.id}'),
+        value: _EventMenuAction.wait,
+        child: const ListTile(
+          leading: Icon(Icons.hourglass_empty),
+          title: Text('设为等待'),
+        ),
+      ),
     PopupMenuItem(
       key: ValueKey('hierarchy-${event.id}'),
       value: _EventMenuAction.hierarchy,
@@ -189,6 +221,9 @@ class EventsPage extends StatelessWidget {
     _EventMenuAction action,
   ) {
     switch (action) {
+      case _EventMenuAction.wait:
+        _run(context, () => controller.wait(event.id));
+        return;
       case _EventMenuAction.hierarchy:
         showEventHierarchyDialog(context, controller: controller, event: event);
         return;
@@ -248,7 +283,7 @@ class EventsPage extends StatelessWidget {
   }
 }
 
-enum _EventMenuAction { hierarchy, moveUp, moveDown, edit, delete }
+enum _EventMenuAction { wait, hierarchy, moveUp, moveDown, edit, delete }
 
 class _EventEditor extends StatefulWidget {
   const _EventEditor({required this.controller, this.event});

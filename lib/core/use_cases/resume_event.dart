@@ -17,8 +17,9 @@ class ResumeEvent {
   Future<void> call(String id) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
-    if (current.status != EventStatus.paused) {
-      throw const DomainFailure('只有已暂停事件可以恢复');
+    if (current.status != EventStatus.paused &&
+        current.status != EventStatus.waiting) {
+      throw const DomainFailure('只有已暂停或等待中事件可以恢复');
     }
     final timestamp = now().toUtc();
     if (await DescendantSwitchService(repository)

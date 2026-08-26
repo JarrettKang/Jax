@@ -15,7 +15,8 @@ class EditEvent {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
     if (current.status != EventStatus.pending &&
-        current.status != EventStatus.paused) {
+        current.status != EventStatus.paused &&
+        current.status != EventStatus.waiting) {
       throw const DomainFailure('当前状态不允许编辑');
     }
     final edited = current.copyWith(name: name, updatedAt: now().toUtc());

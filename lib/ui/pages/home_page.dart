@@ -65,6 +65,7 @@ class _HomePageState extends State<HomePage> {
     builder: (context, _) {
       final running = widget.controller.runningEvent;
       final work = widget.controller.homeRunningContext;
+      final waiting = widget.controller.homeWaitingItems;
       return SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -83,7 +84,7 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 32),
                   if (widget.controller.loading)
                     const Center(child: CircularProgressIndicator())
-                  else if (running == null)
+                  else if (running == null && waiting.isEmpty)
                     Card(
                       child: InkWell(
                         key: const ValueKey('home-open-events'),
@@ -95,60 +96,104 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                     )
-                  else if (work != null)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '正在推进',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              work.subject.name,
-                              key: const ValueKey('home-work-subject'),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                            if (work.ancestors.isNotEmpty) ...[
-                              const SizedBox(height: 6),
+                  else ...[
+                    if (running == null)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('当前没有正在执行的事件'),
+                        ),
+                      ),
+                    if (work != null)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                work.ancestors
-                                    .map((event) => event.name)
-                                    .join(' › '),
-                                key: const ValueKey('home-ancestor-path'),
+                                '当前正在做',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                work.subject.name,
+                                key: const ValueKey('home-work-subject'),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
                               ),
+                              if (work.ancestors.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  work.ancestors
+                                      .map((event) => event.name)
+                                      .join(' › '),
+                                  key: const ValueKey('home-ancestor-path'),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                              const Divider(height: 32),
+                              if (work.omittedBefore)
+                                const _OmissionRow(
+                                  key: ValueKey('home-omitted-before'),
+                                ),
+                              for (final step in work.visibleSteps)
+                                _StepRow(
+                                  event: step,
+                                  elapsed: widget.controller.elapsedFor(step),
+                                ),
+                              if (work.omittedAfter)
+                                const _OmissionRow(
+                                  key: ValueKey('home-omitted-after'),
+                                ),
                             ],
-                            const Divider(height: 32),
-                            if (work.omittedBefore)
-                              const _OmissionRow(
-                                key: ValueKey('home-omitted-before'),
-                              ),
-                            for (final step in work.visibleSteps)
-                              _StepRow(
-                                event: step,
-                                elapsed: widget.controller.elapsedFor(step),
-                              ),
-                            if (work.omittedAfter)
-                              const _OmissionRow(
-                                key: ValueKey('home-omitted-after'),
+                          ),
+                        ),
+                      ),
+                    if (waiting.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        '同时在等待',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Card(
+                        child: Column(
+                          children: [
+                            for (final item in waiting)
+                              ListTile(
+                                key: ValueKey('home-waiting-${item.event.id}'),
+                                leading: const Icon(Icons.hourglass_empty),
+                                title: Text(
+                                  item.event.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: item.ancestors.isEmpty
+                                    ? null
+                                    : Text(
+                                        item.ancestors
+                                            .map((event) => event.name)
+                                            .join(' › '),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                               ),
                           ],
                         ),
                       ),
-                    ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -174,6 +219,7 @@ class _StepRow extends StatelessWidget {
         '进行中 · ${_duration(elapsed)}',
       ),
       EventStatus.paused => (Icons.pause_circle_outline, '已暂停'),
+      EventStatus.waiting => (Icons.hourglass_empty, '等待中'),
       EventStatus.pending => (Icons.radio_button_unchecked, '未开始'),
     };
     return Padding(

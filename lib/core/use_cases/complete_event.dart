@@ -15,7 +15,10 @@ class CompleteEvent {
     if (children.any((child) => child.status != EventStatus.completed)) {
       throw const DomainFailure('仍存在未完成的下层事件');
     }
-    final canCompleteFromChildren = children.isNotEmpty;
+    final canCompleteFromChildren =
+        children.isNotEmpty ||
+        current.status == EventStatus.paused ||
+        current.status == EventStatus.waiting;
     if (current.status != EventStatus.running && !canCompleteFromChildren) {
       throw const DomainFailure('只有正在进行的事件可以完成');
     }

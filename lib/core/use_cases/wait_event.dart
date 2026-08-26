@@ -3,32 +3,31 @@ import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
 import 'create_event.dart';
 
-class PauseEvent {
-  const PauseEvent({required this.repository, required this.now});
+class WaitEvent {
+  const WaitEvent({required this.repository, required this.now});
   final EventRepository repository;
   final Clock now;
+
   Future<void> call(String id) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
-    if (current.status == EventStatus.waiting) {
+    if (current.status == EventStatus.paused) {
       await repository.updateEvent(
-        current.copyWith(status: EventStatus.paused, updatedAt: now().toUtc()),
+        current.copyWith(status: EventStatus.waiting, updatedAt: now().toUtc()),
       );
       return;
     }
     if (current.status != EventStatus.running) {
-      throw const DomainFailure('只有正在进行或等待中的事件可以暂停');
+      throw const DomainFailure('只有正在进行或已暂停的事件可以设为等待');
     }
-    final segments = await repository.getRunSegments(id);
-    final open = segments
+    final open = (await repository.getRunSegments(id))
         .where((segment) => segment.endedAt == null)
         .firstOrNull;
     if (open == null) throw const DomainFailure('执行计时数据不完整');
     final timestamp = now().toUtc();
-    final paused = current.copyWith(
-      status: EventStatus.paused,
-      updatedAt: timestamp,
+    await repository.pauseEvent(
+      current.copyWith(status: EventStatus.waiting, updatedAt: timestamp),
+      open.copyWith(endedAt: timestamp),
     );
-    await repository.pauseEvent(paused, open.copyWith(endedAt: timestamp));
   }
 }

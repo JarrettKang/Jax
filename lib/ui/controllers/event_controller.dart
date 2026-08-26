@@ -20,6 +20,7 @@ import '../../core/use_cases/restore_event.dart';
 import '../../core/use_cases/start_event.dart';
 import '../../core/use_cases/update_event_parent.dart';
 import '../../core/use_cases/reorder_sibling.dart';
+import '../../core/use_cases/wait_event.dart';
 
 class EventController extends ChangeNotifier {
   EventController({
@@ -37,6 +38,7 @@ class EventController extends ChangeNotifier {
        _resume = ResumeEvent(repository: repository, newId: newId, now: now),
        _restore = RestoreEvent(repository: repository, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now),
+       _wait = WaitEvent(repository: repository, now: now),
        _hierarchy = EventHierarchyService(repository),
        _durations = HierarchyDurationService(repository, now: now),
        _updateParent = UpdateEventParent(repository: repository, now: now),
@@ -52,6 +54,7 @@ class EventController extends ChangeNotifier {
   final ResumeEvent _resume;
   final RestoreEvent _restore;
   final StartEvent _start;
+  final WaitEvent _wait;
   final EventHierarchyService _hierarchy;
   final HierarchyDurationService _durations;
   final UpdateEventParent _updateParent;
@@ -64,6 +67,7 @@ class EventController extends ChangeNotifier {
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
+  List<HomeWaitingItem> _homeWaitingItems = const [];
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
@@ -77,6 +81,8 @@ class EventController extends ChangeNotifier {
   JaxEvent? get runningParent => _runningParent;
   List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
   HomeRunningContext? get homeRunningContext => _homeRunningContext;
+  List<HomeWaitingItem> get homeWaitingItems =>
+      List.unmodifiable(_homeWaitingItems);
   int siblingIndexFor(String eventId) {
     final event = _events.where((item) => item.id == eventId).firstOrNull;
     if (event == null) return -1;
@@ -149,6 +155,22 @@ class EventController extends ChangeNotifier {
     _homeRunningContext = running == null
         ? null
         : await _buildHomeRunningContext(running, _runningParent);
+    final waitingItems = <HomeWaitingItem>[];
+    for (final event in _events.where(
+      (event) => event.status == EventStatus.waiting,
+    )) {
+      final ancestors = <JaxEvent>[];
+      var parent = await _repository.getParent(event.id);
+      final visited = <String>{event.id};
+      while (parent != null && visited.add(parent.id)) {
+        ancestors.add(parent);
+        parent = await _repository.getParent(parent.id);
+      }
+      waitingItems.add(
+        HomeWaitingItem(event: event, ancestors: ancestors.reversed.toList()),
+      );
+    }
+    _homeWaitingItems = waitingItems;
     _syncTicker();
   }
 
@@ -198,6 +220,7 @@ class EventController extends ChangeNotifier {
   Future<String?> start(String id) => _change(() => _start(id));
   Future<String?> pause(String id) => _change(() => _pause(id));
   Future<String?> resume(String id) => _change(() => _resume(id));
+  Future<String?> wait(String id) => _change(() => _wait(id));
   Future<String?> complete(String id) => _change(() => _complete(id));
   Future<String?> restore(String id) => _change(() => _restore(id));
   Future<JaxEvent?> parentOf(String id) => _repository.getParent(id);
@@ -298,6 +321,12 @@ class EventController extends ChangeNotifier {
     _ticker?.cancel();
     super.dispose();
   }
+}
+
+class HomeWaitingItem {
+  const HomeWaitingItem({required this.event, required this.ancestors});
+  final JaxEvent event;
+  final List<JaxEvent> ancestors;
 }
 
 class HomeRunningContext {

@@ -25,6 +25,62 @@ void main() {
     expect(find.text('暂无未完成事件'), findsOneWidget);
   });
 
+  testWidgets('shows running context and ordered waiting summary', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 26, 12);
+    final repository =
+        MemoryRepository([
+            _event('root', 'Root', EventStatus.paused, now, sortOrder: 0),
+            _event('run', 'Running', EventStatus.running, now, sortOrder: 1),
+            _event(
+              'w1',
+              'Waiting one',
+              EventStatus.waiting,
+              now,
+              parent: 'root',
+              sortOrder: 0,
+            ),
+            _event('w2', 'Waiting two', EventStatus.waiting, now, sortOrder: 2),
+          ])
+          ..segments.add(
+            RunSegment(
+              id: 'run-segment',
+              eventId: 'run',
+              startedAt: now,
+              createdAt: now,
+            ),
+          );
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    expect(find.text('当前正在做'), findsOneWidget);
+    expect(find.text('同时在等待'), findsOneWidget);
+    expect(find.text('Waiting one'), findsOneWidget);
+    expect(find.text('Root'), findsWidgets);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('home-waiting-w1'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('home-waiting-w2'))).dy,
+      ),
+    );
+  });
+
+  testWidgets('shows waiting even without a running event', (tester) async {
+    final now = DateTime(2026, 8, 26, 12);
+    await tester.pumpWidget(
+      JaxApp(
+        repository: MemoryRepository([
+          _event('w', 'Waiting', EventStatus.waiting, now),
+        ]),
+        now: () => now,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('当前没有正在执行的事件'), findsOneWidget);
+    expect(find.text('同时在等待'), findsOneWidget);
+    expect(find.text('我们来做点什么？'), findsNothing);
+  });
+
   testWidgets('shows work subject, ancestor and ordered step states', (
     tester,
   ) async {
@@ -70,7 +126,7 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
 
-    expect(find.text('正在推进'), findsOneWidget);
+    expect(find.text('当前正在做'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-work-subject')), findsOneWidget);
     expect(find.text('B'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-ancestor-path')), findsOneWidget);

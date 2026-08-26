@@ -10,7 +10,8 @@ class DeleteEvent {
     final event = await repository.getEvent(id);
     if (event == null) throw const DomainFailure('事件不存在');
     if (event.status != EventStatus.pending &&
-        event.status != EventStatus.paused) {
+        event.status != EventStatus.paused &&
+        event.status != EventStatus.waiting) {
       throw const DomainFailure('当前状态不允许删除');
     }
     if ((await repository.getDirectChildren(id)).isNotEmpty) {

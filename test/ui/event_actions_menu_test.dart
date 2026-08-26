@@ -31,6 +31,7 @@ void main() {
             event('pending', EventStatus.pending, order: 0),
             event('paused', EventStatus.paused, order: 1),
             event('running', EventStatus.running, order: 2),
+            event('waiting', EventStatus.waiting, order: 3),
           ])
           ..segments.add(
             RunSegment(
@@ -48,6 +49,10 @@ void main() {
     expect(find.byKey(const ValueKey('resume-paused')), findsOneWidget);
     expect(find.byKey(const ValueKey('pause-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('complete-running')), findsOneWidget);
+    expect(find.text('等待中'), findsOneWidget);
+    expect(find.byKey(const ValueKey('resume-waiting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pause-waiting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('complete-waiting')), findsOneWidget);
     for (final id in ['pending', 'paused', 'running']) {
       expect(find.byKey(ValueKey('more-$id')), findsOneWidget);
       expect(find.byKey(ValueKey('hierarchy-$id')), findsNothing);
@@ -68,6 +73,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('more-running')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('hierarchy-running')), findsOneWidget);
+    expect(find.byKey(const ValueKey('wait-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-running')), findsNothing);
     expect(find.byKey(const ValueKey('delete-running')), findsNothing);
   });

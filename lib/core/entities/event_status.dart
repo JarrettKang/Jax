@@ -2,6 +2,7 @@ enum EventStatus {
   pending,
   running,
   paused,
+  waiting,
   completed;
 
   static EventStatus fromStorage(String value) {

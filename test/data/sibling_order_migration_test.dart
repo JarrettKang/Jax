@@ -64,6 +64,6 @@ void main() {
       ['child-early', 'child-late'],
     );
     final version = await upgraded.database.rawQuery('PRAGMA user_version');
-    expect(version.single['user_version'], 4);
+    expect(version.single['user_version'], 5);
   });
 }

@@ -58,7 +58,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
-    expect(find.text('正在推进'), findsOneWidget);
+    expect(find.text('当前正在做'), findsOneWidget);
     expect(find.text('任务 A'), findsWidgets);
     await tester.tap(find.text('事件'));
     await tester.pumpAndSettle();
