@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/category_selector.dart';
 
 class RoutinePage extends StatelessWidget {
   const RoutinePage({required this.controller, super.key});
@@ -200,17 +201,10 @@ class RoutinePage extends StatelessWidget {
                     controller: name,
                     decoration: const InputDecoration(labelText: '名称'),
                   ),
-                  DropdownButtonFormField<String?>(
-                    initialValue: category,
-                    decoration: const InputDecoration(labelText: '分类'),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('未分类')),
-                      ...controller.categories.map(
-                        (c) =>
-                            DropdownMenuItem(value: c.id, child: Text(c.name)),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => category = v),
+                  CategorySelector(
+                    categories: controller.categories,
+                    value: category,
+                    onChanged: (value) => setState(() => category = value),
                   ),
                   DropdownButtonFormField<RoutineRecurrence>(
                     initialValue: recurrence,

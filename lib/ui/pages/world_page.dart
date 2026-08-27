@@ -5,6 +5,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/entities/event_status.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/category_selector.dart';
 import '../widgets/event_more_menu_button.dart';
 import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
@@ -468,37 +469,117 @@ class _WorldPageState extends State<WorldPage> {
   Future<void> _createEvent(BuildContext c) async {
     final text = TextEditingController();
     String? error;
+    String? parentId;
+    String? selectedRootCategoryId;
     await showDialog<void>(
       context: c,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('新建事件'),
-          content: TextField(
-            controller: text,
-            autofocus: true,
-            decoration: InputDecoration(labelText: '事件名称', errorText: error),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+        builder: (context, setDialogState) {
+          final parents = widget.controller.worldEvents
+              .where((event) => event.status != EventStatus.completed)
+              .toList(growable: false);
+          final inheritedCategoryId = parentId == null
+              ? null
+              : _rootCategoryId(parentId!);
+          return AlertDialog(
+            title: const Text('新建事件'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: text,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: '事件名称',
+                      errorText: error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    key: const ValueKey('world-create-parent'),
+                    initialValue: parentId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: '上层事件'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('无（顶级事件）'),
+                      ),
+                      ...parents.map(
+                        (event) => DropdownMenuItem(
+                          value: event.id,
+                          child: Text(
+                            event.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) => setDialogState(() {
+                      parentId = value;
+                      error = null;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  CategorySelector(
+                    selectorKey: const ValueKey('world-create-category'),
+                    categories: widget.controller.categories,
+                    value: parentId == null
+                        ? selectedRootCategoryId
+                        : inheritedCategoryId,
+                    enabled: parentId == null,
+                    helperText: parentId == null ? null : '由上层事件继承',
+                    onChanged: (value) => setDialogState(() {
+                      selectedRootCategoryId = value;
+                      error = null;
+                    }),
+                  ),
+                ],
+              ),
             ),
-            FilledButton(
-              onPressed: () async {
-                final result = await widget.controller.create(text.text);
-                if (!context.mounted) return;
-                if (result == null) {
-                  Navigator.pop(context);
-                } else {
-                  setDialogState(() => error = result);
-                }
-              },
-              child: const Text('创建'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final result = await widget.controller.create(
+                    text.text,
+                    parentEventId: parentId,
+                    categoryId: parentId == null
+                        ? selectedRootCategoryId
+                        : null,
+                  );
+                  if (!context.mounted) return;
+                  if (result == null) {
+                    Navigator.pop(context);
+                  } else {
+                    setDialogState(() => error = result);
+                  }
+                },
+                child: const Text('创建'),
+              ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  String? _rootCategoryId(String eventId) {
+    final events = {
+      for (final event in widget.controller.worldEvents) event.id: event,
+    };
+    var current = events[eventId];
+    final visited = <String>{};
+    while (current != null &&
+        current.parentEventId != null &&
+        visited.add(current.id)) {
+      current = events[current.parentEventId];
+    }
+    return current?.categoryId;
   }
 
   Future<void> _confirmDelete(BuildContext c, JaxEvent e) async {

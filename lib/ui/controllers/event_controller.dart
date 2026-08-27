@@ -338,7 +338,13 @@ class EventController extends ChangeNotifier {
     );
   }
 
-  Future<String?> create(String name) => _change(() => _create(name));
+  Future<String?> create(
+    String name, {
+    String? parentEventId,
+    String? categoryId,
+  }) => _change(
+    () => _create(name, parentEventId: parentEventId, categoryId: categoryId),
+  );
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
   Future<String?> createCategory(String name) =>
