@@ -51,7 +51,7 @@ void main() {
     expect(find.byKey(const ValueKey('pause-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('complete-running')), findsOneWidget);
     expect(find.text('等待中'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '恢复'), findsNWidgets(2));
+    expect(find.widgetWithText(OutlinedButton, '恢复'), findsNWidgets(2));
     expect(find.widgetWithText(FilledButton, '完成'), findsNWidgets(2));
     expect(find.byKey(const ValueKey('pause-waiting')), findsNothing);
     expect(find.byKey(const ValueKey('today-remove-pending')), findsOneWidget);
@@ -109,7 +109,7 @@ void main() {
     await tester.tap(find.text('今日'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, '暂停'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '暂停'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -133,7 +133,7 @@ void main() {
     await tester.tap(find.text('今日'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, '恢复'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

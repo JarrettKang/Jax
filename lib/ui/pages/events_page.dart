@@ -4,6 +4,7 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/execution_action_buttons.dart';
 
 class EventsPage extends StatelessWidget {
   const EventsPage({required this.controller, super.key});
@@ -148,8 +149,7 @@ class _EventRow extends StatelessWidget {
       _button(
         context,
         'start',
-        '开始',
-        Icons.play_arrow,
+        ExecutionAction.start,
         () => controller.start(event.id),
       ),
     ],
@@ -157,8 +157,7 @@ class _EventRow extends StatelessWidget {
       _button(
         context,
         'resume',
-        '恢复',
-        Icons.play_arrow,
+        ExecutionAction.resume,
         () => controller.resume(event.id),
       ),
     ],
@@ -166,15 +165,13 @@ class _EventRow extends StatelessWidget {
       _button(
         context,
         'pause',
-        '暂停',
-        Icons.pause,
+        ExecutionAction.pause,
         () => controller.pause(event.id),
       ),
       _button(
         context,
         'complete',
-        '完成',
-        Icons.check,
+        ExecutionAction.complete,
         () => controller.complete(event.id),
       ),
     ],
@@ -182,15 +179,13 @@ class _EventRow extends StatelessWidget {
       _button(
         context,
         'resume',
-        '恢复',
-        Icons.play_arrow,
+        ExecutionAction.resume,
         () => controller.resume(event.id),
       ),
       _button(
         context,
         'complete',
-        '完成',
-        Icons.check,
+        ExecutionAction.complete,
         () => controller.complete(event.id),
       ),
     ],
@@ -200,11 +195,11 @@ class _EventRow extends StatelessWidget {
   Widget _button(
     BuildContext context,
     String keyName,
-    String label,
-    IconData icon,
+    ExecutionAction executionAction,
     Future<String?> Function() action,
-  ) => FilledButton.tonalIcon(
+  ) => ExecutionActionButton(
     key: ValueKey('$keyName-${event.id}'),
+    action: executionAction,
     onPressed: () async {
       final error = await action();
       if (error != null && context.mounted) {
@@ -212,8 +207,6 @@ class _EventRow extends StatelessWidget {
             .showSnackBar(SnackBar(content: Text(error)));
       }
     },
-    icon: Icon(icon),
-    label: Text(label),
   );
 
   String _status(JaxEvent event) => switch (event.status) {
@@ -238,50 +231,65 @@ class _RoutineRow extends StatelessWidget {
         .firstOrNull;
     return Card(
       key: ValueKey('today-routine-${routine.id}'),
-      child: ListTile(
-        title: Text(routine.name),
-        subtitle: Text(category?.name ?? '未分类'),
-        trailing: Wrap(
-          spacing: 4,
-          children: switch (execution?.status) {
-            null => [
-              _button(
-                'start',
-                '开始',
-                Icons.play_arrow,
-                () => controller.startRoutine(routine),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: constraints.maxWidth > 500
+                    ? constraints.maxWidth - 220
+                    : constraints.maxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(routine.name),
+                    Text(category?.name ?? '未分类'),
+                    Text(_status(execution)),
+                  ],
+                ),
+              ),
+              ExecutionActionRow(
+                children: switch (execution?.status) {
+                  null => [
+                    _button(
+                      'start',
+                      ExecutionAction.start,
+                      () => controller.startRoutine(routine),
+                    ),
+                  ],
+                  RoutineExecutionStatus.running => [
+                    _button(
+                      'pause',
+                      ExecutionAction.pause,
+                      () => controller.pauseRoutine(routine),
+                    ),
+                    _button(
+                      'complete',
+                      ExecutionAction.complete,
+                      () => controller.completeRoutine(routine),
+                    ),
+                  ],
+                  RoutineExecutionStatus.paused => [
+                    _button(
+                      'resume',
+                      ExecutionAction.resume,
+                      () => controller.startRoutine(routine),
+                    ),
+                    _button(
+                      'complete',
+                      ExecutionAction.complete,
+                      () => controller.completeRoutine(routine),
+                    ),
+                  ],
+                  RoutineExecutionStatus.completed => const [],
+                },
               ),
             ],
-            RoutineExecutionStatus.running => [
-              _button(
-                'pause',
-                '暂停',
-                Icons.pause,
-                () => controller.pauseRoutine(routine),
-              ),
-              _button(
-                'complete',
-                '完成',
-                Icons.check,
-                () => controller.completeRoutine(routine),
-              ),
-            ],
-            RoutineExecutionStatus.paused => [
-              _button(
-                'resume',
-                '恢复',
-                Icons.play_arrow,
-                () => controller.startRoutine(routine),
-              ),
-              _button(
-                'complete',
-                '完成',
-                Icons.check,
-                () => controller.completeRoutine(routine),
-              ),
-            ],
-            RoutineExecutionStatus.completed => const [Text('已完成')],
-          },
+          ),
         ),
       ),
     );
@@ -289,13 +297,18 @@ class _RoutineRow extends StatelessWidget {
 
   Widget _button(
     String keyName,
-    String label,
-    IconData icon,
-    VoidCallback action,
-  ) => IconButton(
+    ExecutionAction executionAction,
+    VoidCallback callback,
+  ) => ExecutionActionButton(
     key: ValueKey('today-routine-$keyName-${routine.id}'),
-    tooltip: label,
-    onPressed: action,
-    icon: Icon(icon),
+    action: executionAction,
+    onPressed: callback,
   );
+
+  String _status(RoutineExecution? execution) => switch (execution?.status) {
+    null => '未开始',
+    RoutineExecutionStatus.running => '正在执行',
+    RoutineExecutionStatus.paused => '已暂停',
+    RoutineExecutionStatus.completed => '已完成',
+  };
 }

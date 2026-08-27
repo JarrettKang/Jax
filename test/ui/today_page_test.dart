@@ -202,4 +202,84 @@ void main() {
     expect(find.text('跨日执行'), findsNWidgets(2));
     expect(repo.routineExecutions, hasLength(1));
   });
+
+  testWidgets(
+    'Today Routine execution actions use text buttons through every state',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repo = MemoryRepository(const [], false)
+        ..routines.add(
+          Routine(
+            id: 'focus',
+            name: '一个用于验证小屏操作区不会溢出的长名称日常',
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      await tester.pumpWidget(
+        JaxApp(repository: repo, now: () => now, newId: () => 'id'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('今日'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('today-routine-start-focus')),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(OutlinedButton, '开始'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('today-routine-start-focus')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('today-routine-pause-focus')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('today-routine-complete-focus')),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(OutlinedButton, '暂停'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('today-routine-pause-focus')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('today-routine-resume-focus')),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('today-routine-complete-focus')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('已完成'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('today-routine-start-focus')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('today-routine-resume-focus')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('today-routine-pause-focus')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('today-routine-complete-focus')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

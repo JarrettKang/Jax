@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
+import '../widgets/execution_action_buttons.dart';
 
 class RoutinePage extends StatelessWidget {
   const RoutinePage({required this.controller, super.key});
@@ -115,14 +116,16 @@ class RoutinePage extends StatelessWidget {
     final actions = <Widget>[];
     if (e == null) {
       actions.add(
-        _action('开始', Icons.play_arrow, () => controller.startRoutine(r)),
+        _action(ExecutionAction.start, () => controller.startRoutine(r)),
       );
     } else if (e.status == RoutineExecutionStatus.running) {
-      actions.add(_action('暂停', Icons.pause, () => controller.pauseRoutine(r)));
+      actions.add(
+        _action(ExecutionAction.pause, () => controller.pauseRoutine(r)),
+      );
       actions.add(_complete(r));
     } else if (e.status == RoutineExecutionStatus.paused) {
       actions.add(
-        _action('恢复', Icons.play_arrow, () => controller.startRoutine(r)),
+        _action(ExecutionAction.resume, () => controller.startRoutine(r)),
       );
       actions.add(_complete(r));
     }
@@ -158,19 +161,18 @@ class RoutinePage extends StatelessWidget {
                 ],
               ),
             ),
-            Wrap(spacing: 8, runSpacing: 8, children: actions),
+            ExecutionActionRow(children: actions),
           ],
         ),
       ),
     );
   }
 
-  Widget _action(String text, IconData icon, VoidCallback tap) =>
-      OutlinedButton.icon(onPressed: tap, icon: Icon(icon), label: Text(text));
-  Widget _complete(Routine r) => FilledButton.icon(
+  Widget _action(ExecutionAction action, VoidCallback tap) =>
+      ExecutionActionButton(action: action, onPressed: tap);
+  Widget _complete(Routine r) => ExecutionActionButton(
+    action: ExecutionAction.complete,
     onPressed: () => controller.completeRoutine(r),
-    icon: const Icon(Icons.check),
-    label: const Text('完成'),
   );
   String _label(RoutineRecurrence r) => switch (r) {
     RoutineRecurrence.daily => '每天',
