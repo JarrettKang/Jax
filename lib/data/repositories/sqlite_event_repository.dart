@@ -577,6 +577,20 @@ class SqliteEventRepository
       );
 
   @override
+  Future<void> addEventDayPlans(List<EventDayPlan> plans) async {
+    if (plans.isEmpty) return;
+    await _appDatabase.database.transaction((tx) async {
+      for (final plan in plans) {
+        await tx.insert(
+          'event_day_plans',
+          _eventDayPlanToRow(plan),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+    });
+  }
+
+  @override
   Future<void> removeEventDayPlan(String eventId, String dayKey) async =>
       _appDatabase.database.delete(
         'event_day_plans',

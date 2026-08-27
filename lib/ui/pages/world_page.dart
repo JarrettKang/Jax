@@ -26,7 +26,9 @@ class WorldPage extends StatefulWidget {
 
 class _WorldPageState extends State<WorldPage> {
   final Set<String> _collapsedEvents = {};
+  final Set<String> _selectedEventIds = {};
   var _showingDetail = false;
+  var _selecting = false;
   String? _selectedCategoryId;
 
   @override
@@ -180,15 +182,26 @@ class _WorldPageState extends State<WorldPage> {
         ],
       ),
       const SizedBox(height: 12),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.icon(
-          key: const ValueKey('world-new-event'),
-          onPressed: () => _createTopLevelEvent(context, categoryId),
-          icon: const Icon(Icons.add),
-          label: const Text('新建事件'),
-        ),
-      ),
+      _selecting
+          ? _selectionToolbar(context, roots)
+          : Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  key: const ValueKey('world-new-event'),
+                  onPressed: () => _createTopLevelEvent(context, categoryId),
+                  icon: const Icon(Icons.add),
+                  label: const Text('新建事件'),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('world-batch-select'),
+                  onPressed: () => setState(() => _selecting = true),
+                  icon: const Icon(Icons.checklist),
+                  label: const Text('批量选择'),
+                ),
+              ],
+            ),
       if (roots.isEmpty)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 72),
@@ -240,12 +253,70 @@ class _WorldPageState extends State<WorldPage> {
   void _enterDetail(String? categoryId) => setState(() {
     _selectedCategoryId = categoryId;
     _showingDetail = true;
+    _selecting = false;
+    _selectedEventIds.clear();
   });
 
   void _leaveDetail() => setState(() {
     _showingDetail = false;
     _selectedCategoryId = null;
+    _selecting = false;
+    _selectedEventIds.clear();
   });
+
+  Widget _selectionToolbar(BuildContext context, List<JaxEvent> roots) => Wrap(
+    key: const ValueKey('world-batch-toolbar'),
+    crossAxisAlignment: WrapCrossAlignment.center,
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      Text(
+        '已选择 ${_selectedEventIds.length} 项',
+        key: const ValueKey('world-batch-count'),
+      ),
+      FilledButton.icon(
+        key: const ValueKey('world-batch-add-today'),
+        onPressed: _selectedEventIds.isEmpty
+            ? null
+            : () => _addSelectedToToday(context, roots),
+        icon: const Icon(Icons.today),
+        label: const Text('加入今日'),
+      ),
+      TextButton(
+        key: const ValueKey('world-batch-cancel'),
+        onPressed: () => setState(() {
+          _selecting = false;
+          _selectedEventIds.clear();
+        }),
+        child: const Text('取消'),
+      ),
+    ],
+  );
+
+  Future<void> _addSelectedToToday(
+    BuildContext context,
+    List<JaxEvent> roots,
+  ) async {
+    final ids = [
+      for (final root in roots)
+        for (final event in _visibleTreeEvents(root))
+          if (_selectedEventIds.contains(event.id)) event.id,
+    ];
+    final selectedCount = ids.length;
+    final error = await widget.controller.addManyToToday(ids);
+    if (!mounted || !context.mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    setState(() {
+      _selecting = false;
+      _selectedEventIds.clear();
+    });
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('已加入今日 $selectedCount 项')));
+  }
 
   int _descendantCount(String rootId) => widget.controller.worldEvents
       .where((event) => event.id != rootId && _under(event, rootId))
@@ -260,6 +331,10 @@ class _WorldPageState extends State<WorldPage> {
   );
 
   Iterable<Widget> _tree(BuildContext c, JaxEvent root) {
+    return [for (final e in _visibleTreeEvents(root)) _node(c, e)];
+  }
+
+  Iterable<JaxEvent> _visibleTreeEvents(JaxEvent root) {
     final result = <JaxEvent>[];
     final hidden = <String>{};
     for (final e in widget.controller.worldEvents.where(
@@ -272,7 +347,7 @@ class _WorldPageState extends State<WorldPage> {
       result.add(e);
       if (_collapsedEvents.contains(e.id)) hidden.add(e.id);
     }
-    return [for (final e in result) _node(c, e)];
+    return result;
   }
 
   bool _under(JaxEvent e, String root) {
@@ -298,6 +373,8 @@ class _WorldPageState extends State<WorldPage> {
         displayState == WorldDisplayState.running ||
         displayState == WorldDisplayState.progressing;
     final completed = displayState == WorldDisplayState.completed;
+    final planned = widget.controller.isPlannedToday(e.id);
+    final selectable = e.status != EventStatus.completed && !planned;
     final actions = <PopupMenuEntry<_WorldAction>>[
       if (e.status != EventStatus.completed &&
           !widget.controller.isPlannedToday(e.id))
@@ -429,7 +506,21 @@ class _WorldPageState extends State<WorldPage> {
         root: root,
         active: active,
         completed: completed,
-        leading: child
+        leading: _selecting
+            ? Checkbox(
+                key: ValueKey('world-batch-checkbox-${e.id}'),
+                value: _selectedEventIds.contains(e.id),
+                onChanged: selectable
+                    ? (selected) => setState(() {
+                        if (selected == true) {
+                          _selectedEventIds.add(e.id);
+                        } else {
+                          _selectedEventIds.remove(e.id);
+                        }
+                      })
+                    : null,
+              )
+            : child
             ? IconButton(
                 key: ValueKey('world-toggle-${e.id}'),
                 tooltip: _collapsedEvents.contains(e.id) ? '展开下层事件' : '折叠下层事件',
@@ -447,25 +538,33 @@ class _WorldPageState extends State<WorldPage> {
             : const SizedBox(width: 48, height: 48),
         name: e.name,
         statusIcon: state.$1,
-        statusLabel: state.$2,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EventReorderButtons(
-              controller: widget.controller,
-              eventId: e.id,
-              upKey: ValueKey('world-move-up-${e.id}'),
-              downKey: ValueKey('world-move-down-${e.id}'),
-              compact: true,
-            ),
-            EventMoreMenuButton<_WorldAction>(
-              key: ValueKey('world-more-${e.id}'),
-              compact: true,
-              onSelected: (a) => _select(c, e, a),
-              itemBuilder: (_) => actions,
-            ),
-          ],
-        ),
+        statusLabel: !_selecting
+            ? state.$2
+            : planned
+            ? '${state.$2} · 已在今日'
+            : completed
+            ? '${state.$2} · 不可加入'
+            : state.$2,
+        trailing: _selecting
+            ? const SizedBox(width: 8, height: 48)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  EventReorderButtons(
+                    controller: widget.controller,
+                    eventId: e.id,
+                    upKey: ValueKey('world-move-up-${e.id}'),
+                    downKey: ValueKey('world-move-down-${e.id}'),
+                    compact: true,
+                  ),
+                  EventMoreMenuButton<_WorldAction>(
+                    key: ValueKey('world-more-${e.id}'),
+                    compact: true,
+                    onSelected: (a) => _select(c, e, a),
+                    itemBuilder: (_) => actions,
+                  ),
+                ],
+              ),
       ),
     );
   }

@@ -374,6 +374,36 @@ class EventController extends ChangeNotifier {
   Future<String?> complete(String id) => _change(() => _complete(id));
   Future<String?> restore(String id) => _change(() => _restore(id));
   Future<String?> addToToday(String id) => _change(() => _ensureToday(id));
+  Future<String?> addManyToToday(Iterable<String> ids) => _change(() async {
+    final requestedIds = ids.toList(growable: false);
+    if (requestedIds.isEmpty) return null;
+    final uniqueIds = <String>{};
+    final additions = <String>[];
+    for (final id in requestedIds) {
+      if (!uniqueIds.add(id)) continue;
+      final event = await _repository.getEvent(id);
+      if (event == null) throw const DomainFailure('事件不存在');
+      if (event.status == EventStatus.completed) {
+        throw const DomainFailure('请先恢复已完成事件');
+      }
+      additions.add(id);
+    }
+    final dayKey = currentJaxDay.key;
+    final existing =
+        await _dayPlans?.getEventDayPlans(dayKey) ?? const <EventDayPlan>[];
+    final planned = existing.map((plan) => plan.eventId).toSet();
+    final newIds = additions.where((id) => !planned.contains(id)).toList();
+    await _dayPlans?.addEventDayPlans([
+      for (var i = 0; i < newIds.length; i++)
+        EventDayPlan(
+          eventId: newIds[i],
+          dayKey: dayKey,
+          order: existing.length + i,
+          createdAt: _now().toUtc(),
+        ),
+    ]);
+    return null;
+  });
   Future<String?> removeFromToday(String id) => _change(() async {
     final event = await _repository.getEvent(id);
     if (event?.status == EventStatus.running) {

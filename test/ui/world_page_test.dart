@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 import 'package:jax/core/entities/category.dart';
+import 'package:jax/core/entities/event_day_plan.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/preferences/world_category_collapse_store.dart';
@@ -319,4 +320,102 @@ void main() {
     expect(find.text('正在执行'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Category detail batch selection appends visible independent unfinished Events to Today',
+    (tester) async {
+      final repository =
+          MemoryRepository([
+              event('already', EventStatus.paused, categoryId: 'dev', order: 0),
+              event('parent', EventStatus.pending, categoryId: 'dev', order: 1),
+              event('child', EventStatus.waiting, parent: 'parent', order: 0),
+              event('done', EventStatus.completed, parent: 'parent', order: 1),
+              event('later', EventStatus.paused, categoryId: 'dev', order: 2),
+            ], false)
+            ..categories.add(category('dev', '开发项目', 0))
+            ..eventDayPlans.add(
+              EventDayPlan(
+                eventId: 'already',
+                dayKey: '2026-08-28',
+                order: 0,
+                createdAt: now,
+              ),
+            );
+      await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+      await tester.pumpAndSettle();
+      await openWorld(tester);
+      await openDetail(tester, 'dev');
+
+      await tester.tap(find.byKey(const ValueKey('world-batch-select')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('world-batch-toolbar')), findsOneWidget);
+      expect(find.byKey(const ValueKey('world-move-up-parent')), findsNothing);
+      expect(find.byKey(const ValueKey('world-more-parent')), findsNothing);
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.byKey(const ValueKey('world-batch-checkbox-done')),
+            )
+            .onChanged,
+        isNull,
+      );
+      expect(find.textContaining('已在今日'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('world-batch-checkbox-parent')),
+      );
+      await tester.pump();
+      expect(
+        tester
+            .widget<Checkbox>(
+              find.byKey(const ValueKey('world-batch-checkbox-child')),
+            )
+            .value,
+        isFalse,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('world-batch-checkbox-child')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('world-batch-checkbox-later')),
+      );
+      await tester.pump();
+      expect(find.text('已选择 3 项'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('world-batch-add-today')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('world-batch-toolbar')), findsNothing);
+      expect(repository.eventDayPlans.map((plan) => plan.eventId), [
+        'already',
+        'parent',
+        'child',
+        'later',
+      ]);
+      expect(
+        repository.events.firstWhere((event) => event.id == 'done').status,
+        EventStatus.completed,
+      );
+      expect(
+        repository.events
+            .firstWhere((event) => event.id == 'child')
+            .parentEventId,
+        'parent',
+      );
+      expect(
+        repository.events.firstWhere((event) => event.id == 'later').sortOrder,
+        2,
+      );
+      expect(find.byKey(const ValueKey('world-node-parent')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('world-batch-select')));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('world-batch-checkbox-later')),
+      );
+      await tester.tap(find.byKey(const ValueKey('world-batch-cancel')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('world-batch-toolbar')), findsNothing);
+      expect(find.byKey(const ValueKey('world-more-later')), findsOneWidget);
+    },
+  );
 }

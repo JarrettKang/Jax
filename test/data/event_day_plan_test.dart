@@ -51,14 +51,28 @@ void main() {
           createdAt: now,
         ),
       );
+      await repository.addEventDayPlans([
+        EventDayPlan(
+          eventId: 'e1',
+          dayKey: '2026-08-27',
+          order: 2,
+          createdAt: now,
+        ),
+        EventDayPlan(
+          eventId: 'e0',
+          dayKey: '2026-08-27',
+          order: 3,
+          createdAt: now,
+        ),
+      ]);
       expect(
         (await repository.getEventDayPlans('2026-08-27')).map((p) => p.eventId),
-        ['e2', 'e0'],
+        ['e2', 'e0', 'e1'],
       );
       await repository.reorderEventDayPlan('e0', '2026-08-27', 0);
       expect(
         (await repository.getEventDayPlans('2026-08-27')).map((p) => p.eventId),
-        ['e0', 'e2'],
+        ['e0', 'e2', 'e1'],
       );
       expect((await repository.getOrderedTopLevelEvents()).map((e) => e.id), [
         'e0',
@@ -67,8 +81,8 @@ void main() {
       ]);
       await repository.removeEventDayPlan('e0', '2026-08-27');
       expect(
-        (await repository.getEventDayPlans('2026-08-27')).single.eventId,
-        'e2',
+        (await repository.getEventDayPlans('2026-08-27')).map((p) => p.eventId),
+        ['e2', 'e1'],
       );
       await db.close();
     },

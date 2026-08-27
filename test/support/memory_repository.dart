@@ -269,6 +269,13 @@ class MemoryRepository
   }
 
   @override
+  Future<void> addEventDayPlans(List<EventDayPlan> plans) async {
+    for (final plan in plans) {
+      await addEventDayPlan(plan);
+    }
+  }
+
+  @override
   Future<void> removeEventDayPlan(String eventId, String dayKey) async =>
       eventDayPlans.removeWhere(
         (p) => p.eventId == eventId && p.dayKey == dayKey,

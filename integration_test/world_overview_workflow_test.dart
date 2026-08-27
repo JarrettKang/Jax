@@ -85,6 +85,14 @@ void main() {
         updatedAt: now,
       ),
       JaxEvent(
+        id: 'completed-child',
+        name: '已完成下层',
+        status: EventStatus.completed,
+        parentEventId: 'root',
+        createdAt: now,
+        updatedAt: now,
+      ),
+      JaxEvent(
         id: 'running',
         name: '测试 Yukawa',
         status: EventStatus.running,
@@ -127,12 +135,48 @@ void main() {
       find.byKey(const ValueKey('world-category-active-research')),
       findsOne,
     );
-    expect(find.text('2 个事件'), findsOne);
+    expect(find.text('3 个事件'), findsOne);
 
     await tester.tap(find.byKey(const ValueKey('world-category-open-dev')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('world-node-root')), findsOne);
     expect(find.byKey(const ValueKey('world-node-running')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('world-batch-select')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Checkbox>(
+            find.byKey(const ValueKey('world-batch-checkbox-completed-child')),
+          )
+          .onChanged,
+      isNull,
+    );
+    await tester.tap(find.byKey(const ValueKey('world-batch-checkbox-root')));
+    await tester.tap(
+      find.byKey(const ValueKey('world-batch-checkbox-existing-child')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已选择 2 项'), findsOne);
+    await tester.tap(find.byKey(const ValueKey('world-batch-add-today')));
+    await tester.pumpAndSettle();
+    expect(
+      (await repository.getEventDayPlans('2026-08-28'))
+          .map((plan) => plan.eventId),
+      ['running', 'root', 'existing-child'],
+    );
+    expect((await repository.getEvent('root'))!.parentEventId, isNull);
+    expect(
+      (await repository.getEvent('existing-child'))!.parentEventId,
+      'root',
+    );
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('today-event-root')), findsOne);
+    expect(find.byKey(const ValueKey('today-event-existing-child')), findsOne);
+    await tester.tap(find.text('世界'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('world-category-open-dev')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('world-new-event')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '发布 Windows Debug');
@@ -150,12 +194,12 @@ void main() {
     expect((await repository.getEvent('new-child'))!.parentEventId, 'root');
     expect(
       (await repository.getDirectChildren('root')).map((event) => event.id),
-      ['existing-child', 'new-child'],
+      ['existing-child', 'completed-child', 'new-child'],
     );
 
     await tester.tap(find.byKey(const ValueKey('world-back-overview')));
     await tester.pumpAndSettle();
-    expect(find.text('4 个事件'), findsOne);
+    expect(find.text('5 个事件'), findsOne);
     await tester.tap(find.byKey(const ValueKey('world-category-open-empty')));
     await tester.pumpAndSettle();
     expect(find.text('这个分类还没有事件'), findsOne);
