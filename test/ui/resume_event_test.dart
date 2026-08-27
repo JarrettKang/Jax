@@ -25,9 +25,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('resume-one')));
     await tester.pump();
-    expect(find.textContaining('正在进行'), findsOneWidget);
+    expect(find.textContaining('正在执行'), findsOneWidget);
     expect(repository.segments.single.id, 'new');
   });
 }

@@ -1,13 +1,18 @@
+import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
+
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/entities/category.dart';
+import '../../core/entities/event_day_plan.dart';
 import '../../core/entities/routine.dart';
 import '../../core/repositories/event_repository.dart';
+import '../../core/repositories/event_day_plan_repository.dart';
 import '../../core/repositories/routine_repository.dart';
 import '../database/app_database.dart';
 
-class SqliteEventRepository implements EventRepository, RoutineRepository {
+class SqliteEventRepository
+    implements EventRepository, EventDayPlanRepository, RoutineRepository {
   const SqliteEventRepository(this._appDatabase);
   final AppDatabase _appDatabase;
 
@@ -555,6 +560,77 @@ class SqliteEventRepository implements EventRepository, RoutineRepository {
   );
 
   @override
+  Future<List<EventDayPlan>> getEventDayPlans(String dayKey) async =>
+      (await _appDatabase.database.query(
+        'event_day_plans',
+        where: 'day_date = ?',
+        whereArgs: [dayKey],
+        orderBy: 'order_index ASC, created_at_utc ASC, event_id ASC',
+      )).map(_eventDayPlanFromRow).toList();
+
+  @override
+  Future<void> addEventDayPlan(EventDayPlan plan) async =>
+      _appDatabase.database.insert(
+        'event_day_plans',
+        _eventDayPlanToRow(plan),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+
+  @override
+  Future<void> removeEventDayPlan(String eventId, String dayKey) async =>
+      _appDatabase.database.delete(
+        'event_day_plans',
+        where: 'event_id = ? AND day_date = ?',
+        whereArgs: [eventId, dayKey],
+      );
+
+  @override
+  Future<void> reorderEventDayPlan(
+    String eventId,
+    String dayKey,
+    int targetIndex,
+  ) async => _appDatabase.database.transaction((tx) async {
+    final rows = await tx.query(
+      'event_day_plans',
+      where: 'day_date = ?',
+      whereArgs: [dayKey],
+      orderBy: 'order_index ASC, created_at_utc ASC, event_id ASC',
+    );
+    final plans = rows.map(_eventDayPlanFromRow).toList();
+    final current = plans.indexWhere((p) => p.eventId == eventId);
+    if (current < 0 || targetIndex < 0 || targetIndex >= plans.length) {
+      throw StateError('Invalid Today order');
+    }
+    final moved = plans.removeAt(current);
+    plans.insert(targetIndex, moved);
+    for (var i = 0; i < plans.length; i++) {
+      await tx.update(
+        'event_day_plans',
+        {'order_index': i},
+        where: 'event_id = ? AND day_date = ?',
+        whereArgs: [plans[i].eventId, dayKey],
+      );
+    }
+  });
+
+  Map<String, Object?> _eventDayPlanToRow(EventDayPlan plan) => {
+    'event_id': plan.eventId,
+    'day_date': plan.dayKey,
+    'order_index': plan.order,
+    'created_at_utc': plan.createdAt.toUtc().millisecondsSinceEpoch,
+  };
+
+  EventDayPlan _eventDayPlanFromRow(Map<String, Object?> row) => EventDayPlan(
+    eventId: row['event_id']! as String,
+    dayKey: row['day_date']! as String,
+    order: row['order_index']! as int,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      row['created_at_utc']! as int,
+      isUtc: true,
+    ),
+  );
+
+  @override
   Future<List<Routine>> getRoutines() async =>
       (await _appDatabase.database.query(
         'routines',
@@ -577,6 +653,30 @@ class SqliteEventRepository implements EventRepository, RoutineRepository {
   }
 
   @override
+  Future<void> reorderRoutine(String id, int targetIndex) async =>
+      _appDatabase.database.transaction((tx) async {
+        final rows = await tx.query(
+          'routines',
+          orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+        );
+        final routines = rows.map(_routineFromRow).toList();
+        final current = routines.indexWhere((r) => r.id == id);
+        if (current < 0 || targetIndex < 0 || targetIndex >= routines.length) {
+          throw StateError('Invalid Routine order');
+        }
+        final moved = routines.removeAt(current);
+        routines.insert(targetIndex, moved);
+        for (var i = 0; i < routines.length; i++) {
+          await tx.update(
+            'routines',
+            {'sort_order': i},
+            where: 'id = ?',
+            whereArgs: [routines[i].id],
+          );
+        }
+      });
+
+  @override
   Future<RoutineExecution?> getRoutineExecution(
     String routineId,
     String occurrenceDate,
@@ -595,6 +695,17 @@ class SqliteEventRepository implements EventRepository, RoutineRepository {
       (await _appDatabase.database.query('routine_executions'))
           .map(_executionFromRow)
           .toList();
+  @override
+  Future<RoutineExecution?> getRunningRoutineExecution() async {
+    final rows = await _appDatabase.database.query(
+      'routine_executions',
+      where: 'status = ?',
+      whereArgs: ['running'],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _executionFromRow(rows.single);
+  }
+
   @override
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
       (await _appDatabase.database.query(

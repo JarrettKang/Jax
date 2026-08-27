@@ -4,11 +4,13 @@ abstract interface class RoutineRepository {
   Future<List<Routine>> getRoutines();
   Future<void> insertRoutine(Routine routine);
   Future<void> updateRoutine(Routine routine);
+  Future<void> reorderRoutine(String id, int targetIndex);
   Future<RoutineExecution?> getRoutineExecution(
     String routineId,
     String occurrenceDate,
   );
   Future<List<RoutineExecution>> getRoutineExecutions();
+  Future<RoutineExecution?> getRunningRoutineExecution();
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String executionId);
   Future<void> startRoutineExecution(
     RoutineExecution execution,

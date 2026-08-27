@@ -36,6 +36,6 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(repository.events, isEmpty);
-    expect(find.text('暂无未完成事件'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-node-one')), findsNothing);
   });
 }

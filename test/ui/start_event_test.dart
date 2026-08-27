@@ -26,9 +26,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('start-one')));
-    await tester.pump();
-    expect(find.textContaining('正在进行'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('正在执行'), findsOneWidget);
     expect(find.byKey(const ValueKey('edit-one')), findsNothing);
     expect(find.byKey(const ValueKey('delete-one')), findsNothing);
   });

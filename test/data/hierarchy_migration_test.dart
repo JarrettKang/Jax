@@ -63,7 +63,7 @@ void main() {
     final event = await repository.getEvent('existing');
     final segments = await repository.getRunSegments('existing');
 
-    expect(AppDatabase.schemaVersion, 7);
+    expect(AppDatabase.schemaVersion, 8);
     expect(event?.parentEventId, isNull);
     expect(event?.categoryId, isNull);
     expect(event?.status.name, 'completed');

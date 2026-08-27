@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 7;
+  static const schemaVersion = 8;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -50,6 +50,7 @@ class AppDatabase {
     )''');
     await _createRunSegments(database);
     await _createRoutineTables(database);
+    await _createEventDayPlans(database);
   }
 
   static Future<void> _upgradeSchema(
@@ -90,6 +91,7 @@ class AppDatabase {
       );
     }
     if (oldVersion < 7) await _createRoutineTables(database);
+    if (oldVersion < 8) await _createEventDayPlans(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -169,6 +171,15 @@ class AppDatabase {
       created_at_utc INTEGER NOT NULL
     )''');
   }
+
+  static Future<void> _createEventDayPlans(Database database) =>
+      database.execute('''CREATE TABLE event_day_plans (
+        event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        day_date TEXT NOT NULL,
+        order_index INTEGER NOT NULL,
+        created_at_utc INTEGER NOT NULL,
+        PRIMARY KEY(event_id, day_date)
+      )''');
 
   Future<void> close() => database.close();
 }

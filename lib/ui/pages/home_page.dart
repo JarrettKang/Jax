@@ -104,7 +104,7 @@ class _HomePageState extends State<HomePage> {
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
-                          child: Text('当前没有正在执行的事件'),
+                          child: Text('当前没有正在执行的事项'),
                         ),
                       ),
                     if (work != null)

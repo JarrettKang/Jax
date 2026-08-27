@@ -1,4 +1,5 @@
 import '../entities/routine.dart';
+import '../entities/jax_day.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/routine_repository.dart';
 import '../use_cases/create_event.dart';
@@ -12,8 +13,7 @@ class RoutineService {
   final RoutineRepository repository;
   final IdGenerator newId;
   final Clock now;
-  static String occurrence(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  static String occurrence(DateTime date) => JaxDay.containing(date).key;
   Future<void> create(
     String name,
     String? categoryId,

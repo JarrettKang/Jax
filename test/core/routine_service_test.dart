@@ -8,6 +8,17 @@ import 'package:jax/core/services/routine_service.dart';
 import '../support/memory_repository.dart';
 
 void main() {
+  test('routine occurrence follows the shared 23:00 Jax day', () {
+    expect(
+      RoutineService.occurrence(DateTime(2026, 8, 27, 22, 59)),
+      '2026-08-27',
+    );
+    expect(RoutineService.occurrence(DateTime(2026, 8, 27, 23)), '2026-08-28');
+    expect(
+      RoutineService.occurrence(DateTime(2026, 8, 27, 23, 1)),
+      '2026-08-28',
+    );
+  });
   test('recurrence applies to local calendar weekdays', () {
     Routine r(RoutineRecurrence type, int mask) => Routine(
       id: 'r',
@@ -81,6 +92,39 @@ void main() {
     expect(await repo.getRoutineExecution(r.id, '2026-08-28'), isNull);
     expect(repo.events, isEmpty);
   });
+  test(
+    'Routine order stays independent from Event and Today plan order',
+    () async {
+      final repo = MemoryRepository();
+      final t = DateTime(2026, 8, 27, 8);
+      repo.routines.addAll([
+        Routine(
+          id: 'r1',
+          name: 'R1',
+          recurrence: RoutineRecurrence.daily,
+          weekdayMask: 0,
+          isActive: true,
+          sortOrder: 0,
+          createdAt: t,
+          updatedAt: t,
+        ),
+        Routine(
+          id: 'r2',
+          name: 'R2',
+          recurrence: RoutineRecurrence.daily,
+          weekdayMask: 0,
+          isActive: true,
+          sortOrder: 1,
+          createdAt: t,
+          updatedAt: t,
+        ),
+      ]);
+      await repo.reorderRoutine('r2', 0);
+      expect((await repo.getRoutines()).map((r) => r.id), ['r2', 'r1']);
+      expect(repo.events, isEmpty);
+      expect(repo.eventDayPlans, isEmpty);
+    },
+  );
   test('event and routine share one running slot in both directions', () async {
     final t = DateTime.utc(2026, 8, 27, 8);
     final event = JaxEvent(

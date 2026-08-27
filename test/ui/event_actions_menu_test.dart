@@ -23,7 +23,7 @@ void main() {
         updatedAt: time,
       );
 
-  testWidgets('cards expose only state actions and a more menu', (
+  testWidgets('Today cards expose only execution and plan actions', (
     tester,
   ) async {
     final repository =
@@ -43,52 +43,19 @@ void main() {
           );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await openEventsPage(tester);
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('start-pending')), findsOneWidget);
     expect(find.byKey(const ValueKey('resume-paused')), findsOneWidget);
     expect(find.byKey(const ValueKey('pause-running')), findsOneWidget);
     expect(find.byKey(const ValueKey('complete-running')), findsOneWidget);
     expect(find.text('等待中'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '恢复'), findsNWidgets(2));
     expect(find.widgetWithText(FilledButton, '完成'), findsNWidgets(2));
     expect(find.byKey(const ValueKey('pause-waiting')), findsNothing);
-    for (final id in ['pending', 'paused', 'running']) {
-      expect(find.byKey(ValueKey('more-$id')), findsOneWidget);
-      final tooltip = tester.widget<Tooltip>(
-        find.descendant(
-          of: find.byKey(ValueKey('more-$id')),
-          matching: find.byType(Tooltip),
-        ),
-      );
-      expect(tooltip.message, '更多操作');
-      expect(find.byKey(ValueKey('hierarchy-$id')), findsNothing);
-      expect(find.byKey(ValueKey('edit-$id')), findsNothing);
-      expect(find.byKey(ValueKey('delete-$id')), findsNothing);
-    }
-
-    await tester.tap(find.byKey(const ValueKey('more-pending')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('hierarchy-pending')), findsOneWidget);
-    expect(find.byKey(const ValueKey('edit-pending')), findsOneWidget);
-    expect(find.byKey(const ValueKey('delete-pending')), findsOneWidget);
-    expect(find.byKey(const ValueKey('move-up-pending')), findsNothing);
-    expect(find.byKey(const ValueKey('move-down-pending')), findsOneWidget);
-    await tester.tapAt(Offset.zero);
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('more-running')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('hierarchy-running')), findsOneWidget);
-    expect(find.byKey(const ValueKey('wait-running')), findsOneWidget);
-    await tester.tapAt(Offset.zero);
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('more-waiting')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('pause-waiting')), findsOneWidget);
-    expect(find.byKey(const ValueKey('edit-running')), findsNothing);
-    expect(find.byKey(const ValueKey('delete-running')), findsNothing);
+    expect(find.byKey(const ValueKey('today-remove-pending')), findsOneWidget);
+    expect(find.byKey(const ValueKey('today-remove-running')), findsNothing);
   });
 
   testWidgets('parent menu hides deletion and menu actions remain usable', (
@@ -103,14 +70,14 @@ void main() {
     await tester.pumpAndSettle();
     await openEventsPage(tester);
 
-    await tester.tap(find.byKey(const ValueKey('more-parent')));
+    await tester.tap(find.byKey(const ValueKey('world-more-parent')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('delete-parent')), findsNothing);
     expect(find.byKey(const ValueKey('hierarchy-parent')), findsOneWidget);
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('more-sibling')));
+    await tester.tap(find.byKey(const ValueKey('world-more-sibling')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('edit-sibling')));
     await tester.pumpAndSettle();
@@ -139,11 +106,11 @@ void main() {
       );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await openEventsPage(tester);
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(OutlinedButton, '暂停'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '暂停'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
-    expect(find.byKey(const ValueKey('more-running')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -163,11 +130,11 @@ void main() {
     ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await openEventsPage(tester);
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(OutlinedButton, '恢复'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '恢复'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '完成'), findsOneWidget);
-    expect(find.byKey(const ValueKey('more-waiting')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

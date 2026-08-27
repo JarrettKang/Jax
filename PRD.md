@@ -347,3 +347,15 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 12. 正常关闭时自动暂停。
 
 每一步开始前均应先确定对应规则和测试；每一步完成后均应运行全部已有测试。
+
+## 13. v0.2 今日统一执行入口
+
+- 一级导航固定为“首页 / 今日 / 世界 / 日常 / 记录”：首页回答现在正在做什么，今日回答今天准备做什么，世界管理 Event 长期结构，日常管理 Routine definition，记录复盘过去时间。
+- “今日事项”只包含明确加入当前 Jax day 的 Event，不等于全部 unfinished Event；“今日日常”包含 active 且 recurrence 命中当前 Jax day 显示日期的 Routine。两个分区分别排序，不建立 Event/Routine 混合顺序。
+- Jax day 使用设备本地时间 23:00 切换。逻辑日期 `YYYY-MM-DD` 表示前一自然日 23:00 至该日 23:00；Today、Routine occurrence/weekday 和 Daily Summary 共用同一个 JaxDay 规则。
+- Event 今日计划是独立的按日关联，包含 Event、逻辑日期和当日顺序；不改变 status、hierarchy、Category、World sibling order、duration 或 history。加入时追加到当日末尾，使用上移/下移调整独立顺序。
+- World 是 Event 正式创建和长期管理入口，并提供加入今日/移出今日。completed Event 不能主动加入或移出；恢复为 paused 后可重新加入。running Event 不能移出，waiting Event 可以移出且状态保持 waiting。
+- 从任意入口开始或恢复 Event 时自动确保当前 Jax day plan 存在。Event 完成后保留在当天 Today，下一 Jax day 不继承；跨 23:00 仍 running 的 Event 自动进入新 Today，且不自动暂停。
+- Routine 不需要手动规划。跨 23:00 仍 running 的上一 occurrence 继续使用同一 RoutineExecution，新 Today 显示它且不创建同名第二 occurrence；时间统计仍按 23:00 裁剪。
+- Today Event 显示 ancestor breadcrumb，但不复制 hierarchy、Category CRUD 或完整 World tree。Today 与日常/World 可共用现有 Core 执行动作，全局 Event + RoutineExecution 最多一个 running 的约束不变。
+- Today plan 本身不产生执行时间；日/周记录继续只统计 Event 与 Routine run segments。

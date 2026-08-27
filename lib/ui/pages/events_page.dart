@@ -2,330 +2,300 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
+import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
-import '../widgets/event_more_menu_button.dart';
-import '../widgets/event_reorder_buttons.dart';
-import 'event_hierarchy_dialog.dart';
 
 class EventsPage extends StatelessWidget {
   const EventsPage({required this.controller, super.key});
   final EventController controller;
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
-    builder: (context, _) => Scaffold(
-      body: controller.loading
-          ? const Center(child: CircularProgressIndicator())
-          : controller.events.isEmpty
-          ? const Center(child: Text('暂无未完成事件'))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-              children: controller.events
-                  .map(
-                    (event) => Padding(
-                      padding: EdgeInsets.only(
-                        left: (controller.hierarchyDepthFor(event.id) * 24.0)
-                            .clamp(0.0, 72.0),
-                      ),
-                      child: Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .outlineVariant,
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final actions = _actions(context, event);
-                              if (constraints.maxWidth < 600) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    12,
-                                    8,
-                                    8,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        event.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(_statusText(event)),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: Wrap(children: actions),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
-                              return ListTile(
-                                title: Text(event.name),
-                                subtitle: Text(_statusText(event)),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: actions,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+    builder: (context, _) {
+      if (controller.loading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      final events = controller.todayEvents;
+      final routines = controller.todayRoutines;
+      final day = controller.currentJaxDay;
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: [
+          Text('今日', style: Theme.of(context).textTheme.headlineMedium),
+          Text('${day.displayDate.month}月${day.displayDate.day}日 · 23:00 结束'),
+          if (controller.runningEvent != null ||
+              controller.runningRoutine != null) ...[
+            const SizedBox(height: 24),
+            Text('当前正在执行', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              controller.runningEvent?.name ?? controller.runningRoutine!.name,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showEditor(context, null),
-        icon: const Icon(Icons.add),
-        label: const Text('新建事件'),
-      ),
-    ),
-  );
-  String _statusText(JaxEvent event) => event.status == EventStatus.running
-      ? '正在进行 · ${_duration(controller.elapsedFor(event))}'
-      : event.status == EventStatus.paused
-      ? '已暂停 · ${_duration(controller.elapsedFor(event))}'
-      : event.status == EventStatus.waiting
-      ? '等待中'
-      : '未开始';
-
-  List<Widget> _actions(BuildContext context, JaxEvent event) => [
-    EventReorderButtons(
-      controller: controller,
-      eventId: event.id,
-      upKey: ValueKey('move-up-${event.id}'),
-      downKey: ValueKey('move-down-${event.id}'),
-    ),
-    if (event.status == EventStatus.pending)
-      IconButton(
-        key: ValueKey('start-${event.id}'),
-        icon: const Icon(Icons.play_arrow),
-        tooltip: '开始',
-        onPressed: () => _run(context, () => controller.start(event.id)),
-      ),
-    if (event.status == EventStatus.paused)
-      IconButton(
-        key: ValueKey('resume-${event.id}'),
-        icon: const Icon(Icons.play_arrow),
-        tooltip: '恢复',
-        onPressed: () => _run(context, () => controller.resume(event.id)),
-      ),
-    if (event.status == EventStatus.waiting) ...[
-      OutlinedButton.icon(
-        key: ValueKey('resume-${event.id}'),
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('恢复'),
-        onPressed: () => _run(context, () => controller.resume(event.id)),
-      ),
-      const SizedBox(width: 16),
-      FilledButton.tonalIcon(
-        key: ValueKey('complete-${event.id}'),
-        icon: const Icon(Icons.check),
-        label: const Text('完成'),
-        onPressed: () => _run(context, () => controller.complete(event.id)),
-      ),
-    ],
-    if (event.status == EventStatus.running)
-      OutlinedButton.icon(
-        key: ValueKey('pause-${event.id}'),
-        icon: const Icon(Icons.pause),
-        label: const Text('暂停'),
-        onPressed: () => _run(context, () => controller.pause(event.id)),
-      ),
-    if (event.status == EventStatus.running) const SizedBox(width: 16),
-    if (event.status == EventStatus.running)
-      FilledButton.tonalIcon(
-        key: ValueKey('complete-${event.id}'),
-        icon: const Icon(Icons.check),
-        label: const Text('完成'),
-        onPressed: () => _run(context, () => controller.complete(event.id)),
-      ),
-    EventMoreMenuButton<_EventMenuAction>(
-      key: ValueKey('more-${event.id}'),
-      onSelected: (action) => _selectMenuAction(context, event, action),
-      itemBuilder: (context) => _menuItems(event),
-    ),
-  ];
-
-  List<PopupMenuEntry<_EventMenuAction>> _menuItems(JaxEvent event) => [
-    if (event.status == EventStatus.waiting)
-      PopupMenuItem(
-        key: ValueKey('pause-${event.id}'),
-        value: _EventMenuAction.pause,
-        child: const ListTile(leading: Icon(Icons.pause), title: Text('暂停')),
-      ),
-    if (event.status == EventStatus.running ||
-        event.status == EventStatus.paused)
-      PopupMenuItem(
-        key: ValueKey('wait-${event.id}'),
-        value: _EventMenuAction.wait,
-        child: const ListTile(
-          leading: Icon(Icons.hourglass_empty),
-          title: Text('设为等待'),
-        ),
-      ),
-    PopupMenuItem(
-      key: ValueKey('hierarchy-${event.id}'),
-      value: _EventMenuAction.hierarchy,
-      child: const ListTile(
-        leading: Icon(Icons.account_tree_outlined),
-        title: Text('层级详情'),
-      ),
-    ),
-    if (event.status != EventStatus.running)
-      PopupMenuItem(
-        key: ValueKey('edit-${event.id}'),
-        value: _EventMenuAction.edit,
-        child: const ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
-      ),
-    if (event.status != EventStatus.running &&
-        !controller.hasDirectChildren(event.id))
-      PopupMenuItem(
-        key: ValueKey('delete-${event.id}'),
-        value: _EventMenuAction.delete,
-        child: const ListTile(
-          leading: Icon(Icons.delete_outline),
-          title: Text('删除事件'),
-        ),
-      ),
-  ];
-
-  void _selectMenuAction(
-    BuildContext context,
-    JaxEvent event,
-    _EventMenuAction action,
-  ) {
-    switch (action) {
-      case _EventMenuAction.pause:
-        _run(context, () => controller.pause(event.id));
-        return;
-      case _EventMenuAction.wait:
-        _run(context, () => controller.wait(event.id));
-        return;
-      case _EventMenuAction.hierarchy:
-        showEventHierarchyDialog(context, controller: controller, event: event);
-        return;
-      case _EventMenuAction.edit:
-        _showEditor(context, event);
-        return;
-      case _EventMenuAction.delete:
-        _confirmDelete(context, event);
-        return;
-    }
-  }
-
-  static String _duration(Duration value) =>
-      '${value.inHours.toString().padLeft(2, '0')}:${(value.inMinutes % 60).toString().padLeft(2, '0')}:${(value.inSeconds % 60).toString().padLeft(2, '0')}';
-  Future<void> _run(
-    BuildContext context,
-    Future<String?> Function() action,
-  ) async {
-    final error = await action();
-    if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
-  void _showEditor(BuildContext context, JaxEvent? event) => showDialog<void>(
-    context: context,
-    builder: (_) => _EventEditor(controller: controller, event: event),
-  );
-  Future<void> _confirmDelete(BuildContext context, JaxEvent event) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除事件'),
-        content: Text('确定删除“${event.name}”吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
-          ),
+          ],
+          const SizedBox(height: 24),
+          Text('今日事项', style: Theme.of(context).textTheme.titleLarge),
+          if (events.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('今天还没有安排 Event，请到世界加入。'),
+            ),
+          for (var i = 0; i < events.length; i++)
+            _EventRow(
+              controller: controller,
+              event: events[i],
+              index: i,
+              count: events.length,
+            ),
+          const SizedBox(height: 24),
+          Text('今日日常', style: Theme.of(context).textTheme.titleLarge),
+          if (routines.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('今天没有 recurrence 命中的日常。'),
+            ),
+          for (final routine in routines)
+            _RoutineRow(controller: controller, routine: routine),
+          if (events.isEmpty && routines.isEmpty) ...[
+            const SizedBox(height: 24),
+            const Center(child: Text('今天还没有安排事项')),
+          ],
         ],
+      );
+    },
+  );
+}
+
+class _EventRow extends StatelessWidget {
+  const _EventRow({
+    required this.controller,
+    required this.event,
+    required this.index,
+    required this.count,
+  });
+  final EventController controller;
+  final JaxEvent event;
+  final int index;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final breadcrumb = controller.eventBreadcrumb(event);
+    return Card(
+      key: ValueKey('today-event-${event.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: constraints.maxWidth > 620
+                    ? constraints.maxWidth - 390
+                    : constraints.maxWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    if (breadcrumb.isNotEmpty)
+                      Text(
+                        breadcrumb,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    Text(_status(event)),
+                  ],
+                ),
+              ),
+              if (index > 0)
+                IconButton(
+                  key: ValueKey('today-up-${event.id}'),
+                  tooltip: '今日上移',
+                  onPressed: () => controller.moveToday(event.id, index - 1),
+                  icon: const Icon(Icons.arrow_upward),
+                ),
+              if (index < count - 1)
+                IconButton(
+                  key: ValueKey('today-down-${event.id}'),
+                  tooltip: '今日下移',
+                  onPressed: () => controller.moveToday(event.id, index + 1),
+                  icon: const Icon(Icons.arrow_downward),
+                ),
+              ..._actions(context),
+              if (event.status != EventStatus.running &&
+                  event.status != EventStatus.completed)
+                IconButton(
+                  key: ValueKey('today-remove-${event.id}'),
+                  tooltip: '移出今日',
+                  onPressed: () => controller.removeFromToday(event.id),
+                  icon: const Icon(Icons.today_outlined),
+                ),
+            ],
+          ),
+        ),
       ),
     );
-    if (confirmed == true && context.mounted) {
-      await _run(context, () => controller.delete(event.id));
-    }
-  }
-}
-
-enum _EventMenuAction { wait, pause, hierarchy, edit, delete }
-
-class _EventEditor extends StatefulWidget {
-  const _EventEditor({required this.controller, this.event});
-  final EventController controller;
-  final JaxEvent? event;
-  @override
-  State<_EventEditor> createState() => _EventEditorState();
-}
-
-class _EventEditorState extends State<_EventEditor> {
-  late final TextEditingController _text = TextEditingController(
-    text: widget.event?.name,
-  );
-  String? _error;
-  bool _busy = false;
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.event == null ? '新建事件' : '编辑事件'),
-    content: TextField(
-      controller: _text,
-      autofocus: true,
-      decoration: InputDecoration(labelText: '事件名称', errorText: _error),
-      onSubmitted: _busy ? null : (_) => _submit(),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _busy ? null : () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(
-        onPressed: _busy ? null : _submit,
-        child: Text(widget.event == null ? '创建' : '保存'),
+  List<Widget> _actions(BuildContext context) => switch (event.status) {
+    EventStatus.pending => [
+      _button(
+        context,
+        'start',
+        '开始',
+        Icons.play_arrow,
+        () => controller.start(event.id),
       ),
     ],
+    EventStatus.paused => [
+      _button(
+        context,
+        'resume',
+        '恢复',
+        Icons.play_arrow,
+        () => controller.resume(event.id),
+      ),
+    ],
+    EventStatus.running => [
+      _button(
+        context,
+        'pause',
+        '暂停',
+        Icons.pause,
+        () => controller.pause(event.id),
+      ),
+      _button(
+        context,
+        'complete',
+        '完成',
+        Icons.check,
+        () => controller.complete(event.id),
+      ),
+    ],
+    EventStatus.waiting => [
+      _button(
+        context,
+        'resume',
+        '恢复',
+        Icons.play_arrow,
+        () => controller.resume(event.id),
+      ),
+      _button(
+        context,
+        'complete',
+        '完成',
+        Icons.check,
+        () => controller.complete(event.id),
+      ),
+    ],
+    EventStatus.completed => const [],
+  };
+
+  Widget _button(
+    BuildContext context,
+    String keyName,
+    String label,
+    IconData icon,
+    Future<String?> Function() action,
+  ) => FilledButton.tonalIcon(
+    key: ValueKey('$keyName-${event.id}'),
+    onPressed: () async {
+      final error = await action();
+      if (error != null && context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+      }
+    },
+    icon: Icon(icon),
+    label: Text(label),
   );
-  Future<void> _submit() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final error = widget.event == null
-        ? await widget.controller.create(_text.text)
-        : await widget.controller.edit(widget.event!.id, _text.text);
-    if (!mounted) return;
-    if (error == null) {
-      Navigator.pop(context);
-    } else {
-      setState(() {
-        _busy = false;
-        _error = error;
-      });
-    }
+
+  String _status(JaxEvent event) => switch (event.status) {
+    EventStatus.pending => '未开始',
+    EventStatus.running => '正在执行',
+    EventStatus.paused => '已暂停',
+    EventStatus.waiting => '等待中',
+    EventStatus.completed => '已完成',
+  };
+}
+
+class _RoutineRow extends StatelessWidget {
+  const _RoutineRow({required this.controller, required this.routine});
+  final EventController controller;
+  final Routine routine;
+
+  @override
+  Widget build(BuildContext context) {
+    final execution = controller.executionFor(routine);
+    final category = controller.categories
+        .where((c) => c.id == routine.categoryId)
+        .firstOrNull;
+    return Card(
+      key: ValueKey('today-routine-${routine.id}'),
+      child: ListTile(
+        title: Text(routine.name),
+        subtitle: Text(category?.name ?? '未分类'),
+        trailing: Wrap(
+          spacing: 4,
+          children: switch (execution?.status) {
+            null => [
+              _button(
+                'start',
+                '开始',
+                Icons.play_arrow,
+                () => controller.startRoutine(routine),
+              ),
+            ],
+            RoutineExecutionStatus.running => [
+              _button(
+                'pause',
+                '暂停',
+                Icons.pause,
+                () => controller.pauseRoutine(routine),
+              ),
+              _button(
+                'complete',
+                '完成',
+                Icons.check,
+                () => controller.completeRoutine(routine),
+              ),
+            ],
+            RoutineExecutionStatus.paused => [
+              _button(
+                'resume',
+                '恢复',
+                Icons.play_arrow,
+                () => controller.startRoutine(routine),
+              ),
+              _button(
+                'complete',
+                '完成',
+                Icons.check,
+                () => controller.completeRoutine(routine),
+              ),
+            ],
+            RoutineExecutionStatus.completed => const [Text('已完成')],
+          },
+        ),
+      ),
+    );
   }
+
+  Widget _button(
+    String keyName,
+    String label,
+    IconData icon,
+    VoidCallback action,
+  ) => IconButton(
+    key: ValueKey('today-routine-$keyName-${routine.id}'),
+    tooltip: label,
+    onPressed: action,
+    icon: Icon(icon),
+  );
 }

@@ -48,7 +48,8 @@ void main() {
 
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await openEventsPage(tester);
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
 
     final pendingName = find.text('这是一个很长的未开始事件名称用于验证手机布局');
     expect(
@@ -58,30 +59,31 @@ void main() {
 
     for (final key in [
       'start-pending',
-      'more-pending',
       'resume-paused',
-      'more-paused',
       'complete-running',
       'pause-running',
-      'more-running',
     ]) {
       final action = find.byKey(ValueKey(key));
       await tester.scrollUntilVisible(action, 100);
       expect(action, findsOneWidget);
     }
-    await openEventMenu(tester, 'pending');
-    expect(find.byKey(const ValueKey('edit-pending')), findsOneWidget);
-    expect(find.byKey(const ValueKey('delete-pending')), findsOneWidget);
-    await tester.tapAt(Offset.zero);
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('新建事件'));
+    final newEvent = find.byKey(const ValueKey('world-new-event'));
+    await tester.tap(newEvent);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
+
+    await openEventMenu(tester, 'pending');
+    expect(find.byKey(const ValueKey('edit-pending')), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-pending')), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
     expect(tester.takeException(), isNull);
   });
 

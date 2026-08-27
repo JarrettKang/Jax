@@ -203,6 +203,7 @@ class _JaxAppState extends State<JaxApp> {
                         labelType: NavigationRailLabelType.all,
                         onDestinationSelected: (index) {
                           setState(() => _selectedIndex = index);
+                          _controller.load();
                         },
                         destinations: const [
                           NavigationRailDestination(
@@ -213,7 +214,7 @@ class _JaxAppState extends State<JaxApp> {
                           NavigationRailDestination(
                             icon: Icon(Icons.checklist_outlined),
                             selectedIcon: Icon(Icons.checklist),
-                            label: Text('事件'),
+                            label: Text('今日'),
                           ),
                           NavigationRailDestination(
                             icon: Icon(Icons.account_tree_outlined),
@@ -241,6 +242,7 @@ class _JaxAppState extends State<JaxApp> {
                     selectedIndex: _selectedIndex,
                     onDestinationSelected: (index) {
                       setState(() => _selectedIndex = index);
+                      _controller.load();
                     },
                     destinations: const [
                       NavigationDestination(
@@ -251,7 +253,7 @@ class _JaxAppState extends State<JaxApp> {
                       NavigationDestination(
                         icon: Icon(Icons.checklist_outlined),
                         selectedIcon: Icon(Icons.checklist),
-                        label: '事件',
+                        label: '今日',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.account_tree_outlined),

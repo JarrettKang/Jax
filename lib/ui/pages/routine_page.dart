@@ -18,7 +18,7 @@ class RoutinePage extends StatelessWidget {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text('今天', style: Theme.of(context).textTheme.headlineSmall),
+              Text('日常', style: Theme.of(context).textTheme.headlineSmall),
               FilledButton.icon(
                 key: const ValueKey('create-routine'),
                 onPressed: () => _edit(context),
@@ -28,11 +28,14 @@ class RoutinePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
+          Text('今日备用执行', style: Theme.of(context).textTheme.titleLarge),
+          const Text('主要执行入口已统一到“今日”。'),
+          const SizedBox(height: 8),
           if (today.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child: Text('今天没有安排日常'),
+                child: Text('当前 Jax day 没有命中的日常'),
               ),
             ),
           for (final r in today) _card(context, r),
@@ -42,15 +45,41 @@ class RoutinePage extends StatelessWidget {
             ListTile(
               title: Text(r.name),
               subtitle: Text(_label(r.recurrence)),
-              trailing: PopupMenuButton<String>(
-                key: ValueKey('routine-more-${r.id}'),
-                onSelected: (v) {
-                  if (v == 'edit') _edit(context, r);
-                  if (v == 'disable') controller.setRoutineActive(r, false);
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'edit', child: Text('编辑')),
-                  PopupMenuItem(value: 'disable', child: Text('停用')),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (controller.routines.indexOf(r) > 0)
+                    IconButton(
+                      key: ValueKey('routine-up-${r.id}'),
+                      tooltip: '上移',
+                      onPressed: () => controller.reorderRoutine(
+                        r.id,
+                        controller.routines.indexOf(r) - 1,
+                      ),
+                      icon: const Icon(Icons.arrow_upward),
+                    ),
+                  if (controller.routines.indexOf(r) <
+                      controller.routines.length - 1)
+                    IconButton(
+                      key: ValueKey('routine-down-${r.id}'),
+                      tooltip: '下移',
+                      onPressed: () => controller.reorderRoutine(
+                        r.id,
+                        controller.routines.indexOf(r) + 1,
+                      ),
+                      icon: const Icon(Icons.arrow_downward),
+                    ),
+                  PopupMenuButton<String>(
+                    key: ValueKey('routine-more-${r.id}'),
+                    onSelected: (v) {
+                      if (v == 'edit') _edit(context, r);
+                      if (v == 'disable') controller.setRoutineActive(r, false);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('编辑')),
+                      PopupMenuItem(value: 'disable', child: Text('停用')),
+                    ],
+                  ),
                 ],
               ),
             ),

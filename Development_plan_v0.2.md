@@ -148,3 +148,12 @@
 - F8.4：TimeSummaryService 将 Event 与 Routine segments 归一到同一个 overlap/Category 聚合流程；不新增 summary 表或 category snapshot。
 - F8.5：新增五栏导航“日常”、今日派生列表、创建/编辑 recurrence、开始/暂停/恢复/完成、停用/重新启用及首页 running Routine 简洁展示；World 保持纯 Event。
 - F8 测试覆盖 recurrence、occurrence 唯一性、跨类型 running、segments、inactive/reactivate、Category 删除与动态历史、23:00 Summary、v6 migration、窄屏 UI、Windows/Android lifecycle 和完整回归。
+
+## 10. F9：Today / 今日统一执行入口
+
+- F9.1 抽取无 Flutter 依赖的 `JaxDay`，统一 Today、Routine recurrence 和 TimeSummaryService 的设备本地 23:00 日界线及显示日期 weekday。
+- F9.2 schema v7→v8 新增 `event_day_plans(event_id, day_date, order_index, created_at_utc)`；复合主键防重复，Event 删除级联清理，旧数据库迁移后计划为空并完整保留 Event、Routine、Category、hierarchy、segments 与 execution。
+- F9.3 Event Day Plan 使用独立 Repository；加入/移出/排序不修改 Event 事实。start/resume 和跨日 running Event 自动确保当前计划，completed 当天保留，running/completed 的移出受 Core/UI 保护。
+- F9.4 原 Events page 重构为 Today presentation，分为当前 running 摘要、今日事项和今日日常；Event 使用独立 today order 与 breadcrumb，Routine 使用 definition order。World 接收 Event 创建、编辑、删除、hierarchy、Category、World order、恢复及今日规划入口；日常页保留 Routine 管理及备用执行能力。
+- F9.5 跨日 running Routine 继续单一旧 execution，并覆盖当前日派生 occurrence，避免同名重复。Event/Routine 全局单 running、首页现在视角和 Record segment-only 统计保持不变。
+- F9.6 测试包括 22:59/23:00/23:01、v7 migration、计划唯一性/移除/独立排序、World start 自动规划、completed 当天留存、waiting、weekday recurrence、跨日 running Routine、导航、空状态、长 breadcrumb、小屏与全部历史能力迁移；完成全量测试、analyze 和 Windows/Android Debug 验收后独立提交。

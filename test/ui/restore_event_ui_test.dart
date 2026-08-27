@@ -8,7 +8,7 @@ import 'package:jax/core/entities/run_segment.dart';
 import '../support/memory_repository.dart';
 
 void main() {
-  testWidgets('World confirms restore and returns event to Events', (
+  testWidgets('World confirms restore and keeps restored Event in World', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -57,9 +57,6 @@ void main() {
 
     expect(find.text('root 的长事件名称'), findsOneWidget);
     expect(find.text('leaf 的长事件名称'), findsOneWidget);
-    await tester.tap(find.text('事件'));
-    await tester.pumpAndSettle();
-    expect(find.text('root 的长事件名称'), findsOneWidget);
     expect(find.textContaining('已暂停'), findsOneWidget);
     expect(await repository.getRunSegments('leaf'), hasLength(1));
     expect(tester.takeException(), isNull);

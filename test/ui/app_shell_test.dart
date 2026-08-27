@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 
@@ -5,12 +6,12 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('shows the empty events and summary sections', (tester) async {
+  testWidgets('shows the empty World and summary sections', (tester) async {
     await tester.pumpWidget(JaxApp(repository: MemoryRepository()));
     await tester.pumpAndSettle();
     expect(find.text('Jax'), findsOneWidget);
     await openEventsPage(tester);
-    expect(find.text('暂无未完成事件'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-new-event')), findsOneWidget);
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
     expect(find.text('这一天没有记录到执行时间'), findsOneWidget);

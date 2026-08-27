@@ -34,6 +34,7 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: repository, now: () => end));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
+    await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('pause-one')));
     await tester.pumpAndSettle();
     expect(find.textContaining('已暂停'), findsOneWidget);

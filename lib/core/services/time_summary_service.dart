@@ -1,4 +1,5 @@
 import '../entities/jax_event.dart';
+import '../entities/jax_day.dart';
 import '../entities/time_summary.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/routine_repository.dart';
@@ -13,12 +14,8 @@ class TimeSummaryService {
       : null;
 
   Future<TimeSummary> day(DateTime date) async {
-    final localDate = DateTime(date.year, date.month, date.day);
-    final start = localDate
-        .subtract(const Duration(days: 1))
-        .add(const Duration(hours: 23));
-    final nominalEnd = localDate.add(const Duration(hours: 23));
-    return _within(start, nominalEnd);
+    final jaxDay = JaxDay.forDisplayDate(date);
+    return _within(jaxDay.start, jaxDay.end);
   }
 
   Future<WeeklyTimeSummary> week(DateTime date) async {
@@ -26,9 +23,7 @@ class TimeSummaryService {
     final monday = local.subtract(
       Duration(days: local.weekday - DateTime.monday),
     );
-    final start = monday
-        .subtract(const Duration(days: 1))
-        .add(const Duration(hours: 23));
+    final start = JaxDay.forDisplayDate(monday).start;
     final end = start.add(const Duration(days: 7));
     final days = <TimeSummary>[];
     for (var offset = 0; offset < 7; offset++) {

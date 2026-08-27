@@ -54,11 +54,23 @@ class _WorldPageState extends State<WorldPage> {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: FilledButton.tonalIcon(
-              key: const ValueKey('world-new-category'),
-              onPressed: () => _createCategory(context),
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('新建分类'),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  key: const ValueKey('world-new-event'),
+                  onPressed: () => _createEvent(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('新建事件'),
+                ),
+                FilledButton.tonalIcon(
+                  key: const ValueKey('world-new-category'),
+                  onPressed: () => _createCategory(context),
+                  icon: const Icon(Icons.create_new_folder_outlined),
+                  label: const Text('新建分类'),
+                ),
+              ],
             ),
           ),
           for (final key in keys)
@@ -188,6 +200,45 @@ class _WorldPageState extends State<WorldPage> {
         displayState == WorldDisplayState.progressing;
     final completed = displayState == WorldDisplayState.completed;
     final actions = <PopupMenuEntry<_WorldAction>>[
+      if (e.status != EventStatus.completed &&
+          !widget.controller.isPlannedToday(e.id))
+        PopupMenuItem(
+          key: ValueKey('world-add-today-${e.id}'),
+          value: _WorldAction.addToday,
+          child: const ListTile(
+            leading: Icon(Icons.today),
+            title: Text('加入今日'),
+          ),
+        ),
+      if (widget.controller.isPlannedToday(e.id) &&
+          e.status != EventStatus.running &&
+          e.status != EventStatus.completed)
+        PopupMenuItem(
+          key: ValueKey('world-remove-today-${e.id}'),
+          value: _WorldAction.removeToday,
+          child: const ListTile(
+            leading: Icon(Icons.today_outlined),
+            title: Text('移出今日'),
+          ),
+        ),
+      if (e.status == EventStatus.pending)
+        PopupMenuItem(
+          key: ValueKey('start-${e.id}'),
+          value: _WorldAction.start,
+          child: ListTile(leading: Icon(Icons.play_arrow), title: Text('开始')),
+        ),
+      if (e.status == EventStatus.paused || e.status == EventStatus.waiting)
+        PopupMenuItem(
+          key: ValueKey('resume-${e.id}'),
+          value: _WorldAction.resume,
+          child: ListTile(leading: Icon(Icons.play_arrow), title: Text('恢复')),
+        ),
+      if (e.status == EventStatus.running)
+        PopupMenuItem(
+          key: ValueKey('pause-${e.id}'),
+          value: _WorldAction.pause,
+          child: ListTile(leading: Icon(Icons.pause), title: Text('暂停')),
+        ),
       if (e.status == EventStatus.completed)
         PopupMenuItem(
           key: ValueKey('world-restore-${e.id}'),
@@ -203,14 +254,31 @@ class _WorldPageState extends State<WorldPage> {
             title: Text('投入详情'),
           ),
         ),
-      const PopupMenuItem(
+      if (e.status == EventStatus.running || e.status == EventStatus.waiting)
+        PopupMenuItem(
+          key: ValueKey('complete-${e.id}'),
+          value: _WorldAction.complete,
+          child: const ListTile(leading: Icon(Icons.check), title: Text('完成')),
+        ),
+      if (e.status == EventStatus.running || e.status == EventStatus.paused)
+        PopupMenuItem(
+          key: ValueKey('wait-${e.id}'),
+          value: _WorldAction.wait,
+          child: const ListTile(
+            leading: Icon(Icons.hourglass_empty),
+            title: Text('设为等待'),
+          ),
+        ),
+      PopupMenuItem(
+        key: ValueKey('hierarchy-${e.id}'),
         value: _WorldAction.hierarchy,
         child: ListTile(
           leading: Icon(Icons.account_tree_outlined),
           title: Text('层级详情'),
         ),
       ),
-      const PopupMenuItem(
+      PopupMenuItem(
+        key: ValueKey('edit-${e.id}'),
         value: _WorldAction.edit,
         child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
       ),
@@ -229,6 +297,17 @@ class _WorldPageState extends State<WorldPage> {
           child: ListTile(
             leading: Icon(Icons.delete_outline),
             title: Text('删除历史记录'),
+          ),
+        ),
+      if (e.status != EventStatus.running &&
+          e.status != EventStatus.completed &&
+          !child)
+        PopupMenuItem(
+          key: ValueKey('delete-${e.id}'),
+          value: _WorldAction.delete,
+          child: const ListTile(
+            leading: Icon(Icons.delete_outline),
+            title: Text('删除事件'),
           ),
         ),
     ];
@@ -305,6 +384,22 @@ class _WorldPageState extends State<WorldPage> {
         showHistoryDetailDialog(c, controller: widget.controller, event: e);
       case _WorldAction.deleteHistory:
         _confirmDeleteHistory(c, e);
+      case _WorldAction.addToday:
+        widget.controller.addToToday(e.id);
+      case _WorldAction.removeToday:
+        widget.controller.removeFromToday(e.id);
+      case _WorldAction.start:
+        widget.controller.start(e.id);
+      case _WorldAction.resume:
+        widget.controller.resume(e.id);
+      case _WorldAction.pause:
+        widget.controller.pause(e.id);
+      case _WorldAction.complete:
+        widget.controller.complete(e.id);
+      case _WorldAction.wait:
+        widget.controller.wait(e.id);
+      case _WorldAction.delete:
+        _confirmDelete(c, e);
     }
   }
 
@@ -368,6 +463,63 @@ class _WorldPageState extends State<WorldPage> {
   Future<void> _createCategory(BuildContext c) async {
     final n = await _name(c, '新建分类', null);
     if (n != null) await widget.controller.createCategory(n);
+  }
+
+  Future<void> _createEvent(BuildContext c) async {
+    final text = TextEditingController();
+    String? error;
+    await showDialog<void>(
+      context: c,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('新建事件'),
+          content: TextField(
+            controller: text,
+            autofocus: true,
+            decoration: InputDecoration(labelText: '事件名称', errorText: error),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final result = await widget.controller.create(text.text);
+                if (!context.mounted) return;
+                if (result == null) {
+                  Navigator.pop(context);
+                } else {
+                  setDialogState(() => error = result);
+                }
+              },
+              child: const Text('创建'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext c, JaxEvent e) async {
+    final confirmed = await showDialog<bool>(
+      context: c,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除事件'),
+        content: Text('确定删除“${e.name}”吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await widget.controller.delete(e.id);
   }
 
   Future<void> _catAction(
@@ -509,6 +661,14 @@ class _WorldNodeRow extends StatelessWidget {
 }
 
 enum _WorldAction {
+  addToday,
+  removeToday,
+  start,
+  resume,
+  pause,
+  complete,
+  wait,
+  delete,
   hierarchy,
   edit,
   category,

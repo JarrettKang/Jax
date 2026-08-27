@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' hide Category;
 
 import '../../core/entities/event_status.dart';
+import '../../core/entities/event_day_plan.dart';
+import '../../core/entities/jax_day.dart';
 import '../../core/entities/category.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
+import '../../core/repositories/event_day_plan_repository.dart';
 import '../../core/services/event_hierarchy_service.dart';
 import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/services/world_display_state_service.dart';
@@ -52,6 +55,9 @@ class EventController extends ChangeNotifier {
        _durations = HierarchyDurationService(repository, now: now),
        _worldDisplayStates = const WorldDisplayStateService(),
        _summaries = TimeSummaryService(repository, now),
+       _dayPlans = repository is EventDayPlanRepository
+           ? repository as EventDayPlanRepository
+           : null,
        _routineRepository = repository is RoutineRepository
            ? repository as RoutineRepository
            : null,
@@ -85,6 +91,7 @@ class EventController extends ChangeNotifier {
   final HierarchyDurationService _durations;
   final WorldDisplayStateService _worldDisplayStates;
   final TimeSummaryService _summaries;
+  final EventDayPlanRepository? _dayPlans;
   final RoutineRepository? _routineRepository;
   final RoutineService? _routineService;
   final CategoryService _categories;
@@ -101,6 +108,7 @@ class EventController extends ChangeNotifier {
   List<Routine> _routines = const [];
   final Map<String, RoutineExecution?> _todayExecutions = {};
   final Map<String, List<RoutineRunSegment>> _routineSegments = {};
+  List<EventDayPlan> _todayPlans = const [];
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
@@ -108,6 +116,7 @@ class EventController extends ChangeNotifier {
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
+  Timer? _dayBoundaryTimer;
   Future<void> _reorderTail = Future.value();
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
@@ -117,9 +126,24 @@ class EventController extends ChangeNotifier {
       _worldStates[eventId] ?? WorldDisplayState.pending;
   List<Category> get categories => List.unmodifiable(_categoryItems);
   List<Routine> get routines => List.unmodifiable(_routines);
-  List<Routine> get todayRoutines => _routines
-      .where((r) => r.isActive && r.appliesTo(_now().toLocal()))
-      .toList();
+  JaxDay get currentJaxDay => JaxDay.containing(_now());
+  List<JaxEvent> get todayEvents {
+    final byId = {for (final event in _worldEvents) event.id: event};
+    return _todayPlans.map((plan) => byId[plan.eventId]).nonNulls.toList();
+  }
+
+  bool isPlannedToday(String eventId) =>
+      _todayPlans.any((plan) => plan.eventId == eventId);
+  List<Routine> get todayRoutines {
+    final displayDate = currentJaxDay.displayDate;
+    final runningId = runningRoutineExecution?.routineId;
+    return _routines
+        .where(
+          (r) => (r.isActive && r.appliesTo(displayDate)) || r.id == runningId,
+        )
+        .toList();
+  }
+
   RoutineExecution? executionFor(Routine r) => _todayExecutions[r.id];
   RoutineExecution? get runningRoutineExecution => _todayExecutions.values
       .where((e) => e?.status == RoutineExecutionStatus.running)
@@ -197,11 +221,31 @@ class EventController extends ChangeNotifier {
     _worldEvents = _orderTree([..._events, ..._history]);
     _worldStates = _worldDisplayStates.derive(_worldEvents);
     _categoryItems = await _repository.getCategories();
+    final dayKey = currentJaxDay.key;
+    final runningEventNow = _worldEvents
+        .where((event) => event.status == EventStatus.running)
+        .firstOrNull;
+    var plans =
+        await _dayPlans?.getEventDayPlans(dayKey) ?? const <EventDayPlan>[];
+    if (runningEventNow != null &&
+        !plans.any((plan) => plan.eventId == runningEventNow.id)) {
+      await _dayPlans?.addEventDayPlan(
+        EventDayPlan(
+          eventId: runningEventNow.id,
+          dayKey: dayKey,
+          order: plans.length,
+          createdAt: _now().toUtc(),
+        ),
+      );
+      plans =
+          await _dayPlans?.getEventDayPlans(dayKey) ?? const <EventDayPlan>[];
+    }
+    _todayPlans = plans;
     if (_routineRepository != null) {
       _routines = await _routineRepository.getRoutines();
       _todayExecutions.clear();
       _routineSegments.clear();
-      final day = RoutineService.occurrence(_now().toLocal());
+      final day = currentJaxDay.key;
       for (final r in _routines) {
         final e = await _routineRepository.getRoutineExecution(r.id, day);
         _todayExecutions[r.id] = e;
@@ -209,6 +253,13 @@ class EventController extends ChangeNotifier {
           _routineSegments[e.id] = await _routineRepository
               .getRoutineRunSegments(e.id);
         }
+      }
+      final runningRoutine = await _routineRepository
+          .getRunningRoutineExecution();
+      if (runningRoutine != null && runningRoutine.occurrenceDate != day) {
+        _todayExecutions[runningRoutine.routineId] = runningRoutine;
+        _routineSegments[runningRoutine.id] = await _routineRepository
+            .getRoutineRunSegments(runningRoutine.id);
       }
     }
     for (final event in [..._events, ..._history]) {
@@ -246,6 +297,7 @@ class EventController extends ChangeNotifier {
     }
     _homeWaitingItems = waitingItems;
     _syncTicker();
+    _scheduleDayBoundaryRefresh();
   }
 
   Future<HomeRunningContext> _buildHomeRunningContext(
@@ -301,12 +353,69 @@ class EventController extends ChangeNotifier {
       _change(() => _categories.assign(eventId, categoryId));
   Future<String?> delete(String id) => _change(() => _delete(id));
   Future<String?> deleteHistory(String id) => _change(() => _deleteHistory(id));
-  Future<String?> start(String id) => _change(() => _start(id));
+  Future<String?> start(String id) => _change(() async {
+    await _start(id);
+    await _ensureToday(id);
+    return null;
+  });
   Future<String?> pause(String id) => _change(() => _pause(id));
-  Future<String?> resume(String id) => _change(() => _resume(id));
+  Future<String?> resume(String id) => _change(() async {
+    await _resume(id);
+    await _ensureToday(id);
+    return null;
+  });
   Future<String?> wait(String id) => _change(() => _wait(id));
   Future<String?> complete(String id) => _change(() => _complete(id));
   Future<String?> restore(String id) => _change(() => _restore(id));
+  Future<String?> addToToday(String id) => _change(() => _ensureToday(id));
+  Future<String?> removeFromToday(String id) => _change(() async {
+    final event = await _repository.getEvent(id);
+    if (event?.status == EventStatus.running) {
+      throw const DomainFailure('请先暂停或完成正在执行的事件');
+    }
+    if (event?.status == EventStatus.completed) {
+      throw const DomainFailure('当天已完成事项会保留到今日结束');
+    }
+    await _dayPlans?.removeEventDayPlan(id, currentJaxDay.key);
+    return null;
+  });
+  Future<String?> moveToday(String id, int targetIndex) => _change(
+    () => _dayPlans!.reorderEventDayPlan(id, currentJaxDay.key, targetIndex),
+  );
+  Future<void> _ensureToday(String id) async {
+    final event = await _repository.getEvent(id);
+    if (event == null) throw const DomainFailure('事件不存在');
+    if (event.status == EventStatus.completed) {
+      throw const DomainFailure('请先恢复已完成事件');
+    }
+    final plans =
+        await _dayPlans?.getEventDayPlans(currentJaxDay.key) ??
+        const <EventDayPlan>[];
+    if (plans.any((plan) => plan.eventId == id)) return;
+    await _dayPlans?.addEventDayPlan(
+      EventDayPlan(
+        eventId: id,
+        dayKey: currentJaxDay.key,
+        order: plans.length,
+        createdAt: _now().toUtc(),
+      ),
+    );
+  }
+
+  String eventBreadcrumb(JaxEvent event) {
+    final byId = {for (final item in _worldEvents) item.id: item};
+    final names = <String>[];
+    var parentId = event.parentEventId;
+    final seen = <String>{event.id};
+    while (parentId != null && seen.add(parentId)) {
+      final parent = byId[parentId];
+      if (parent == null) break;
+      names.add(parent.name);
+      parentId = parent.parentEventId;
+    }
+    return names.reversed.join(' › ');
+  }
+
   Future<String?> createRoutine(
     String name,
     String? category,
@@ -324,6 +433,8 @@ class EventController extends ChangeNotifier {
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>
       _change(() => _routineService!.setActive(r, active));
+  Future<String?> reorderRoutine(String id, int targetIndex) =>
+      _change(() => _routineRepository!.reorderRoutine(id, targetIndex));
   Future<String?> startRoutine(Routine r) =>
       _change(() => _routineService!.start(r, execution: executionFor(r)));
   Future<String?> pauseRoutine(Routine r) =>
@@ -439,9 +550,21 @@ class EventController extends ChangeNotifier {
     }
   }
 
+  void _scheduleDayBoundaryRefresh() {
+    _dayBoundaryTimer?.cancel();
+    final delay = currentJaxDay.end.difference(_now().toLocal());
+    _dayBoundaryTimer = Timer(
+      delay.isNegative || delay == Duration.zero
+          ? const Duration(milliseconds: 1)
+          : delay,
+      load,
+    );
+  }
+
   @override
   void dispose() {
     _ticker?.cancel();
+    _dayBoundaryTimer?.cancel();
     super.dispose();
   }
 }

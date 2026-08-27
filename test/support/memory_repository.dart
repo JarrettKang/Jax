@@ -2,19 +2,26 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/category.dart';
+import 'package:jax/core/entities/event_day_plan.dart';
 import 'package:jax/core/entities/routine.dart';
 import 'package:jax/core/repositories/event_repository.dart';
+import 'package:jax/core/repositories/event_day_plan_repository.dart';
 import 'package:jax/core/repositories/routine_repository.dart';
 
-class MemoryRepository implements EventRepository, RoutineRepository {
-  MemoryRepository([Iterable<JaxEvent> seed = const []])
-    : events = List.of(seed);
+class MemoryRepository
+    implements EventRepository, EventDayPlanRepository, RoutineRepository {
+  MemoryRepository([
+    Iterable<JaxEvent> seed = const [],
+    this.autoPlanSeedEvents = true,
+  ]) : events = List.of(seed);
+  final bool autoPlanSeedEvents;
   final List<JaxEvent> events;
   final List<RunSegment> segments = [];
   final List<Category> categories = [];
   final List<Routine> routines = [];
   final List<RoutineExecution> routineExecutions = [];
   final List<RoutineRunSegment> routineSegments = [];
+  final List<EventDayPlan> eventDayPlans = [];
   @override
   Future<void> insertEvent(JaxEvent event) async {
     final siblings = events.where(
@@ -174,6 +181,7 @@ class MemoryRepository implements EventRepository, RoutineRepository {
   Future<void> deleteEvent(String id) async {
     events.removeWhere((event) => event.id == id);
     segments.removeWhere((segment) => segment.eventId == id);
+    eventDayPlans.removeWhere((plan) => plan.eventId == id);
   }
 
   @override
@@ -235,6 +243,58 @@ class MemoryRepository implements EventRepository, RoutineRepository {
   }
 
   @override
+  Future<List<EventDayPlan>> getEventDayPlans(String dayKey) async {
+    final explicit = eventDayPlans.where((p) => p.dayKey == dayKey).toList();
+    final result = explicit.isEmpty && autoPlanSeedEvents
+        ? [
+            for (var i = 0; i < events.length; i++)
+              EventDayPlan(
+                eventId: events[i].id,
+                dayKey: dayKey,
+                order: i,
+                createdAt: events[i].createdAt,
+              ),
+          ]
+        : explicit;
+    return result..sort((a, b) => a.order.compareTo(b.order));
+  }
+
+  @override
+  Future<void> addEventDayPlan(EventDayPlan plan) async {
+    if (!eventDayPlans.any(
+      (p) => p.eventId == plan.eventId && p.dayKey == plan.dayKey,
+    )) {
+      eventDayPlans.add(plan);
+    }
+  }
+
+  @override
+  Future<void> removeEventDayPlan(String eventId, String dayKey) async =>
+      eventDayPlans.removeWhere(
+        (p) => p.eventId == eventId && p.dayKey == dayKey,
+      );
+  @override
+  Future<void> reorderEventDayPlan(
+    String eventId,
+    String dayKey,
+    int targetIndex,
+  ) async {
+    final plans = await getEventDayPlans(dayKey);
+    final current = plans.indexWhere((p) => p.eventId == eventId);
+    if (current < 0 || targetIndex < 0 || targetIndex >= plans.length) {
+      throw StateError('Invalid Today order');
+    }
+    final moved = plans.removeAt(current);
+    plans.insert(targetIndex, moved);
+    for (var i = 0; i < plans.length; i++) {
+      final index = eventDayPlans.indexWhere(
+        (p) => p.eventId == plans[i].eventId && p.dayKey == dayKey,
+      );
+      eventDayPlans[index] = plans[i].copyWith(order: i);
+    }
+  }
+
+  @override
   Future<List<Routine>> getRoutines() async =>
       List.of(routines)..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   @override
@@ -247,6 +307,21 @@ class MemoryRepository implements EventRepository, RoutineRepository {
   Future<void> updateRoutine(Routine r) async =>
       routines[routines.indexWhere((x) => x.id == r.id)] = r;
   @override
+  Future<void> reorderRoutine(String id, int targetIndex) async {
+    final ordered = await getRoutines();
+    final current = ordered.indexWhere((r) => r.id == id);
+    if (current < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
+      throw StateError('Invalid Routine order');
+    }
+    final moved = ordered.removeAt(current);
+    ordered.insert(targetIndex, moved);
+    for (var i = 0; i < ordered.length; i++) {
+      routines[routines.indexWhere((r) => r.id == ordered[i].id)] = ordered[i]
+          .copyWith(sortOrder: i);
+    }
+  }
+
+  @override
   Future<RoutineExecution?> getRoutineExecution(String id, String day) async =>
       routineExecutions
           .where((e) => e.routineId == id && e.occurrenceDate == day)
@@ -254,6 +329,11 @@ class MemoryRepository implements EventRepository, RoutineRepository {
   @override
   Future<List<RoutineExecution>> getRoutineExecutions() async =>
       List.of(routineExecutions);
+  @override
+  Future<RoutineExecution?> getRunningRoutineExecution() async =>
+      routineExecutions
+          .where((e) => e.status == RoutineExecutionStatus.running)
+          .firstOrNull;
   @override
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
       routineSegments.where((s) => s.executionId == id).toList();

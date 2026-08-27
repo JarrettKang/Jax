@@ -22,7 +22,8 @@ void main() {
 
     await tester.tap(find.text('我们来做点什么？'));
     await tester.pumpAndSettle();
-    expect(find.text('暂无未完成事件'), findsOneWidget);
+    expect(find.text('今日事项'), findsOneWidget);
+    expect(find.text('今天还没有安排事项'), findsOneWidget);
   });
 
   testWidgets('shows running context and ordered waiting summary', (
@@ -76,7 +77,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('当前没有正在执行的事件'), findsOneWidget);
+    expect(find.text('当前没有正在执行的事项'), findsOneWidget);
     expect(find.text('同时在等待'), findsOneWidget);
     expect(find.text('我们来做点什么？'), findsNothing);
   });
@@ -342,7 +343,7 @@ void main() {
     await tester.pump();
     expect(find.text('状态同步任务'), findsWidgets);
 
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('今日'));
     await tester.pump();
     now = now.add(const Duration(minutes: 1));
     await tester.tap(find.byKey(const ValueKey('pause-task')));
@@ -351,7 +352,7 @@ void main() {
     await tester.pump();
     expect(find.text('我们来做点什么？'), findsOneWidget);
 
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('今日'));
     await tester.pump();
     now = now.add(const Duration(minutes: 1));
     await tester.tap(find.byKey(const ValueKey('resume-task')));
@@ -360,7 +361,7 @@ void main() {
     await tester.pump();
     expect(find.text('状态同步任务'), findsWidgets);
 
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('今日'));
     await tester.pump();
     now = now.add(const Duration(minutes: 1));
     await tester.tap(find.byKey(const ValueKey('complete-task')));
