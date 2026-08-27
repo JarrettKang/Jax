@@ -57,6 +57,13 @@ void main() {
     expect(find.text('已完成'), findsOneWidget);
     expect(find.text('等待中'), findsOneWidget);
     expect(find.text('推进中'), findsOneWidget);
+    expect(
+      (tester.getCenter(find.text('E')).dy -
+              tester.getCenter(find.text('正在执行')).dy)
+          .abs(),
+      lessThan(4),
+      reason: 'wide World rows keep the Event title and status inline',
+    );
   });
 
   testWidgets('world collapse hides descendants and restores them', (
@@ -78,6 +85,29 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('world-toggle-A')));
     await tester.pump();
     expect(find.byKey(const ValueKey('world-node-C')), findsOneWidget);
+  });
+
+  testWidgets('narrow World lays out long deep Event names without overflow', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const rootName = '这是一个很长的上层事件名称用于验证世界页小屏布局';
+    const childName = '这是一个很长的深层事件名称用于验证状态和操作不会溢出';
+    final repository = MemoryRepository([
+      event(rootName, EventStatus.pending, order: 0),
+      event(childName, EventStatus.running, parent: rootName, order: 0),
+    ]);
+
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('世界'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(rootName), findsOneWidget);
+    expect(find.text(childName), findsOneWidget);
+    expect(find.text('正在执行'), findsOneWidget);
   });
 
   testWidgets('old unclassified roots stay unclassified after first category', (

@@ -9,16 +9,24 @@ class EventMoreMenuButton<T> extends StatelessWidget {
   const EventMoreMenuButton({
     required this.itemBuilder,
     required this.onSelected,
+    this.compact = false,
     super.key,
   });
 
   final PopupMenuItemBuilder<T> itemBuilder;
   final PopupMenuItemSelected<T> onSelected;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<T>(
     tooltip: '更多操作',
     icon: const Icon(Icons.more_vert),
+    style: compact
+        ? IconButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            minimumSize: const Size(44, 48),
+          )
+        : null,
     onSelected: onSelected,
     itemBuilder: itemBuilder,
   );

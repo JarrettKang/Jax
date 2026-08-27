@@ -238,9 +238,10 @@ class _WorldPageState extends State<WorldPage> {
       root: root,
       active: active,
       completed: completed,
-      child: ListTile(
-        dense: !root,
-        minVerticalPadding: root ? 8 : 2,
+      child: _WorldNodeRow(
+        root: root,
+        active: active,
+        completed: completed,
         leading: child
             ? IconButton(
                 key: ValueKey('world-toggle-${e.id}'),
@@ -256,23 +257,10 @@ class _WorldPageState extends State<WorldPage> {
                       : _collapsed.add(e.id),
                 ),
               )
-            : const SizedBox(width: 48),
-        title: Text(
-          e.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(c).textTheme.bodyLarge?.copyWith(
-            fontWeight: active || root ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-        subtitle: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(state.$1, size: 15),
-            const SizedBox(width: 4),
-            Text(state.$2, style: Theme.of(c).textTheme.bodySmall),
-          ],
-        ),
+            : const SizedBox(width: 48, height: 48),
+        name: e.name,
+        statusIcon: state.$1,
+        statusLabel: state.$2,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -281,9 +269,11 @@ class _WorldPageState extends State<WorldPage> {
               eventId: e.id,
               upKey: ValueKey('world-move-up-${e.id}'),
               downKey: ValueKey('world-move-down-${e.id}'),
+              compact: true,
             ),
             EventMoreMenuButton<_WorldAction>(
               key: ValueKey('world-more-${e.id}'),
+              compact: true,
               onSelected: (a) => _select(c, e, a),
               itemBuilder: (_) => actions,
             ),
@@ -442,6 +432,79 @@ class _WorldPageState extends State<WorldPage> {
       ),
     );
     return r;
+  }
+}
+
+class _WorldNodeRow extends StatelessWidget {
+  const _WorldNodeRow({
+    required this.root,
+    required this.active,
+    required this.completed,
+    required this.leading,
+    required this.name,
+    required this.statusIcon,
+    required this.statusLabel,
+    required this.trailing,
+  });
+
+  final bool root;
+  final bool active;
+  final bool completed;
+  final Widget leading;
+  final String name;
+  final IconData statusIcon;
+  final String statusLabel;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = Text(
+      name,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodyLarge?.copyWith(
+        fontWeight: active || root ? FontWeight.w600 : FontWeight.w400,
+      ),
+    );
+    final status = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(statusIcon, size: 15),
+        const SizedBox(width: 4),
+        Text(statusLabel, style: theme.textTheme.bodySmall),
+      ],
+    );
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: root || active ? 54 : 48),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          leading,
+          const SizedBox(width: 4),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) => constraints.maxWidth >= 220
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(fit: FlexFit.loose, child: title),
+                        const SizedBox(width: 10),
+                        status,
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [title, status],
+                    ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          trailing,
+        ],
+      ),
+    );
   }
 }
 

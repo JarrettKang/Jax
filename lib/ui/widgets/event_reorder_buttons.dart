@@ -13,6 +13,7 @@ class EventReorderButtons extends StatelessWidget {
     required this.upKey,
     required this.downKey,
     this.onReordered,
+    this.compact = false,
     super.key,
   });
 
@@ -21,6 +22,7 @@ class EventReorderButtons extends StatelessWidget {
   final Key upKey;
   final Key downKey;
   final VoidCallback? onReordered;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,10 @@ class EventReorderButtons extends StatelessWidget {
             icon: const Icon(Icons.arrow_upward),
             tooltip: '上移',
             onPressed: () => _move(context, true),
+            visualDensity: compact ? VisualDensity.compact : null,
+            constraints: compact
+                ? const BoxConstraints(minWidth: 44, minHeight: 48)
+                : null,
           ),
         if (index >= 0 && index < count - 1)
           IconButton(
@@ -42,6 +48,10 @@ class EventReorderButtons extends StatelessWidget {
             icon: const Icon(Icons.arrow_downward),
             tooltip: '下移',
             onPressed: () => _move(context, false),
+            visualDensity: compact ? VisualDensity.compact : null,
+            constraints: compact
+                ? const BoxConstraints(minWidth: 44, minHeight: 48)
+                : null,
           ),
       ],
     );
