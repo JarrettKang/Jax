@@ -7,6 +7,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/routine.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   final now = DateTime(2026, 8, 27, 12);
@@ -76,8 +77,7 @@ void main() {
       final repo = MemoryRepository([event('A', EventStatus.paused)], false);
       await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('世界'));
-      await tester.pumpAndSettle();
+      await openEventsPage(tester);
       await tester.tap(find.byKey(const ValueKey('world-more-A')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('world-add-today-A')));
@@ -133,8 +133,7 @@ void main() {
       JaxApp(repository: repo, now: () => now, newId: () => 'segment'),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('world-more-start-me')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('start-start-me')));

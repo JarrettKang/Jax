@@ -6,6 +6,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('World confirms restore and keeps restored Event in World', (
@@ -43,8 +44,7 @@ void main() {
           );
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
+    await openEventsPage(tester);
 
     await tester.tap(find.byKey(const ValueKey('world-more-root')));
     await tester.pumpAndSettle();

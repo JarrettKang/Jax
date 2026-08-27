@@ -1,24 +1,25 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
-import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/preferences/world_category_collapse_store.dart';
 
 import '../support/memory_repository.dart';
 
 void main() {
-  final now = DateTime(2026, 8, 26, 12);
+  final now = DateTime(2026, 8, 28, 12);
   JaxEvent event(
     String id,
     EventStatus status, {
+    String? name,
     String? parent,
     String? categoryId,
     int? order,
   }) => JaxEvent(
     id: id,
-    name: id,
+    name: name ?? id,
     status: status,
     parentEventId: parent,
     categoryId: categoryId,
@@ -26,346 +27,296 @@ void main() {
     createdAt: now,
     updatedAt: now,
   );
-
-  testWidgets('world shows all statuses in hierarchy order', (tester) async {
-    final repository = MemoryRepository([
-      event('A', EventStatus.pending, order: 0),
-      event('B', EventStatus.completed, parent: 'A', order: 0),
-      event('C', EventStatus.paused, parent: 'A', order: 1),
-      event('D', EventStatus.waiting, parent: 'A', order: 2),
-      event('E', EventStatus.running, parent: 'A', order: 3),
-    ]);
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
+  Category category(String id, String name, int order) => Category(
+    id: id,
+    name: name,
+    sortOrder: order,
+    createdAt: now,
+    updatedAt: now,
+  );
+  Future<void> openWorld(WidgetTester tester) async {
     await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
-    for (final id in ['A', 'B', 'C', 'D', 'E']) {
+  }
+
+  Future<void> openDetail(WidgetTester tester, String? id) async {
+    await tester.tap(find.byKey(ValueKey('world-category-open-$id')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'overview shows ordered real and virtual Categories with structural counts',
+    (tester) async {
+      final repository =
+          MemoryRepository([
+              event(
+                'dev-root',
+                EventStatus.pending,
+                categoryId: 'dev',
+                order: 0,
+              ),
+              event(
+                'dev-child',
+                EventStatus.completed,
+                parent: 'dev-root',
+                order: 0,
+              ),
+              event(
+                'research-root',
+                EventStatus.running,
+                categoryId: 'research',
+                order: 1,
+              ),
+              event('loose-root', EventStatus.waiting, order: 2),
+            ])
+            ..categories.addAll([
+              category('dev', '开发项目', 0),
+              category('research', '科研', 1),
+              category('empty', '生活起居', 2),
+            ]);
+      await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+      await tester.pumpAndSettle();
+      await openWorld(tester);
+
+      expect(find.byKey(const ValueKey('world-overview')), findsOneWidget);
+      expect(find.byKey(const ValueKey('world-tree')), findsNothing);
+      for (final id in ['dev', 'research', 'empty', null]) {
+        expect(find.byKey(ValueKey('world-category-$id')), findsOneWidget);
+      }
+      expect(find.text('2 个事件'), findsOneWidget);
+      expect(find.text('1 个顶级事件'), findsNWidgets(3));
+      expect(find.text('0 个事件'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('world-category-active-research')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('world-category-active-dev')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('world-category-more-null')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('unclassified is hidden when empty and empty World is natural', (
+    tester,
+  ) async {
+    final repository = MemoryRepository()
+      ..categories.add(category('empty', '空分类', 0));
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await openWorld(tester);
+    expect(find.byKey(const ValueKey('world-category-empty')), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-category-null')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(JaxApp(repository: MemoryRepository()));
+    await tester.pumpAndSettle();
+    await openWorld(tester);
+    expect(find.text('你的世界还没有分类'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-new-category')), findsOneWidget);
+  });
+
+  testWidgets('Category card opens only its full hierarchy and back returns', (
+    tester,
+  ) async {
+    final repository =
+        MemoryRepository([
+            event('A', EventStatus.pending, categoryId: 'dev', order: 0),
+            event('B', EventStatus.completed, parent: 'A', order: 0),
+            event('C', EventStatus.paused, parent: 'A', order: 1),
+            event('R', EventStatus.pending, categoryId: 'research', order: 1),
+          ])
+          ..categories.addAll([
+            category('dev', '开发项目', 0),
+            category('research', '科研', 1),
+          ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await openWorld(tester);
+    await openDetail(tester, 'dev');
+
+    expect(find.byKey(const ValueKey('world-tree')), findsOneWidget);
+    for (final id in ['A', 'B', 'C']) {
       expect(find.byKey(ValueKey('world-node-$id')), findsOneWidget);
-      final tooltip = tester.widget<Tooltip>(
-        find.descendant(
-          of: find.byKey(ValueKey('world-more-$id')),
-          matching: find.byType(Tooltip),
+    }
+    expect(find.byKey(const ValueKey('world-node-R')), findsNothing);
+    expect(find.text('已完成'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('world-back-overview')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('world-overview')), findsOneWidget);
+  });
+
+  testWidgets(
+    'Event collapse remains session state and legacy preferences are harmless',
+    (tester) async {
+      final preferences = InMemoryWorldCategoryCollapseStore();
+      await preferences.setCollapsed(
+        WorldCategoryCollapseStore.sectionKey('dev'),
+        true,
+      );
+      final repository = MemoryRepository([
+        event('A', EventStatus.pending, categoryId: 'dev'),
+        event('B', EventStatus.paused, parent: 'A'),
+        event('C', EventStatus.completed, parent: 'B'),
+      ])..categories.add(category('dev', '开发项目', 0));
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          worldCategoryCollapseStore: preferences,
         ),
       );
-      expect(tooltip.message, '更多操作');
-    }
-    expect(
-      tester.getTopLeft(find.byKey(const ValueKey('world-node-B'))).dy,
-      lessThan(
-        tester.getTopLeft(find.byKey(const ValueKey('world-node-C'))).dy,
-      ),
+      await tester.pumpAndSettle();
+      await openWorld(tester);
+      expect(find.byKey(const ValueKey('world-category-dev')), findsOneWidget);
+      await openDetail(tester, 'dev');
+      expect(find.byKey(const ValueKey('world-node-B')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('world-toggle-A')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('world-node-B')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('world-back-overview')));
+      await tester.pumpAndSettle();
+      await openDetail(tester, 'dev');
+      expect(find.byKey(const ValueKey('world-node-B')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('world-toggle-A')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('world-node-C')), findsOneWidget);
+    },
+  );
+
+  testWidgets('detail creates categorized and unclassified root Events', (
+    tester,
+  ) async {
+    var id = 0;
+    final repository = MemoryRepository([event('loose', EventStatus.pending)])
+      ..categories.add(category('research', '科研', 0));
+    await tester.pumpWidget(
+      JaxApp(repository: repository, newId: () => 'new-${id++}'),
     );
-    expect(find.text('已完成'), findsOneWidget);
-    expect(find.text('等待中'), findsOneWidget);
-    expect(find.text('推进中'), findsOneWidget);
+    await tester.pumpAndSettle();
+    await openWorld(tester);
+    await openDetail(tester, 'research');
+    expect(find.text('这个分类还没有事件'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('world-new-event')));
+    await tester.pumpAndSettle();
+    expect(find.text('由当前分类确定'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '测试 Yukawa');
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+    final categorized = repository.events.singleWhere(
+      (item) => item.name == '测试 Yukawa',
+    );
+    expect(categorized.parentEventId, isNull);
+    expect(categorized.categoryId, 'research');
     expect(
-      (tester.getCenter(find.text('E')).dy -
-              tester.getCenter(find.text('正在执行')).dy)
-          .abs(),
-      lessThan(4),
-      reason: 'wide World rows keep the Event title and status inline',
+      find.byKey(ValueKey('world-node-${categorized.id}')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('world-back-overview')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 个事件'), findsNWidgets(2));
+    await openDetail(tester, null);
+    await tester.tap(find.byKey(const ValueKey('world-new-event')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '无分类新事件');
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+    expect(
+      repository.events.singleWhere((item) => item.name == '无分类新事件').categoryId,
+      isNull,
     );
   });
 
-  testWidgets('world collapse hides descendants and restores them', (
-    tester,
-  ) async {
-    final repository = MemoryRepository([
-      event('A', EventStatus.pending, order: 0),
-      event('B', EventStatus.paused, parent: 'A', order: 0),
-      event('C', EventStatus.completed, parent: 'B', order: 0),
-    ]);
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('world-toggle-A')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('world-node-B')), findsNothing);
-    expect(find.byKey(const ValueKey('world-node-C')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('world-toggle-A')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('world-node-C')), findsOneWidget);
-  });
-
-  testWidgets('narrow World lays out long deep Event names without overflow', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(360, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    const rootName = '这是一个很长的上层事件名称用于验证世界页小屏布局';
-    const childName = '这是一个很长的深层事件名称用于验证状态和操作不会溢出';
-    final repository = MemoryRepository([
-      event(rootName, EventStatus.pending, order: 0),
-      event(childName, EventStatus.running, parent: rootName, order: 0),
-    ]);
-
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text(rootName), findsOneWidget);
-    expect(find.text(childName), findsOneWidget);
-    expect(find.text('正在执行'), findsOneWidget);
-  });
-
-  testWidgets('old unclassified roots stay unclassified after first category', (
-    tester,
-  ) async {
-    final repository = MemoryRepository([
-      event('old-A', EventStatus.pending, order: 0),
-      event('old-B', EventStatus.paused, order: 1),
-    ]);
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('world-new-category')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '科研工作');
-    await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(repository.categories.single.name, '科研工作');
-    expect(find.text('科研工作'), findsOneWidget);
-    expect(find.text('未分类'), findsOneWidget);
-    expect(find.byKey(const ValueKey('world-node-old-A')), findsOneWidget);
-    expect(find.byKey(const ValueKey('world-node-old-B')), findsOneWidget);
-  });
-
-  testWidgets('empty World shows its first created category', (tester) async {
-    final repository = MemoryRepository();
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('world-new-category')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '开发项目');
-    await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('开发项目'), findsOneWidget);
-  });
-
-  testWidgets('World safely shows categorized and unclassified roots', (
+  testWidgets('Category menu renames reorders and deletes without Event loss', (
     tester,
   ) async {
     final repository =
-        MemoryRepository([
-            event('A', EventStatus.pending, categoryId: 'dev', order: 0),
-            event('B', EventStatus.pending, order: 1),
-          ])
-          ..categories.add(
-            Category(
-              id: 'dev',
-              name: '开发项目',
-              sortOrder: 0,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
+        MemoryRepository([event('A', EventStatus.pending, categoryId: 'dev')])
+          ..categories.addAll([
+            category('dev', '开发项目', 0),
+            category('research', '科研', 1),
+          ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('开发项目'), findsOneWidget);
-    expect(find.text('未分类'), findsOneWidget);
-    expect(find.byKey(const ValueKey('world-node-A')), findsOneWidget);
-    expect(find.byKey(const ValueKey('world-node-B')), findsOneWidget);
-  });
+    await openWorld(tester);
 
-  testWidgets('deleting a category returns its root to 未分类 safely', (
-    tester,
-  ) async {
-    final repository =
-        MemoryRepository([
-            event('A', EventStatus.pending, categoryId: 'dev', order: 0),
-          ])
-          ..categories.add(
-            Category(
-              id: 'dev',
-              name: '开发项目',
-              sortOrder: 0,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
-    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
-    final categoryTooltip = tester.widget<Tooltip>(
-      find.descendant(
-        of: find.byKey(const ValueKey('world-category-more-dev')),
-        matching: find.byType(Tooltip),
-      ),
+    await tester.tap(
+      find.byKey(const ValueKey('world-category-more-research')),
     );
-    expect(categoryTooltip.message, '分类操作');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('上移'));
+    await tester.pumpAndSettle();
+    expect((await repository.getCategories()).first.id, 'research');
+
+    await tester.tap(find.byKey(const ValueKey('world-category-more-dev')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '工程');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('工程'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('world-category-more-dev')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除分类'));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('未分类'), findsOneWidget);
+    expect(find.byKey(const ValueKey('world-category-dev')), findsNothing);
+    expect(find.byKey(const ValueKey('world-category-null')), findsOneWidget);
+    expect(repository.events.single.categoryId, isNull);
+    await openDetail(tester, null);
     expect(find.byKey(const ValueKey('world-node-A')), findsOneWidget);
   });
 
-  testWidgets(
-    'World remembers Category collapse preferences across navigation and app recreation',
-    (tester) async {
-      final preferences = InMemoryWorldCategoryCollapseStore();
-      final repository =
-          MemoryRepository([
-              event(
-                'research-event',
-                EventStatus.pending,
-                categoryId: 'research',
-                order: 0,
-              ),
-              event(
-                'life-event',
-                EventStatus.pending,
-                categoryId: 'life',
-                order: 1,
-              ),
-              event('uncategorized-event', EventStatus.pending, order: 2),
-            ])
-            ..categories.addAll([
-              Category(
-                id: 'research',
-                name: '科研',
-                sortOrder: 0,
-                createdAt: now,
-                updatedAt: now,
-              ),
-              Category(
-                id: 'life',
-                name: '生活起居',
-                sortOrder: 1,
-                createdAt: now,
-                updatedAt: now,
-              ),
-            ]);
-
-      Future<void> openWorld() async {
-        await tester.tap(find.text('世界'));
-        await tester.pumpAndSettle();
-      }
-
-      await tester.pumpWidget(
-        JaxApp(
-          repository: repository,
-          now: () => now,
-          worldCategoryCollapseStore: preferences,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await openWorld();
-
-      // Every previously unseen section, including the virtual 未分类 section,
-      // starts expanded.
-      expect(find.byKey(const ValueKey('world-node-research-event')), findsOne);
-      expect(find.byKey(const ValueKey('world-node-life-event')), findsOne);
-      expect(
-        find.byKey(const ValueKey('world-node-uncategorized-event')),
-        findsOne,
-      );
-
-      await tester.tap(
-        find.byKey(const ValueKey('world-category-toggle-research')),
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('world-category-toggle-null')),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('world-node-research-event')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('world-node-uncategorized-event')),
-        findsNothing,
-      );
-      expect(find.byKey(const ValueKey('world-node-life-event')), findsOne);
-
-      await tester.tap(find.text('今日'));
-      await tester.pumpAndSettle();
-      await openWorld();
-      expect(
-        find.byKey(const ValueKey('world-node-research-event')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('world-node-uncategorized-event')),
-        findsNothing,
-      );
-
-      // A fresh application state reads the same persisted preference store.
-      await tester.pumpWidget(
-        JaxApp(
-          repository: repository,
-          now: () => now,
-          worldCategoryCollapseStore: preferences,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await openWorld();
-      expect(
-        find.byKey(const ValueKey('world-node-research-event')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('world-node-uncategorized-event')),
-        findsNothing,
-      );
-
-      // Expanding again persists too; rename preserves the identity-based key.
-      await tester.tap(
-        find.byKey(const ValueKey('world-category-toggle-research')),
-      );
-      await tester.pumpAndSettle();
-      repository.categories[0] = repository.categories[0].copyWith(
-        name: '科研（新名称）',
-      );
-      await tester.pumpWidget(
-        JaxApp(
-          repository: repository,
-          now: () => now,
-          worldCategoryCollapseStore: preferences,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await openWorld();
-      expect(find.text('科研（新名称）'), findsOne);
-      expect(find.byKey(const ValueKey('world-node-research-event')), findsOne);
-
-      // A newly created identity has no preference and therefore starts open.
-      repository.categories.add(
-        Category(
-          id: 'new',
-          name: '新分类',
-          sortOrder: 2,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
-      repository.events.add(
-        event('new-event', EventStatus.pending, categoryId: 'new', order: 3),
-      );
-      await tester.pumpWidget(
-        JaxApp(
-          repository: repository,
-          now: () => now,
-          worldCategoryCollapseStore: preferences,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await openWorld();
-      expect(find.byKey(const ValueKey('world-node-new-event')), findsOne);
-    },
-  );
+  testWidgets('narrow overview uses two columns and detail does not overflow', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+    const longCategory = '这是一个很长的开发项目分类名称用于验证小屏';
+    const longEvent = '这是一个很长的深层事件名称用于验证世界页不会溢出';
+    final repository =
+        MemoryRepository([
+            event(
+              'root',
+              EventStatus.pending,
+              name: longEvent,
+              categoryId: 'dev',
+            ),
+            event(
+              'child',
+              EventStatus.running,
+              name: longEvent,
+              parent: 'root',
+            ),
+          ])
+          ..categories.addAll([
+            category('dev', longCategory, 0),
+            category('research', '科研', 1),
+          ]);
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await openWorld(tester);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('world-category-dev'))).dy,
+      tester
+          .getTopLeft(find.byKey(const ValueKey('world-category-research')))
+          .dy,
+    );
+    expect(tester.takeException(), isNull);
+    await openDetail(tester, 'dev');
+    expect(find.text(longEvent), findsNWidgets(2));
+    expect(find.text('正在执行'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

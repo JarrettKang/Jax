@@ -131,6 +131,7 @@
 - F6.1 新增独立 `categories` 表和 root Event nullable `category_id`，schema 由 v5 升级到 v6；旧 Event 迁移后全部进入虚拟“未分类”，不创建系统 Category 记录。迁移必须保留 hierarchy、sort order、状态、run_segments 和历史事实，并在临时库及双端 Debug 验证。
 - Category Core 规则包括名称校验、唯一名称、CRUD、独立排序、删除归还未分类、root assignment，以及 child→root 继承 / root→child 清除直接 category。World UI 只派生 descendants 的所属 Category，不复制 category_id。
 - F6.2 测试策略新增 Category Core/Data/migration/World Widget 覆盖；继续执行完整自动化回归、`flutter analyze`、Windows Debug 和 Android Emulator Debug，真机不参与 migration，不生成 Release。
+- F6.3 World presentation 改为 Category overview → Category detail 两层结构；overview 响应式展示派生的 Event/root 数量及 running Category 轻量状态，detail 原样复用高密度 hierarchy，并从当前 Category 上下文创建 root Event。旧 Category collapse preference 保留为兼容数据但不再参与 UI，不修改 schema。
 - F4.3 状态：已完成。提交后 `flutter analyze` 和全部 122 项 Core/Data/Widget 自动化测试通过；Windows v0.1/v0.2 Debug 验收通过且普通 Debug 产物已恢复、无进程或文件锁残留；Android 模拟器 v0.1、真实 sqflite 恢复契约、v2→v4 migration 和 v0.2 层级/恢复 Debug 工作流全部通过。schema 保持 v4，未连接或修改 Android 真机，未生成任何 Release。F4 形成新的稳定 Debug 基线。
 
 ## 8. F7：日/周时间复盘

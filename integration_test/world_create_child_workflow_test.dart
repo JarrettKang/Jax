@@ -91,6 +91,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('world-category-open-research')),
+    );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('world-more-root')));
     await tester.pumpAndSettle();
@@ -115,6 +119,10 @@ void main() {
     expect(await repository.getEventDayPlans('2026-08-28'), isEmpty);
     expect(find.byKey(const ValueKey('world-node-new-child')), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('world-back-overview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('world-category-open-null')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('world-more-completed')));
     await tester.pumpAndSettle();
     expect(

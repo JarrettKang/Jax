@@ -282,9 +282,10 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 
 ### 10.8 v0.2 F6：世界结构视图
 
-- 新增“世界”主栏目，与“事件”（当前未完成工作）和“记录”（已完成历史）职责区分；世界展示全部 pending、paused、running、waiting、completed Event。
-- 世界直接复用现有 hierarchy 与 sibling ordering 构造树状视图；completed Event 只改变 status，不从树中移走、不自动沉底、不打散层级或历史事实。
-- 有下层的节点支持世界页 session 内展开/折叠；折叠状态不持久化，不新增数据库字段。状态图标沿用事件页和首页的状态视觉语言。
+- 新增“世界”主栏目，与“今日”和“记录”职责区分；第一层按用户顺序展示 Category 总览，进入某个 Category 后，第二层展示该分区全部 pending、paused、running、waiting、completed Event 的完整结构。
+- Category 总览以响应式卡片展示 Event 总数、顶级 Event 数量，并对包含唯一 running Event 的 Category 作轻量强调；这些信息从当前 hierarchy 实时派生，不持久化为统计事实。
+- Category detail 直接复用现有 hierarchy 与 sibling ordering 构造树状视图；completed Event 只改变 status，不从树中移走、不自动沉底、不打散层级或历史事实。
+- 有下层的 Event 节点支持 World detail session 内展开/折叠，不新增 Event 数据库字段。状态图标沿用今日和首页的状态视觉语言。
 - 世界以结构浏览为主，操作为辅；层级详情、上移、下移、编辑继续调用既有 Core/UI 业务入口，不能绕过层级、排序、删除和单 running 约束。
 
 ### 10.9 v0.2 F6.1：世界结构状态
@@ -298,7 +299,9 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - Category 是独立于 Event hierarchy 的一级世界分区；只有顶级 Event 直接拥有一个 nullable Category，所有 descendants 通过当前顶级祖先继承分类。
 - 系统提供不可编辑的虚拟“未分类”分组；用户 Category 支持创建、重命名、删除和独立排序。删除 Category 只将所属 roots 归入未分类，不删除 Event 或破坏 hierarchy。
 - hierarchy 移动到下层时清除旧的直接 Category；下层解除关系成为新 root 时继承原 root Category。Category 不拥有 status、duration、run_segments、completion 或 Category 状态。
-- World 按 Category 顺序展示 root trees，分类折叠与 Event tree 折叠分别为 UI session 状态，不持久化；Event sibling ordering 在每个分类内保持原有相对顺序。
+- World overview 按 Category 用户顺序从左到右、从上到下展示卡片；有未分类 root Event 时追加虚拟“未分类”卡片，空用户 Category 仍显示。Category detail 只展示该 Category 的 root trees 与 descendants，Event sibling ordering 保持原有相对顺序。
+- 从 Category detail 新建 root Event 时直接采用当前 Category；从虚拟“未分类”detail 创建时 `category_id` 保持 null。下层 Event 继续从父 Event 菜单创建并继承 root Category；Routine 不进入 World。
+- 两层结构不再提供 Category 展开/折叠 UI；既有 Category collapse preference 作为无害兼容数据保留但不再参与 World 展示，不为此增加 migration。Event tree 的 session 内展开/折叠继续保留。
 
 ### 10.11 v0.2 F7：时间复盘
 

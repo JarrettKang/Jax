@@ -10,7 +10,16 @@ import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('creates an event without exposing its id', (tester) async {
-    final repository = MemoryRepository();
+    final repository = MemoryRepository()
+      ..categories.add(
+        Category(
+          id: 'inbox',
+          name: '收集箱',
+          sortOrder: 0,
+          createdAt: DateTime.utc(2026, 8, 24),
+          updatedAt: DateTime.utc(2026, 8, 24),
+        ),
+      );
     await tester.pumpWidget(
       JaxApp(
         repository: repository,
@@ -32,7 +41,16 @@ void main() {
   testWidgets('shows validation and does not create an empty event', (
     tester,
   ) async {
-    final repository = MemoryRepository();
+    final repository = MemoryRepository()
+      ..categories.add(
+        Category(
+          id: 'inbox',
+          name: '收集箱',
+          sortOrder: 0,
+          createdAt: DateTime.utc(2026, 8, 24),
+          updatedAt: DateTime.utc(2026, 8, 24),
+        ),
+      );
     await tester.pumpWidget(JaxApp(repository: repository));
     await tester.pumpAndSettle();
     await openEventsPage(tester);
@@ -66,12 +84,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('world-new-event')));
     await tester.pumpAndSettle();
 
-    expect(find.text('分类'), findsOneWidget);
+    expect(find.text('由当前分类确定'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '测试 Yukawa');
-    await tester.tap(find.byKey(const ValueKey('world-create-category')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('科研').last);
-    await tester.pumpAndSettle();
     await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
 
@@ -234,9 +248,6 @@ void main() {
     await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('world-new-event')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('world-create-category')));
-    await tester.pumpAndSettle();
-
     expect(find.text(longName), findsWidgets);
     expect(tester.takeException(), isNull);
   });

@@ -67,8 +67,7 @@ void main() {
       await tester.scrollUntilVisible(action, 100);
       expect(action, findsOneWidget);
     }
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
+    await openEventsPage(tester);
     final newEvent = find.byKey(const ValueKey('world-new-event'));
     await tester.tap(newEvent);
     await tester.pumpAndSettle();

@@ -25,54 +25,15 @@ class WorldPage extends StatefulWidget {
 }
 
 class _WorldPageState extends State<WorldPage> {
-  final Set<String> _collapsed = {};
-  var _preferencesReady = false;
-  Future<void> _preferenceWriteTail = Future.value();
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCollapsedCategories();
-  }
-
-  Future<void> _loadCollapsedCategories() async {
-    Set<String> collapsed = const {};
-    try {
-      collapsed = await widget.worldCategoryCollapseStore
-          .loadCollapsedSectionKeys();
-    } catch (_) {
-      // A preference read must not prevent World from using its compatible
-      // default: all sections expanded.
-    }
-    if (!mounted) return;
-    setState(() {
-      _collapsed.addAll(collapsed);
-      _preferencesReady = true;
-    });
-  }
-
-  void _toggleCategory(String? categoryId) {
-    final key = WorldCategoryCollapseStore.sectionKey(categoryId);
-    final collapsed = !_collapsed.contains(key);
-    setState(() {
-      if (collapsed) {
-        _collapsed.add(key);
-      } else {
-        _collapsed.remove(key);
-      }
-    });
-    _preferenceWriteTail = _preferenceWriteTail.then<void>(
-      (_) => widget.worldCategoryCollapseStore.setCollapsed(key, collapsed),
-      onError: (_, _) =>
-          widget.worldCategoryCollapseStore.setCollapsed(key, collapsed),
-    );
-  }
+  final Set<String> _collapsedEvents = {};
+  var _showingDetail = false;
+  String? _selectedCategoryId;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
-      if (widget.controller.loading || !_preferencesReady) {
+      if (widget.controller.loading) {
         return const Center(child: CircularProgressIndicator());
       }
       final roots = widget.controller.worldEvents
@@ -93,119 +54,210 @@ class _WorldPageState extends State<WorldPage> {
             : null;
         groups.putIfAbsent(groupId, () => []).add(event);
       }
-      final keys = <String?>[
+      final overviewKeys = <String?>[
         ...widget.controller.categories.map((c) => c.id),
         if (groups.containsKey(null)) null,
       ];
-      return ListView(
-        key: const ValueKey('world-tree'),
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  key: const ValueKey('world-new-event'),
-                  onPressed: () => _createTopLevelEvent(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新建事件'),
-                ),
-                FilledButton.tonalIcon(
-                  key: const ValueKey('world-new-category'),
-                  onPressed: () => _createCategory(context),
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                  label: const Text('新建分类'),
-                ),
-              ],
-            ),
-          ),
-          for (final key in keys)
-            if (key != null || groups[key]?.isNotEmpty == true) ...[
-              _header(context, key, categoriesById[key]),
-              if (!_collapsed.contains(
-                WorldCategoryCollapseStore.sectionKey(key),
-              ))
-                for (final root in groups[key] ?? const <JaxEvent>[])
-                  ..._tree(context, root),
-            ],
-        ],
-      );
+      if (_showingDetail &&
+          _selectedCategoryId != null &&
+          !categoriesById.containsKey(_selectedCategoryId)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _leaveDetail();
+        });
+        return _overview(context, overviewKeys, groups, categoriesById);
+      }
+      return _showingDetail
+          ? _detail(
+              context,
+              _selectedCategoryId,
+              categoriesById[_selectedCategoryId],
+              groups[_selectedCategoryId] ?? const <JaxEvent>[],
+            )
+          : _overview(context, overviewKeys, groups, categoriesById);
     },
   );
 
-  Widget _header(BuildContext c, String? id, Category? cat) {
-    final i = cat == null ? -1 : widget.controller.categories.indexOf(cat);
-    final k = WorldCategoryCollapseStore.sectionKey(id);
-    final colors = Theme.of(c).colorScheme;
-    return Container(
-      key: ValueKey('world-category-$id'),
-      margin: const EdgeInsets.only(top: 24, bottom: 8),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+  Widget _overview(
+    BuildContext context,
+    List<String?> keys,
+    Map<String?, List<JaxEvent>> groups,
+    Map<String, Category> categoriesById,
+  ) => ListView(
+    key: const ValueKey('world-overview'),
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+    children: [
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.tonalIcon(
+          key: const ValueKey('world-new-category'),
+          onPressed: () => _createCategory(context),
+          icon: const Icon(Icons.create_new_folder_outlined),
+          label: const Text('新建分类'),
+        ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(4, 4, 0, 6),
-        leading: IconButton(
-          key: ValueKey('world-category-toggle-$id'),
-          tooltip: _collapsed.contains(k) ? '展开分类' : '折叠分类',
-          icon: Icon(
-            _collapsed.contains(k) ? Icons.chevron_right : Icons.expand_more,
-          ),
-          onPressed: () => _toggleCategory(id),
-        ),
-        title: Text(
-          cat?.name ?? '未分类',
-          style: Theme.of(c).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        trailing: cat == null
-            ? null
-            : Opacity(
-                opacity: .62,
-                child: PopupMenuButton<_CatAction>(
-                  key: ValueKey('world-category-more-$id'),
-                  tooltip: '分类操作',
-                  onSelected: (a) => _catAction(c, cat, i, a),
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: _CatAction.rename,
-                      child: ListTile(
-                        leading: Icon(Icons.edit),
-                        title: Text('重命名'),
-                      ),
-                    ),
-                    if (i > 0)
-                      const PopupMenuItem(
-                        value: _CatAction.up,
-                        child: ListTile(
-                          leading: Icon(Icons.arrow_upward),
-                          title: Text('上移'),
-                        ),
-                      ),
-                    if (i < widget.controller.categories.length - 1)
-                      const PopupMenuItem(
-                        value: _CatAction.down,
-                        child: ListTile(
-                          leading: Icon(Icons.arrow_downward),
-                          title: Text('下移'),
-                        ),
-                      ),
-                    const PopupMenuItem(
-                      value: _CatAction.delete,
-                      child: ListTile(
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('删除分类'),
-                      ),
-                    ),
-                  ],
-                ),
+      if (keys.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 72),
+          child: Center(child: Text('你的世界还没有分类')),
+        )
+      else ...[
+        const SizedBox(height: 20),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = (constraints.maxWidth / 260).ceil().clamp(1, 4);
+            final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.2;
+            return GridView.builder(
+              key: const ValueKey('world-category-grid'),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: largeText ? .8 : 1.25,
               ),
+              itemCount: keys.length,
+              itemBuilder: (context, index) {
+                final id = keys[index];
+                final category = id == null ? null : categoriesById[id];
+                final roots = groups[id] ?? const <JaxEvent>[];
+                final eventCount = roots.fold<int>(
+                  0,
+                  (count, root) => count + 1 + _descendantCount(root.id),
+                );
+                final active = _categoryContainsRunning(roots);
+                return _CategoryOverviewCard(
+                  key: ValueKey('world-category-$id'),
+                  categoryId: id,
+                  name: category?.name ?? '未分类',
+                  eventCount: eventCount,
+                  rootCount: roots.length,
+                  active: active,
+                  onTap: () => _enterDetail(id),
+                  menu: category == null
+                      ? null
+                      : _categoryMenu(
+                          context,
+                          category,
+                          widget.controller.categories.indexOf(category),
+                        ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    ],
+  );
+
+  Widget _detail(
+    BuildContext context,
+    String? categoryId,
+    Category? category,
+    List<JaxEvent> roots,
+  ) => ListView(
+    key: const ValueKey('world-tree'),
+    padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+    children: [
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          TextButton.icon(
+            key: const ValueKey('world-back-overview'),
+            onPressed: _leaveDetail,
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('世界'),
+          ),
+          const Icon(Icons.chevron_right, size: 18),
+          Text(
+            category?.name ?? '未分类',
+            key: const ValueKey('world-detail-title'),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
-    );
-  }
+      const SizedBox(height: 12),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(
+          key: const ValueKey('world-new-event'),
+          onPressed: () => _createTopLevelEvent(context, categoryId),
+          icon: const Icon(Icons.add),
+          label: const Text('新建事件'),
+        ),
+      ),
+      if (roots.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 72),
+          child: Center(child: Text('这个分类还没有事件')),
+        )
+      else ...[
+        const SizedBox(height: 16),
+        for (final root in roots) ..._tree(context, root),
+      ],
+    ],
+  );
+
+  Widget _categoryMenu(BuildContext context, Category category, int index) =>
+      PopupMenuButton<_CatAction>(
+        key: ValueKey('world-category-more-${category.id}'),
+        tooltip: '分类操作',
+        onSelected: (action) => _catAction(context, category, index, action),
+        itemBuilder: (_) => [
+          const PopupMenuItem(
+            value: _CatAction.rename,
+            child: ListTile(leading: Icon(Icons.edit), title: Text('重命名')),
+          ),
+          if (index > 0)
+            const PopupMenuItem(
+              value: _CatAction.up,
+              child: ListTile(
+                leading: Icon(Icons.arrow_upward),
+                title: Text('上移'),
+              ),
+            ),
+          if (index < widget.controller.categories.length - 1)
+            const PopupMenuItem(
+              value: _CatAction.down,
+              child: ListTile(
+                leading: Icon(Icons.arrow_downward),
+                title: Text('下移'),
+              ),
+            ),
+          const PopupMenuItem(
+            value: _CatAction.delete,
+            child: ListTile(
+              leading: Icon(Icons.delete_outline),
+              title: Text('删除分类'),
+            ),
+          ),
+        ],
+      );
+
+  void _enterDetail(String? categoryId) => setState(() {
+    _selectedCategoryId = categoryId;
+    _showingDetail = true;
+  });
+
+  void _leaveDetail() => setState(() {
+    _showingDetail = false;
+    _selectedCategoryId = null;
+  });
+
+  int _descendantCount(String rootId) => widget.controller.worldEvents
+      .where((event) => event.id != rootId && _under(event, rootId))
+      .length;
+
+  bool _categoryContainsRunning(List<JaxEvent> roots) => roots.any(
+    (root) => widget.controller.worldEvents.any(
+      (event) =>
+          event.status == EventStatus.running &&
+          (event.id == root.id || _under(event, root.id)),
+    ),
+  );
 
   Iterable<Widget> _tree(BuildContext c, JaxEvent root) {
     final result = <JaxEvent>[];
@@ -218,7 +270,7 @@ class _WorldPageState extends State<WorldPage> {
         continue;
       }
       result.add(e);
-      if (_collapsed.contains(e.id)) hidden.add(e.id);
+      if (_collapsedEvents.contains(e.id)) hidden.add(e.id);
     }
     return [for (final e in result) _node(c, e)];
   }
@@ -380,16 +432,16 @@ class _WorldPageState extends State<WorldPage> {
         leading: child
             ? IconButton(
                 key: ValueKey('world-toggle-${e.id}'),
-                tooltip: _collapsed.contains(e.id) ? '展开下层事件' : '折叠下层事件',
+                tooltip: _collapsedEvents.contains(e.id) ? '展开下层事件' : '折叠下层事件',
                 icon: Icon(
-                  _collapsed.contains(e.id)
+                  _collapsedEvents.contains(e.id)
                       ? Icons.chevron_right
                       : Icons.expand_more,
                 ),
                 onPressed: () => setState(
-                  () => _collapsed.contains(e.id)
-                      ? _collapsed.remove(e.id)
-                      : _collapsed.add(e.id),
+                  () => _collapsedEvents.contains(e.id)
+                      ? _collapsedEvents.remove(e.id)
+                      : _collapsedEvents.add(e.id),
                 ),
               )
             : const SizedBox(width: 48, height: 48),
@@ -523,8 +575,8 @@ class _WorldPageState extends State<WorldPage> {
     if (n != null) await widget.controller.createCategory(n);
   }
 
-  Future<void> _createTopLevelEvent(BuildContext c) =>
-      _showCreateEventDialog(c);
+  Future<void> _createTopLevelEvent(BuildContext c, String? categoryId) =>
+      _showCreateEventDialog(c, rootCategoryId: categoryId);
 
   Future<void> _createChildEvent(BuildContext c, JaxEvent parent) =>
       _showCreateEventDialog(c, parent: parent);
@@ -532,10 +584,10 @@ class _WorldPageState extends State<WorldPage> {
   Future<void> _showCreateEventDialog(
     BuildContext c, {
     JaxEvent? parent,
+    String? rootCategoryId,
   }) async {
     final text = TextEditingController();
     String? error;
-    String? selectedRootCategoryId;
     await showDialog<void>(
       context: c,
       builder: (dialogContext) => StatefulBuilder(
@@ -574,14 +626,11 @@ class _WorldPageState extends State<WorldPage> {
                     selectorKey: const ValueKey('world-create-category'),
                     categories: widget.controller.categories,
                     value: parent == null
-                        ? selectedRootCategoryId
+                        ? rootCategoryId
                         : inheritedCategoryId,
-                    enabled: parent == null,
-                    helperText: parent == null ? null : '由上层事件继承',
-                    onChanged: (value) => setDialogState(() {
-                      selectedRootCategoryId = value;
-                      error = null;
-                    }),
+                    enabled: false,
+                    helperText: parent == null ? '由当前分类确定' : '由上层事件继承',
+                    onChanged: (_) {},
                   ),
                 ],
               ),
@@ -596,7 +645,7 @@ class _WorldPageState extends State<WorldPage> {
                   final result = await widget.controller.create(
                     text.text,
                     parentEventId: parent?.id,
-                    categoryId: parent == null ? selectedRootCategoryId : null,
+                    categoryId: parent == null ? rootCategoryId : null,
                   );
                   if (!context.mounted) return;
                   if (result == null) {
@@ -711,6 +760,135 @@ class _WorldPageState extends State<WorldPage> {
       ),
     );
     return r;
+  }
+}
+
+class _CategoryOverviewCard extends StatefulWidget {
+  const _CategoryOverviewCard({
+    required super.key,
+    required this.categoryId,
+    required this.name,
+    required this.eventCount,
+    required this.rootCount,
+    required this.active,
+    required this.onTap,
+    required this.menu,
+  });
+
+  final String? categoryId;
+  final String name;
+  final int eventCount;
+  final int rootCount;
+  final bool active;
+  final VoidCallback onTap;
+  final Widget? menu;
+
+  @override
+  State<_CategoryOverviewCard> createState() => _CategoryOverviewCardState();
+}
+
+class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
+  var _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Card(
+        elevation: 0,
+        color: widget.active
+            ? colors.primaryContainer.withValues(alpha: .24)
+            : _hovering
+            ? colors.surfaceContainerHighest.withValues(alpha: .68)
+            : colors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: widget.active
+                ? colors.primary.withValues(alpha: .72)
+                : _hovering
+                ? colors.outline.withValues(alpha: .48)
+                : colors.outlineVariant,
+            width: widget.active ? 1.5 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InkWell(
+                key: ValueKey('world-category-open-${widget.categoryId}'),
+                onTap: widget.onTap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (widget.active) ...[
+                            Icon(
+                              Icons.circle,
+                              key: ValueKey(
+                                'world-category-active-${widget.categoryId}',
+                              ),
+                              size: 8,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: widget.menu == null ? 0 : 28,
+                              ),
+                              child: Text(
+                                widget.name,
+                                key: ValueKey(
+                                  'world-category-name-${widget.categoryId}',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${widget.eventCount} 个事件',
+                        key: ValueKey(
+                          'world-category-event-count-${widget.categoryId}',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${widget.rootCount} 个顶级事件',
+                        key: ValueKey(
+                          'world-category-root-count-${widget.categoryId}',
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (widget.menu case final menu?)
+              Positioned(top: 4, right: 4, child: menu),
+          ],
+        ),
+      ),
+    );
   }
 }
 

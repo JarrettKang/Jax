@@ -6,6 +6,7 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   final time = DateTime.utc(2026, 8, 25, 8);
@@ -61,8 +62,7 @@ void main() {
           ]);
     await tester.pumpWidget(JaxApp(repository: repository, now: () => time));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
+    await openEventsPage(tester);
 
     expect(find.text('完成项目'), findsOneWidget);
     expect(find.text('先完成项目'), findsOneWidget);

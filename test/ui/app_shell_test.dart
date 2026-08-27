@@ -10,8 +10,9 @@ void main() {
     await tester.pumpWidget(JaxApp(repository: MemoryRepository()));
     await tester.pumpAndSettle();
     expect(find.text('Jax'), findsOneWidget);
-    await openEventsPage(tester);
-    expect(find.byKey(const ValueKey('world-new-event')), findsOneWidget);
+    await openWorldOverview(tester);
+    expect(find.byKey(const ValueKey('world-new-category')), findsOneWidget);
+    expect(find.text('你的世界还没有分类'), findsOneWidget);
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
     expect(find.text('这一天没有记录到执行时间'), findsOneWidget);

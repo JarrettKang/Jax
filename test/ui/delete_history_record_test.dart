@@ -5,6 +5,7 @@ import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 
 import '../support/memory_repository.dart';
+import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('World deletes completed history only after confirmation', (
@@ -24,8 +25,7 @@ void main() {
     ]);
     await tester.pumpWidget(JaxApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('世界'));
-    await tester.pumpAndSettle();
+    await openEventsPage(tester);
     await tester.tap(find.byKey(const ValueKey('world-more-done')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('world-delete-history-done')));
