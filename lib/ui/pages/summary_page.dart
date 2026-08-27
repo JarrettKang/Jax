@@ -12,7 +12,16 @@ class SummaryPage extends StatefulWidget {
 
 class _SummaryPageState extends State<SummaryPage> {
   var _week = false;
-  DateTime _anchor = DateTime.now();
+  late DateTime _anchor;
+
+  @override
+  void initState() {
+    super.initState();
+    // Summary navigation must use the app's injected clock.  Besides keeping
+    // the page aligned with the 23:00 Jax-day boundary, this avoids a brief
+    // mismatch between the visible "today" and the data service after reload.
+    _anchor = widget.controller.currentJaxDay.displayDate;
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(

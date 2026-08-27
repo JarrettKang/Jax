@@ -109,7 +109,7 @@ class _WorldPageState extends State<WorldPage> {
               children: [
                 FilledButton.icon(
                   key: const ValueKey('world-new-event'),
-                  onPressed: () => _createEvent(context),
+                  onPressed: () => _createTopLevelEvent(context),
                   icon: const Icon(Icons.add),
                   label: const Text('新建事件'),
                 ),
@@ -316,6 +316,15 @@ class _WorldPageState extends State<WorldPage> {
             title: Text('设为等待'),
           ),
         ),
+      if (e.status != EventStatus.completed)
+        PopupMenuItem(
+          key: ValueKey('world-create-child-${e.id}'),
+          value: _WorldAction.createChild,
+          child: const ListTile(
+            leading: Icon(Icons.add),
+            title: Text('新建下层事件'),
+          ),
+        ),
       PopupMenuItem(
         key: ValueKey('hierarchy-${e.id}'),
         value: _WorldAction.hierarchy,
@@ -421,6 +430,8 @@ class _WorldPageState extends State<WorldPage> {
     switch (a) {
       case _WorldAction.hierarchy:
         showEventHierarchyDialog(c, controller: widget.controller, event: e);
+      case _WorldAction.createChild:
+        _createChildEvent(c, e);
       case _WorldAction.edit:
         _edit(c, e);
       case _WorldAction.category:
@@ -512,23 +523,28 @@ class _WorldPageState extends State<WorldPage> {
     if (n != null) await widget.controller.createCategory(n);
   }
 
-  Future<void> _createEvent(BuildContext c) async {
+  Future<void> _createTopLevelEvent(BuildContext c) =>
+      _showCreateEventDialog(c);
+
+  Future<void> _createChildEvent(BuildContext c, JaxEvent parent) =>
+      _showCreateEventDialog(c, parent: parent);
+
+  Future<void> _showCreateEventDialog(
+    BuildContext c, {
+    JaxEvent? parent,
+  }) async {
     final text = TextEditingController();
     String? error;
-    String? parentId;
     String? selectedRootCategoryId;
     await showDialog<void>(
       context: c,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final parents = widget.controller.worldEvents
-              .where((event) => event.status != EventStatus.completed)
-              .toList(growable: false);
-          final inheritedCategoryId = parentId == null
+          final inheritedCategoryId = parent == null
               ? null
-              : _rootCategoryId(parentId!);
+              : _rootCategoryId(parent.id);
           return AlertDialog(
-            title: const Text('新建事件'),
+            title: Text(parent == null ? '新建事件' : '新建下层事件'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -542,40 +558,26 @@ class _WorldPageState extends State<WorldPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    key: const ValueKey('world-create-parent'),
-                    initialValue: parentId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: '上层事件'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('无（顶级事件）'),
+                  if (parent != null) ...[
+                    InputDecorator(
+                      key: const ValueKey('world-create-child-parent'),
+                      decoration: const InputDecoration(labelText: '上层事件'),
+                      child: Text(
+                        parent.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      ...parents.map(
-                        (event) => DropdownMenuItem(
-                          value: event.id,
-                          child: Text(
-                            event.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) => setDialogState(() {
-                      parentId = value;
-                      error = null;
-                    }),
-                  ),
-                  const SizedBox(height: 12),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   CategorySelector(
                     selectorKey: const ValueKey('world-create-category'),
                     categories: widget.controller.categories,
-                    value: parentId == null
+                    value: parent == null
                         ? selectedRootCategoryId
                         : inheritedCategoryId,
-                    enabled: parentId == null,
-                    helperText: parentId == null ? null : '由上层事件继承',
+                    enabled: parent == null,
+                    helperText: parent == null ? null : '由上层事件继承',
                     onChanged: (value) => setDialogState(() {
                       selectedRootCategoryId = value;
                       error = null;
@@ -593,10 +595,8 @@ class _WorldPageState extends State<WorldPage> {
                 onPressed: () async {
                   final result = await widget.controller.create(
                     text.text,
-                    parentEventId: parentId,
-                    categoryId: parentId == null
-                        ? selectedRootCategoryId
-                        : null,
+                    parentEventId: parent?.id,
+                    categoryId: parent == null ? selectedRootCategoryId : null,
                   );
                   if (!context.mounted) return;
                   if (result == null) {
@@ -795,6 +795,7 @@ enum _WorldAction {
   pause,
   complete,
   wait,
+  createChild,
   delete,
   hierarchy,
   edit,

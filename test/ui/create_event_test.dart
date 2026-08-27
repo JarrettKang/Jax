@@ -81,7 +81,7 @@ void main() {
   });
 
   testWidgets(
-    'child creation shows inherited Category and stores no direct one',
+    'creates a child from its parent menu with inherited Category and no plan',
     (tester) async {
       final parent = JaxEvent(
         id: 'parent',
@@ -91,7 +91,16 @@ void main() {
         updatedAt: DateTime.utc(2026, 8, 24),
         categoryId: 'research',
       );
-      final repository = MemoryRepository([parent])
+      final existingChild = JaxEvent(
+        id: 'existing-child',
+        name: '已有下层',
+        status: EventStatus.pending,
+        parentEventId: parent.id,
+        sortOrder: 0,
+        createdAt: DateTime.utc(2026, 8, 24),
+        updatedAt: DateTime.utc(2026, 8, 24),
+      );
+      final repository = MemoryRepository([parent, existingChild])
         ..categories.add(
           Category(
             id: 'research',
@@ -106,34 +115,24 @@ void main() {
       );
       await tester.pumpAndSettle();
       await openEventsPage(tester);
-      await tester.tap(find.byKey(const ValueKey('world-new-event')));
+      await tester.tap(find.byKey(const ValueKey('world-more-parent')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('world-create-category')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('科研').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('world-create-parent')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('测试 Yukawa').last);
+      await tester.tap(find.byKey(const ValueKey('world-create-child-parent')));
       await tester.pumpAndSettle();
 
       expect(find.text('由上层事件继承'), findsOneWidget);
       expect(
+        find.byKey(const ValueKey('world-create-child-parent')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const ValueKey('world-create-category')),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey('world-create-parent')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('无（顶级事件）').last);
-      await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('category-value-research')),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey('world-create-parent')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('测试 Yukawa').last);
-      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '测试截断距离');
       await tester.tap(find.text('创建'));
       await tester.pumpAndSettle();
@@ -143,7 +142,68 @@ void main() {
       );
       expect(child.parentEventId, parent.id);
       expect(child.categoryId, isNull);
+      expect(
+        (await repository.getDirectChildren(parent.id))
+            .map((event) => event.id),
+        ['existing-child', 'child-id'],
+      );
+      expect(repository.eventDayPlans, isEmpty);
       expect(find.text('测试截断距离'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'allows arbitrary-depth child creation but not from completed Events',
+    (tester) async {
+      final root = JaxEvent(
+        id: 'root',
+        name: '根事件',
+        status: EventStatus.pending,
+        createdAt: DateTime.utc(2026, 8, 24),
+        updatedAt: DateTime.utc(2026, 8, 24),
+      );
+      final parent = JaxEvent(
+        id: 'parent',
+        name: '中间事件',
+        status: EventStatus.waiting,
+        parentEventId: root.id,
+        createdAt: DateTime.utc(2026, 8, 24),
+        updatedAt: DateTime.utc(2026, 8, 24),
+      );
+      final completed = JaxEvent(
+        id: 'completed',
+        name: '已完成事件',
+        status: EventStatus.completed,
+        createdAt: DateTime.utc(2026, 8, 24),
+        updatedAt: DateTime.utc(2026, 8, 24),
+      );
+      final repository = MemoryRepository([root, parent, completed]);
+      await tester.pumpWidget(
+        JaxApp(repository: repository, newId: () => 'deep-child'),
+      );
+      await tester.pumpAndSettle();
+      await openEventsPage(tester);
+
+      await tester.tap(find.byKey(const ValueKey('world-more-parent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('world-create-child-parent')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '更深一层');
+      await tester.tap(find.text('创建'));
+      await tester.pumpAndSettle();
+
+      expect(
+        repository.events
+            .singleWhere((event) => event.id == 'deep-child')
+            .parentEventId,
+        'parent',
+      );
+      await tester.tap(find.byKey(const ValueKey('world-more-completed')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('world-create-child-completed')),
+        findsNothing,
+      );
     },
   );
 
