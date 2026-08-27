@@ -16,6 +16,8 @@ import 'ui/pages/events_page.dart';
 import 'ui/pages/summary_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/world_page.dart';
+import 'ui/pages/routine_page.dart';
+import 'core/repositories/routine_repository.dart';
 
 ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
@@ -93,6 +95,9 @@ class _JaxAppState extends State<JaxApp> {
 
   Future<AppExitResponse> _handleExitRequest() async {
     try {
+      if (widget.repository case final RoutineRepository routines) {
+        await routines.pauseRunningRoutine(widget.now().toUtc());
+      }
       await _prepareForShutdown();
       return AppExitResponse.exit;
     } catch (_) {
@@ -148,6 +153,7 @@ class _JaxAppState extends State<JaxApp> {
       ),
       EventsPage(controller: _controller),
       WorldPage(controller: _controller),
+      RoutinePage(controller: _controller),
       SummaryPage(controller: _controller),
     ];
 
@@ -215,6 +221,11 @@ class _JaxAppState extends State<JaxApp> {
                             label: Text('世界'),
                           ),
                           NavigationRailDestination(
+                            icon: Icon(Icons.repeat),
+                            selectedIcon: Icon(Icons.repeat_on),
+                            label: Text('日常'),
+                          ),
+                          NavigationRailDestination(
                             icon: Icon(Icons.history_outlined),
                             selectedIcon: Icon(Icons.history),
                             label: Text('记录'),
@@ -246,6 +257,11 @@ class _JaxAppState extends State<JaxApp> {
                         icon: Icon(Icons.account_tree_outlined),
                         selectedIcon: Icon(Icons.account_tree),
                         label: '世界',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.repeat),
+                        selectedIcon: Icon(Icons.repeat_on),
+                        label: '日常',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.history_outlined),

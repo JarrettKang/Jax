@@ -1,14 +1,20 @@
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/category.dart';
+import 'package:jax/core/entities/routine.dart';
 import 'package:jax/core/repositories/event_repository.dart';
+import 'package:jax/core/repositories/routine_repository.dart';
 
-class MemoryRepository implements EventRepository {
+class MemoryRepository implements EventRepository, RoutineRepository {
   MemoryRepository([Iterable<JaxEvent> seed = const []])
     : events = List.of(seed);
   final List<JaxEvent> events;
   final List<RunSegment> segments = [];
   final List<Category> categories = [];
+  final List<Routine> routines = [];
+  final List<RoutineExecution> routineExecutions = [];
+  final List<RoutineRunSegment> routineSegments = [];
   @override
   Future<void> insertEvent(JaxEvent event) async {
     final siblings = events.where(
@@ -37,6 +43,7 @@ class MemoryRepository implements EventRepository {
       events[events.indexWhere((item) => item.id == event.id)] = event;
   @override
   Future<void> startEvent(JaxEvent event, RunSegment segment) async {
+    await pauseRunningRoutine(event.updatedAt);
     await updateEvent(event);
     segments.add(segment);
   }
@@ -191,6 +198,11 @@ class MemoryRepository implements EventRepository {
         events[i] = events[i].copyWith(categoryId: null);
       }
     }
+    for (var i = 0; i < routines.length; i++) {
+      if (routines[i].categoryId == id) {
+        routines[i] = routines[i].copyWith(clearCategory: true);
+      }
+    }
   }
 
   @override
@@ -220,5 +232,92 @@ class MemoryRepository implements EventRepository {
       throw StateError('Category not found');
     }
     await updateEvent(event.copyWith(categoryId: categoryId));
+  }
+
+  @override
+  Future<List<Routine>> getRoutines() async =>
+      List.of(routines)..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  @override
+  Future<void> insertRoutine(Routine r) async {
+    if (routines.any((x) => x.id == r.id)) throw StateError('duplicate');
+    routines.add(r);
+  }
+
+  @override
+  Future<void> updateRoutine(Routine r) async =>
+      routines[routines.indexWhere((x) => x.id == r.id)] = r;
+  @override
+  Future<RoutineExecution?> getRoutineExecution(String id, String day) async =>
+      routineExecutions
+          .where((e) => e.routineId == id && e.occurrenceDate == day)
+          .firstOrNull;
+  @override
+  Future<List<RoutineExecution>> getRoutineExecutions() async =>
+      List.of(routineExecutions);
+  @override
+  Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
+      routineSegments.where((s) => s.executionId == id).toList();
+  @override
+  Future<void> startRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+    DateTime now,
+  ) async {
+    final running = events.where((x) => x.status.name == 'running').firstOrNull;
+    if (running != null) {
+      final open = segments
+          .where((x) => x.eventId == running.id && x.endedAt == null)
+          .firstOrNull;
+      await updateEvent(
+        running.copyWith(status: EventStatus.paused, updatedAt: now),
+      );
+      if (open != null) {
+        segments[segments.indexOf(open)] = open.copyWith(endedAt: now);
+      }
+    }
+    await pauseRunningRoutine(now);
+    final i = routineExecutions.indexWhere((x) => x.id == e.id);
+    if (i < 0) {
+      routineExecutions.add(e);
+    } else {
+      routineExecutions[i] = e;
+    }
+    routineSegments.add(s);
+  }
+
+  @override
+  Future<void> pauseRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+  ) async {
+    await updateRoutineExecutionOnly(e);
+    routineSegments[routineSegments.indexWhere((x) => x.id == s.id)] = s;
+  }
+
+  @override
+  Future<void> completeRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+  ) => pauseRoutineExecution(e, s);
+  @override
+  Future<void> updateRoutineExecutionOnly(RoutineExecution e) async {
+    routineExecutions[routineExecutions.indexWhere((x) => x.id == e.id)] = e;
+  }
+
+  @override
+  Future<void> pauseRunningRoutine(DateTime now) async {
+    final e = routineExecutions
+        .where((x) => x.status == RoutineExecutionStatus.running)
+        .firstOrNull;
+    if (e == null) return;
+    final s = routineSegments
+        .where((x) => x.executionId == e.id && x.endedAt == null)
+        .firstOrNull;
+    await updateRoutineExecutionOnly(
+      e.copyWith(status: RoutineExecutionStatus.paused, updatedAt: now),
+    );
+    if (s != null) {
+      routineSegments[routineSegments.indexOf(s)] = s.copyWith(endedAt: now);
+    }
   }
 }

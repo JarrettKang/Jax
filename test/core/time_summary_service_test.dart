@@ -4,10 +4,59 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/services/time_summary_service.dart';
+import 'package:jax/core/entities/routine.dart';
 
 import '../support/memory_repository.dart';
 
 void main() {
+  test(
+    'combines Event and Routine segments and splits Routine at 23:00',
+    () async {
+      final repo = MemoryRepository();
+      final start = DateTime(2026, 8, 27, 22, 50);
+      repo.routines.add(
+        Routine(
+          id: 'routine',
+          name: '洗澡',
+          recurrence: RoutineRecurrence.daily,
+          weekdayMask: 0,
+          isActive: true,
+          sortOrder: 0,
+          createdAt: start,
+          updatedAt: start,
+        ),
+      );
+      repo.routineExecutions.add(
+        RoutineExecution(
+          id: 'execution',
+          routineId: 'routine',
+          occurrenceDate: '2026-08-27',
+          status: RoutineExecutionStatus.completed,
+          createdAt: start,
+          updatedAt: start,
+          completedAt: DateTime(2026, 8, 27, 23, 20),
+        ),
+      );
+      repo.routineSegments.add(
+        RoutineRunSegment(
+          id: 'segment',
+          executionId: 'execution',
+          startedAt: start,
+          endedAt: DateTime(2026, 8, 27, 23, 20),
+          createdAt: start,
+        ),
+      );
+      final service = TimeSummaryService(repo, () => DateTime(2026, 8, 29));
+      expect(
+        (await service.day(DateTime(2026, 8, 27))).total,
+        const Duration(minutes: 10),
+      );
+      expect(
+        (await service.day(DateTime(2026, 8, 28))).total,
+        const Duration(minutes: 20),
+      );
+    },
+  );
   final base = DateTime(2026, 8, 27);
   JaxEvent event(String id, {String? parent, String? category}) => JaxEvent(
     id: id,

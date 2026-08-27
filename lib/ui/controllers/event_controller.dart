@@ -13,6 +13,9 @@ import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/services/world_display_state_service.dart';
 import '../../core/services/time_summary_service.dart';
 import '../../core/entities/time_summary.dart';
+import '../../core/entities/routine.dart';
+import '../../core/repositories/routine_repository.dart';
+import '../../core/services/routine_service.dart';
 import '../../core/services/category_service.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
@@ -49,6 +52,16 @@ class EventController extends ChangeNotifier {
        _durations = HierarchyDurationService(repository, now: now),
        _worldDisplayStates = const WorldDisplayStateService(),
        _summaries = TimeSummaryService(repository, now),
+       _routineRepository = repository is RoutineRepository
+           ? repository as RoutineRepository
+           : null,
+       _routineService = repository is RoutineRepository
+           ? RoutineService(
+               repository: repository as RoutineRepository,
+               newId: newId,
+               now: now,
+             )
+           : null,
        _categories = CategoryService(
          repository: repository,
          newId: newId,
@@ -72,6 +85,8 @@ class EventController extends ChangeNotifier {
   final HierarchyDurationService _durations;
   final WorldDisplayStateService _worldDisplayStates;
   final TimeSummaryService _summaries;
+  final RoutineRepository? _routineRepository;
+  final RoutineService? _routineService;
   final CategoryService _categories;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
@@ -83,6 +98,9 @@ class EventController extends ChangeNotifier {
   List<JaxEvent> _worldEvents = const [];
   Map<String, WorldDisplayState> _worldStates = const {};
   List<Category> _categoryItems = const [];
+  List<Routine> _routines = const [];
+  final Map<String, RoutineExecution?> _todayExecutions = {};
+  final Map<String, List<RoutineRunSegment>> _routineSegments = {};
   JaxEvent? _runningParent;
   List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
@@ -98,6 +116,21 @@ class EventController extends ChangeNotifier {
   WorldDisplayState worldDisplayStateFor(String eventId) =>
       _worldStates[eventId] ?? WorldDisplayState.pending;
   List<Category> get categories => List.unmodifiable(_categoryItems);
+  List<Routine> get routines => List.unmodifiable(_routines);
+  List<Routine> get todayRoutines => _routines
+      .where((r) => r.isActive && r.appliesTo(_now().toLocal()))
+      .toList();
+  RoutineExecution? executionFor(Routine r) => _todayExecutions[r.id];
+  RoutineExecution? get runningRoutineExecution => _todayExecutions.values
+      .where((e) => e?.status == RoutineExecutionStatus.running)
+      .firstOrNull;
+  Routine? get runningRoutine {
+    final e = runningRoutineExecution;
+    return e == null
+        ? null
+        : _routines.where((r) => r.id == e.routineId).firstOrNull;
+  }
+
   bool get loading => _loading;
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
@@ -164,6 +197,20 @@ class EventController extends ChangeNotifier {
     _worldEvents = _orderTree([..._events, ..._history]);
     _worldStates = _worldDisplayStates.derive(_worldEvents);
     _categoryItems = await _repository.getCategories();
+    if (_routineRepository != null) {
+      _routines = await _routineRepository.getRoutines();
+      _todayExecutions.clear();
+      _routineSegments.clear();
+      final day = RoutineService.occurrence(_now().toLocal());
+      for (final r in _routines) {
+        final e = await _routineRepository.getRoutineExecution(r.id, day);
+        _todayExecutions[r.id] = e;
+        if (e != null) {
+          _routineSegments[e.id] = await _routineRepository
+              .getRoutineRunSegments(e.id);
+        }
+      }
+    }
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
       _hasDirectChildren[event.id] = (await _repository.getDirectChildren(
@@ -260,6 +307,34 @@ class EventController extends ChangeNotifier {
   Future<String?> wait(String id) => _change(() => _wait(id));
   Future<String?> complete(String id) => _change(() => _complete(id));
   Future<String?> restore(String id) => _change(() => _restore(id));
+  Future<String?> createRoutine(
+    String name,
+    String? category,
+    RoutineRecurrence recurrence,
+    int mask,
+  ) => _change(() => _routineService!.create(name, category, recurrence, mask));
+  Future<String?> updateRoutine(
+    Routine r,
+    String name,
+    String? category,
+    RoutineRecurrence recurrence,
+    int mask,
+  ) => _change(
+    () => _routineService!.update(r, name, category, recurrence, mask),
+  );
+  Future<String?> setRoutineActive(Routine r, bool active) =>
+      _change(() => _routineService!.setActive(r, active));
+  Future<String?> startRoutine(Routine r) =>
+      _change(() => _routineService!.start(r, execution: executionFor(r)));
+  Future<String?> pauseRoutine(Routine r) =>
+      _change(() => _routineService!.pause(executionFor(r)!));
+  Future<String?> completeRoutine(Routine r) =>
+      _change(() => _routineService!.complete(executionFor(r)!));
+  Duration routineElapsed(Routine r) =>
+      (_routineSegments[executionFor(r)?.id] ?? const []).fold(
+        Duration.zero,
+        (a, s) => a + s.durationAt(_now()),
+      );
   Future<JaxEvent?> parentOf(String id) => _repository.getParent(id);
   Future<List<JaxEvent>> childrenOf(String id) =>
       _repository.getDirectChildren(id);
@@ -349,7 +424,9 @@ class EventController extends ChangeNotifier {
     });
 
   void _syncTicker() {
-    final running = _events.any((event) => event.status == EventStatus.running);
+    final running =
+        _events.any((event) => event.status == EventStatus.running) ||
+        runningRoutineExecution != null;
     if (running && _ticker == null) {
       _ticker = Timer.periodic(
         const Duration(seconds: 1),

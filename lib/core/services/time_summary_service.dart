@@ -1,12 +1,16 @@
 import '../entities/jax_event.dart';
 import '../entities/time_summary.dart';
 import '../repositories/event_repository.dart';
+import '../repositories/routine_repository.dart';
 
 class TimeSummaryService {
   TimeSummaryService(this._repository, this._now);
 
   final EventRepository _repository;
   final DateTime Function() _now;
+  RoutineRepository? get _routines => _repository is RoutineRepository
+      ? _repository as RoutineRepository
+      : null;
 
   Future<TimeSummary> day(DateTime date) async {
     final localDate = DateTime(date.year, date.month, date.day);
@@ -72,6 +76,30 @@ class TimeSummaryService {
           totals[bucket] =
               (totals[bucket] ?? Duration.zero) +
               overlapEnd.difference(overlapStart);
+        }
+      }
+    }
+    final routineRepository = _routines;
+    if (routineRepository != null) {
+      final routines = await routineRepository.getRoutines();
+      final routineById = {for (final r in routines) r.id: r};
+      for (final execution in await routineRepository.getRoutineExecutions()) {
+        final routine = routineById[execution.routineId];
+        if (routine == null) continue;
+        for (final segment in await routineRepository.getRoutineRunSegments(
+          execution.id,
+        )) {
+          final segmentEnd = (segment.endedAt ?? now).toLocal();
+          final segmentStart = segment.startedAt.toLocal();
+          final overlapStart = segmentStart.isAfter(start)
+              ? segmentStart
+              : start;
+          final overlapEnd = segmentEnd.isBefore(end) ? segmentEnd : end;
+          if (overlapEnd.isAfter(overlapStart)) {
+            totals[routine.categoryId] =
+                (totals[routine.categoryId] ?? Duration.zero) +
+                overlapEnd.difference(overlapStart);
+          }
         }
       }
     }

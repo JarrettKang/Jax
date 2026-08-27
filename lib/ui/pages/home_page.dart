@@ -64,6 +64,7 @@ class _HomePageState extends State<HomePage> {
     animation: widget.controller,
     builder: (context, _) {
       final running = widget.controller.runningEvent;
+      final runningRoutine = widget.controller.runningRoutine;
       final work = widget.controller.homeRunningContext;
       final waiting = widget.controller.homeWaitingItems;
       return SafeArea(
@@ -84,7 +85,9 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 32),
                   if (widget.controller.loading)
                     const Center(child: CircularProgressIndicator())
-                  else if (running == null && waiting.isEmpty)
+                  else if (running == null &&
+                      runningRoutine == null &&
+                      waiting.isEmpty)
                     Card(
                       child: InkWell(
                         key: const ValueKey('home-open-events'),
@@ -97,7 +100,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     )
                   else ...[
-                    if (running == null)
+                    if (running == null && runningRoutine == null)
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
@@ -156,6 +159,39 @@ class _HomePageState extends State<HomePage> {
                                 const _OmissionRow(
                                   key: ValueKey('home-omitted-after'),
                                 ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (runningRoutine != null)
+                      Card(
+                        key: const ValueKey('home-running-routine'),
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '当前正在做',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                runningRoutine.name,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall,
+                              ),
+                              Text(
+                                '日常 · ${widget.controller.categories.where((c) => c.id == runningRoutine.categoryId).firstOrNull?.name ?? '未分类'}',
+                              ),
+                              Text(
+                                widget.controller
+                                    .routineElapsed(runningRoutine)
+                                    .toString()
+                                    .split('.')
+                                    .first,
+                              ),
                             ],
                           ),
                         ),

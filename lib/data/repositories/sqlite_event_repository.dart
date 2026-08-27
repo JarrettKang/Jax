@@ -2,10 +2,12 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/entities/category.dart';
+import '../../core/entities/routine.dart';
 import '../../core/repositories/event_repository.dart';
+import '../../core/repositories/routine_repository.dart';
 import '../database/app_database.dart';
 
-class SqliteEventRepository implements EventRepository {
+class SqliteEventRepository implements EventRepository, RoutineRepository {
   const SqliteEventRepository(this._appDatabase);
   final AppDatabase _appDatabase;
 
@@ -79,6 +81,7 @@ class SqliteEventRepository implements EventRepository {
   @override
   Future<void> startEvent(JaxEvent event, RunSegment segment) async {
     await _appDatabase.database.transaction((transaction) async {
+      await _pauseRunningRoutineIn(transaction, event.updatedAt);
       final running = await transaction.query(
         'events',
         where: 'status = ? AND id != ?',
@@ -550,4 +553,264 @@ class SqliteEventRepository implements EventRepository {
       isUtc: true,
     ),
   );
+
+  @override
+  Future<List<Routine>> getRoutines() async =>
+      (await _appDatabase.database.query(
+        'routines',
+        orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+      )).map(_routineFromRow).toList();
+  @override
+  Future<void> insertRoutine(Routine r) async =>
+      _appDatabase.database.insert('routines', _routineToRow(r));
+  @override
+  Future<void> updateRoutine(Routine r) async {
+    if (await _appDatabase.database.update(
+          'routines',
+          _routineToRow(r),
+          where: 'id = ?',
+          whereArgs: [r.id],
+        ) !=
+        1) {
+      throw StateError('Routine not found');
+    }
+  }
+
+  @override
+  Future<RoutineExecution?> getRoutineExecution(
+    String routineId,
+    String occurrenceDate,
+  ) async {
+    final rows = await _appDatabase.database.query(
+      'routine_executions',
+      where: 'routine_id = ? AND occurrence_date = ?',
+      whereArgs: [routineId, occurrenceDate],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _executionFromRow(rows.single);
+  }
+
+  @override
+  Future<List<RoutineExecution>> getRoutineExecutions() async =>
+      (await _appDatabase.database.query('routine_executions'))
+          .map(_executionFromRow)
+          .toList();
+  @override
+  Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
+      (await _appDatabase.database.query(
+        'routine_run_segments',
+        where: 'routine_execution_id = ?',
+        whereArgs: [id],
+        orderBy: 'started_at_utc ASC',
+      )).map(_routineSegmentFromRow).toList();
+  @override
+  Future<void> startRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+    DateTime now,
+  ) async {
+    await _appDatabase.database.transaction((tx) async {
+      await _pauseRunningEventIn(tx, now);
+      final other = await tx.query(
+        'routine_executions',
+        where: 'status = ? AND id != ?',
+        whereArgs: ['running', e.id],
+        limit: 1,
+      );
+      if (other.isNotEmpty) await _pauseRunningRoutineIn(tx, now);
+      final exists = await tx.query(
+        'routine_executions',
+        where: 'id = ?',
+        whereArgs: [e.id],
+        limit: 1,
+      );
+      if (exists.isEmpty) {
+        await tx.insert('routine_executions', _executionToRow(e));
+      } else {
+        await tx.update(
+          'routine_executions',
+          _executionToRow(e),
+          where: 'id = ?',
+          whereArgs: [e.id],
+        );
+      }
+      await tx.insert('routine_run_segments', _routineSegmentToRow(s));
+    });
+  }
+
+  @override
+  Future<void> pauseRoutineExecution(RoutineExecution e, RoutineRunSegment s) =>
+      _finishRoutineSegment(e, s);
+  @override
+  Future<void> completeRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+  ) => _finishRoutineSegment(e, s);
+  Future<void> _finishRoutineSegment(
+    RoutineExecution e,
+    RoutineRunSegment s,
+  ) async => _appDatabase.database.transaction((tx) async {
+    await tx.update(
+      'routine_executions',
+      _executionToRow(e),
+      where: 'id = ?',
+      whereArgs: [e.id],
+    );
+    if (await tx.update(
+          'routine_run_segments',
+          _routineSegmentToRow(s),
+          where: 'id = ? AND ended_at_utc IS NULL',
+          whereArgs: [s.id],
+        ) !=
+        1) {
+      throw StateError('Open routine segment not found');
+    }
+  });
+  @override
+  Future<void> updateRoutineExecutionOnly(RoutineExecution e) async =>
+      _appDatabase.database.update(
+        'routine_executions',
+        _executionToRow(e),
+        where: 'id = ?',
+        whereArgs: [e.id],
+      );
+  @override
+  Future<void> pauseRunningRoutine(DateTime now) async => _appDatabase.database
+      .transaction((tx) => _pauseRunningRoutineIn(tx, now));
+  Future<void> _pauseRunningRoutineIn(dynamic tx, DateTime now) async {
+    final rows = await tx.query(
+      'routine_executions',
+      where: 'status = ?',
+      whereArgs: ['running'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final id = rows.single['id'] as String;
+    await tx.update(
+      'routine_executions',
+      {
+        'status': 'paused',
+        'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    await tx.update(
+      'routine_run_segments',
+      {'ended_at_utc': now.toUtc().millisecondsSinceEpoch},
+      where: 'routine_execution_id = ? AND ended_at_utc IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> _pauseRunningEventIn(dynamic tx, DateTime now) async {
+    final rows = await tx.query(
+      'events',
+      where: 'status = ?',
+      whereArgs: ['running'],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+    final id = rows.single['id'] as String;
+    await tx.update(
+      'events',
+      {
+        'status': 'paused',
+        'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    await tx.update(
+      'run_segments',
+      {'ended_at_utc': now.toUtc().millisecondsSinceEpoch},
+      where: 'event_id = ? AND ended_at_utc IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  Map<String, Object?> _routineToRow(Routine r) => {
+    'id': r.id,
+    'name': r.name,
+    'category_id': r.categoryId,
+    'recurrence_type': r.recurrence.name,
+    'weekday_mask': r.weekdayMask,
+    'is_active': r.isActive ? 1 : 0,
+    'sort_order': r.sortOrder,
+    'created_at_utc': r.createdAt.toUtc().millisecondsSinceEpoch,
+    'updated_at_utc': r.updatedAt.toUtc().millisecondsSinceEpoch,
+  };
+  Routine _routineFromRow(Map<String, Object?> r) => Routine(
+    id: r['id'] as String,
+    name: r['name'] as String,
+    categoryId: r['category_id'] as String?,
+    recurrence: RoutineRecurrence.values.byName(r['recurrence_type'] as String),
+    weekdayMask: r['weekday_mask'] as int,
+    isActive: (r['is_active'] as int) == 1,
+    sortOrder: r['sort_order'] as int,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      r['created_at_utc'] as int,
+      isUtc: true,
+    ),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(
+      r['updated_at_utc'] as int,
+      isUtc: true,
+    ),
+  );
+  Map<String, Object?> _executionToRow(RoutineExecution e) => {
+    'id': e.id,
+    'routine_id': e.routineId,
+    'occurrence_date': e.occurrenceDate,
+    'status': e.status.name,
+    'completed_at_utc': e.completedAt?.toUtc().millisecondsSinceEpoch,
+    'created_at_utc': e.createdAt.toUtc().millisecondsSinceEpoch,
+    'updated_at_utc': e.updatedAt.toUtc().millisecondsSinceEpoch,
+  };
+  RoutineExecution _executionFromRow(Map<String, Object?> r) =>
+      RoutineExecution(
+        id: r['id'] as String,
+        routineId: r['routine_id'] as String,
+        occurrenceDate: r['occurrence_date'] as String,
+        status: RoutineExecutionStatus.values.byName(r['status'] as String),
+        completedAt: r['completed_at_utc'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                r['completed_at_utc'] as int,
+                isUtc: true,
+              ),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          r['created_at_utc'] as int,
+          isUtc: true,
+        ),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(
+          r['updated_at_utc'] as int,
+          isUtc: true,
+        ),
+      );
+  Map<String, Object?> _routineSegmentToRow(RoutineRunSegment s) => {
+    'id': s.id,
+    'routine_execution_id': s.executionId,
+    'started_at_utc': s.startedAt.toUtc().millisecondsSinceEpoch,
+    'ended_at_utc': s.endedAt?.toUtc().millisecondsSinceEpoch,
+    'created_at_utc': s.createdAt.toUtc().millisecondsSinceEpoch,
+  };
+  RoutineRunSegment _routineSegmentFromRow(Map<String, Object?> r) =>
+      RoutineRunSegment(
+        id: r['id'] as String,
+        executionId: r['routine_execution_id'] as String,
+        startedAt: DateTime.fromMillisecondsSinceEpoch(
+          r['started_at_utc'] as int,
+          isUtc: true,
+        ),
+        endedAt: r['ended_at_utc'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                r['ended_at_utc'] as int,
+                isUtc: true,
+              ),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          r['created_at_utc'] as int,
+          isUtc: true,
+        ),
+      );
 }

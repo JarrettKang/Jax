@@ -139,3 +139,12 @@
 - F7.2：记录栏目改为日总结/周总结；日视图使用 Category 横向时间条，周视图使用七日真实时长 Category 堆叠柱及周汇总。
 - F7.3：completed 全量结构、层级与排序由 World 承担；恢复、投入详情和删除历史记录迁移到 World completed Event 菜单。
 - F7 测试覆盖跨 23:00、跨周、open segment、多 Category/未分类、动态 Category 归属、零记录、周日合计，以及 Summary/World Widget 与双平台 Debug 回归。
+
+## 9. F8：Routine / 日常
+
+- F8.1：新增独立 Routine、RoutineExecution、RoutineRunSegment Core 模型与 RoutineRepository；recurrence 以枚举和 weekday bit mask 保存，今日 occurrence 使用本地 `YYYY-MM-DD`。
+- F8.2：SQLite v6→v7 新增 routines、routine_executions、routine_run_segments；唯一约束保证同一 Routine 同一本地日期最多一个 execution，Category 使用 `ON DELETE SET NULL`。
+- F8.3：SQLite transaction 统一 Event/Routine running slot，跨类型开始会关闭另一类型开放片段并暂停；Windows shutdown 同时处理两类 running，Android lifecycle 不改变既有语义。
+- F8.4：TimeSummaryService 将 Event 与 Routine segments 归一到同一个 overlap/Category 聚合流程；不新增 summary 表或 category snapshot。
+- F8.5：新增五栏导航“日常”、今日派生列表、创建/编辑 recurrence、开始/暂停/恢复/完成、停用/重新启用及首页 running Routine 简洁展示；World 保持纯 Event。
+- F8 测试覆盖 recurrence、occurrence 唯一性、跨类型 running、segments、inactive/reactivate、Category 删除与动态历史、23:00 Summary、v6 migration、窄屏 UI、Windows/Android lifecycle 和完整回归。

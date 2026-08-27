@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 6;
+  static const schemaVersion = 7;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -49,6 +49,7 @@ class AppDatabase {
       updated_at_utc INTEGER NOT NULL
     )''');
     await _createRunSegments(database);
+    await _createRoutineTables(database);
   }
 
   static Future<void> _upgradeSchema(
@@ -88,6 +89,7 @@ class AppDatabase {
         'ALTER TABLE events ADD COLUMN category_id TEXT REFERENCES categories(id) ON DELETE SET NULL',
       );
     }
+    if (oldVersion < 7) await _createRoutineTables(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -136,6 +138,37 @@ class AppDatabase {
     ended_at_utc INTEGER,
     created_at_utc INTEGER NOT NULL
   )''');
+
+  static Future<void> _createRoutineTables(Database database) async {
+    await database.execute('''CREATE TABLE routines (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+      recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekdays','weekends','selectedWeekdays')),
+      weekday_mask INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
+      sort_order INTEGER NOT NULL,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL
+    )''');
+    await database.execute('''CREATE TABLE routine_executions (
+      id TEXT PRIMARY KEY,
+      routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE RESTRICT,
+      occurrence_date TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('running','paused','completed')),
+      completed_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL,
+      UNIQUE(routine_id, occurrence_date)
+    )''');
+    await database.execute('''CREATE TABLE routine_run_segments (
+      id TEXT PRIMARY KEY,
+      routine_execution_id TEXT NOT NULL REFERENCES routine_executions(id) ON DELETE CASCADE,
+      started_at_utc INTEGER NOT NULL,
+      ended_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL
+    )''');
+  }
 
   Future<void> close() => database.close();
 }

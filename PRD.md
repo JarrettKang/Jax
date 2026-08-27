@@ -307,6 +307,16 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 时间按 Event 的当前 hierarchy 向上找到 root，并按 root 当前 Category 动态归属；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
 - 日总结显示按时长降序的 Category 横向条与占比；周总结显示七天真实时长的 Category 堆叠柱和全周 Category 汇总。Category identity 基于 id，未分类使用中性样式。
 
+### 10.12 v0.2 F8：Routine / 日常
+
+- Routine 是独立于 Event 的长期重复事项模板，不创建或复用 Event，不进入 World，也没有 Event hierarchy 或 completed 生命周期；主导航新增“日常”。
+- Routine 直接关联现有 nullable Category，支持每天、工作日、周末和至少选择一天的指定星期；“今日”按本地日历日期动态派生，不提前生成 pending execution。
+- RoutineExecution 以 `routine_id + occurrence_date` 保证每日最多一轮，真正开始时创建，状态仅为 running、paused、completed；completed 当日保留，次日按 recurrence 重新呈现未开始，不记录 missed。
+- RoutineExecution 使用独立 run segments。Event 与 RoutineExecution 共用全局唯一 running：开始任一类型会暂停另一类型并关闭其开放片段，完成后不自动恢复此前对象。
+- Windows 正常关闭暂停 running Event 或 RoutineExecution；Android 后台、锁屏和进程恢复继续依赖持久化状态与开放片段，不自动暂停。
+- Routine 时间与 Event direct segments 一起进入日/周总结，共用 23:00 overlap 与当前 Category 动态归属；Category 删除将 Routine 归入未分类，停用/重新启用不删除历史。
+- 第一版 Routine 为稳定顺序的 flat list，不提供物理删除、waiting、复杂 recurrence、SOP、提醒、streak、missed 或评分。
+
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步
