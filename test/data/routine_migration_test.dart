@@ -5,7 +5,7 @@ import 'package:jax/data/database/app_database.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
-    test('v6 data migrates through v8 with Routine tables intact', () async {
+  test('v6 data migrates through v8 with Routine tables intact', () async {
     sqfliteFfiInit();
     final dir = await Directory.systemTemp.createTemp('jax-routine-migration-');
     final path = '${dir.path}/jax.db';
@@ -47,7 +47,7 @@ void main() {
     expect(
       (await app.database.rawQuery('PRAGMA user_version'))
           .single['user_version'],
-      8,
+      AppDatabase.schemaVersion,
     );
     await app.close();
     await dir.delete(recursive: true);

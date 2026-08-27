@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 8;
+  static const schemaVersion = 9;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -51,6 +51,7 @@ class AppDatabase {
     await _createRunSegments(database);
     await _createRoutineTables(database);
     await _createEventDayPlans(database);
+    await _createWorldCategoryCollapsePreferences(database);
   }
 
   static Future<void> _upgradeSchema(
@@ -92,6 +93,7 @@ class AppDatabase {
     }
     if (oldVersion < 7) await _createRoutineTables(database);
     if (oldVersion < 8) await _createEventDayPlans(database);
+    if (oldVersion < 9) await _createWorldCategoryCollapsePreferences(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -179,6 +181,12 @@ class AppDatabase {
         order_index INTEGER NOT NULL,
         created_at_utc INTEGER NOT NULL,
         PRIMARY KEY(event_id, day_date)
+      )''');
+
+  static Future<void> _createWorldCategoryCollapsePreferences(
+    Database database,
+  ) => database.execute('''CREATE TABLE world_category_collapse_preferences (
+        section_key TEXT PRIMARY KEY
       )''');
 
   Future<void> close() => database.close();

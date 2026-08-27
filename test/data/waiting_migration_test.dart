@@ -74,6 +74,6 @@ void main() {
     await repository.updateEvent(child.copyWith(status: EventStatus.waiting));
     expect((await repository.getEvent('c'))!.status, EventStatus.waiting);
     final version = await upgraded.database.rawQuery('PRAGMA user_version');
-    expect(version.single['user_version'], 8);
+    expect(version.single['user_version'], AppDatabase.schemaVersion);
   });
 }

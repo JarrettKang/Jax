@@ -4,6 +4,7 @@ import '../../core/entities/category.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/entities/event_status.dart';
+import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
 import '../widgets/event_more_menu_button.dart';
@@ -12,19 +13,66 @@ import 'event_hierarchy_dialog.dart';
 import 'history_detail_dialog.dart';
 
 class WorldPage extends StatefulWidget {
-  const WorldPage({required this.controller, super.key});
+  const WorldPage({
+    required this.controller,
+    required this.worldCategoryCollapseStore,
+    super.key,
+  });
   final EventController controller;
+  final WorldCategoryCollapseStore worldCategoryCollapseStore;
   @override
   State<WorldPage> createState() => _WorldPageState();
 }
 
 class _WorldPageState extends State<WorldPage> {
   final Set<String> _collapsed = {};
+  var _preferencesReady = false;
+  Future<void> _preferenceWriteTail = Future.value();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCollapsedCategories();
+  }
+
+  Future<void> _loadCollapsedCategories() async {
+    Set<String> collapsed = const {};
+    try {
+      collapsed = await widget.worldCategoryCollapseStore
+          .loadCollapsedSectionKeys();
+    } catch (_) {
+      // A preference read must not prevent World from using its compatible
+      // default: all sections expanded.
+    }
+    if (!mounted) return;
+    setState(() {
+      _collapsed.addAll(collapsed);
+      _preferencesReady = true;
+    });
+  }
+
+  void _toggleCategory(String? categoryId) {
+    final key = WorldCategoryCollapseStore.sectionKey(categoryId);
+    final collapsed = !_collapsed.contains(key);
+    setState(() {
+      if (collapsed) {
+        _collapsed.add(key);
+      } else {
+        _collapsed.remove(key);
+      }
+    });
+    _preferenceWriteTail = _preferenceWriteTail.then<void>(
+      (_) => widget.worldCategoryCollapseStore.setCollapsed(key, collapsed),
+      onError: (_, _) =>
+          widget.worldCategoryCollapseStore.setCollapsed(key, collapsed),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
-      if (widget.controller.loading) {
+      if (widget.controller.loading || !_preferencesReady) {
         return const Center(child: CircularProgressIndicator());
       }
       final roots = widget.controller.worldEvents
@@ -77,7 +125,9 @@ class _WorldPageState extends State<WorldPage> {
           for (final key in keys)
             if (key != null || groups[key]?.isNotEmpty == true) ...[
               _header(context, key, categoriesById[key]),
-              if (!_collapsed.contains('cat:$key'))
+              if (!_collapsed.contains(
+                WorldCategoryCollapseStore.sectionKey(key),
+              ))
                 for (final root in groups[key] ?? const <JaxEvent>[])
                   ..._tree(context, root),
             ],
@@ -88,7 +138,7 @@ class _WorldPageState extends State<WorldPage> {
 
   Widget _header(BuildContext c, String? id, Category? cat) {
     final i = cat == null ? -1 : widget.controller.categories.indexOf(cat);
-    final k = 'cat:$id';
+    final k = WorldCategoryCollapseStore.sectionKey(id);
     final colors = Theme.of(c).colorScheme;
     return Container(
       key: ValueKey('world-category-$id'),
@@ -104,11 +154,7 @@ class _WorldPageState extends State<WorldPage> {
           icon: Icon(
             _collapsed.contains(k) ? Icons.chevron_right : Icons.expand_more,
           ),
-          onPressed: () => setState(
-            () => _collapsed.contains(k)
-                ? _collapsed.remove(k)
-                : _collapsed.add(k),
-          ),
+          onPressed: () => _toggleCategory(id),
         ),
         title: Text(
           cat?.name ?? '未分类',

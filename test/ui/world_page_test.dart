@@ -4,6 +4,7 @@ import 'package:jax/app.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/category.dart';
+import 'package:jax/core/preferences/world_category_collapse_store.dart';
 
 import '../support/memory_repository.dart';
 
@@ -212,4 +213,159 @@ void main() {
     expect(find.text('未分类'), findsOneWidget);
     expect(find.byKey(const ValueKey('world-node-A')), findsOneWidget);
   });
+
+  testWidgets(
+    'World remembers Category collapse preferences across navigation and app recreation',
+    (tester) async {
+      final preferences = InMemoryWorldCategoryCollapseStore();
+      final repository =
+          MemoryRepository([
+              event(
+                'research-event',
+                EventStatus.pending,
+                categoryId: 'research',
+                order: 0,
+              ),
+              event(
+                'life-event',
+                EventStatus.pending,
+                categoryId: 'life',
+                order: 1,
+              ),
+              event('uncategorized-event', EventStatus.pending, order: 2),
+            ])
+            ..categories.addAll([
+              Category(
+                id: 'research',
+                name: '科研',
+                sortOrder: 0,
+                createdAt: now,
+                updatedAt: now,
+              ),
+              Category(
+                id: 'life',
+                name: '生活起居',
+                sortOrder: 1,
+                createdAt: now,
+                updatedAt: now,
+              ),
+            ]);
+
+      Future<void> openWorld() async {
+        await tester.tap(find.text('世界'));
+        await tester.pumpAndSettle();
+      }
+
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          worldCategoryCollapseStore: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openWorld();
+
+      // Every previously unseen section, including the virtual 未分类 section,
+      // starts expanded.
+      expect(find.byKey(const ValueKey('world-node-research-event')), findsOne);
+      expect(find.byKey(const ValueKey('world-node-life-event')), findsOne);
+      expect(
+        find.byKey(const ValueKey('world-node-uncategorized-event')),
+        findsOne,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('world-category-toggle-research')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('world-category-toggle-null')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('world-node-research-event')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('world-node-uncategorized-event')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('world-node-life-event')), findsOne);
+
+      await tester.tap(find.text('今日'));
+      await tester.pumpAndSettle();
+      await openWorld();
+      expect(
+        find.byKey(const ValueKey('world-node-research-event')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('world-node-uncategorized-event')),
+        findsNothing,
+      );
+
+      // A fresh application state reads the same persisted preference store.
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          worldCategoryCollapseStore: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openWorld();
+      expect(
+        find.byKey(const ValueKey('world-node-research-event')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('world-node-uncategorized-event')),
+        findsNothing,
+      );
+
+      // Expanding again persists too; rename preserves the identity-based key.
+      await tester.tap(
+        find.byKey(const ValueKey('world-category-toggle-research')),
+      );
+      await tester.pumpAndSettle();
+      repository.categories[0] = repository.categories[0].copyWith(
+        name: '科研（新名称）',
+      );
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          worldCategoryCollapseStore: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openWorld();
+      expect(find.text('科研（新名称）'), findsOne);
+      expect(find.byKey(const ValueKey('world-node-research-event')), findsOne);
+
+      // A newly created identity has no preference and therefore starts open.
+      repository.categories.add(
+        Category(
+          id: 'new',
+          name: '新分类',
+          sortOrder: 2,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      repository.events.add(
+        event('new-event', EventStatus.pending, categoryId: 'new', order: 3),
+      );
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          worldCategoryCollapseStore: preferences,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openWorld();
+      expect(find.byKey(const ValueKey('world-node-new-event')), findsOne);
+    },
+  );
 }

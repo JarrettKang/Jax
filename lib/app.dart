@@ -8,6 +8,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:uuid/uuid.dart';
 
 import 'core/repositories/event_repository.dart';
+import 'core/preferences/world_category_collapse_store.dart';
 import 'core/services/save_service.dart';
 import 'core/use_cases/create_event.dart';
 import 'core/use_cases/prepare_for_shutdown.dart';
@@ -30,15 +31,19 @@ class JaxApp extends StatefulWidget {
   JaxApp({
     required this.repository,
     SaveService? saveService,
+    WorldCategoryCollapseStore? worldCategoryCollapseStore,
     IdGenerator? newId,
     Clock? now,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
+       worldCategoryCollapseStore =
+           worldCategoryCollapseStore ?? InMemoryWorldCategoryCollapseStore(),
        newId = newId ?? const Uuid().v4,
        now = now ?? DateTime.now;
 
   final EventRepository repository;
   final SaveService saveService;
+  final WorldCategoryCollapseStore worldCategoryCollapseStore;
   final IdGenerator newId;
   final Clock now;
 
@@ -152,7 +157,10 @@ class _JaxAppState extends State<JaxApp> {
         onOpenEvents: () => setState(() => _selectedIndex = 1),
       ),
       EventsPage(controller: _controller),
-      WorldPage(controller: _controller),
+      WorldPage(
+        controller: _controller,
+        worldCategoryCollapseStore: widget.worldCategoryCollapseStore,
+      ),
       RoutinePage(controller: _controller),
       SummaryPage(controller: _controller),
     ];

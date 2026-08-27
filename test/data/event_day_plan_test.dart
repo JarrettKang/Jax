@@ -106,7 +106,7 @@ void main() {
       expect(
         (await app.database.rawQuery('PRAGMA user_version'))
             .single['user_version'],
-        8,
+        AppDatabase.schemaVersion,
       );
       await app.close();
       await dir.delete(recursive: true);
