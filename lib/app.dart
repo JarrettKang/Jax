@@ -162,7 +162,10 @@ class _JaxAppState extends State<JaxApp> {
         now: widget.now,
         onOpenEvents: () => setState(() => _selectedIndex = 1),
       ),
-      EventsPage(controller: _controller),
+      EventsPage(
+        controller: _controller,
+        onOpenWorld: () => setState(() => _selectedIndex = 2),
+      ),
       WorldPage(
         controller: _controller,
         worldCategoryCollapseStore: widget.worldCategoryCollapseStore,

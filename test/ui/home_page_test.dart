@@ -23,7 +23,8 @@ void main() {
     await tester.tap(find.text('我们来做点什么？'));
     await tester.pumpAndSettle();
     expect(find.text('今日事项'), findsOneWidget);
-    expect(find.text('今天还没有安排事项'), findsOneWidget);
+    expect(find.text('暂无今日事项'), findsOneWidget);
+    expect(find.byKey(const ValueKey('today-open-world')), findsOneWidget);
   });
 
   testWidgets('shows running context and ordered waiting summary', (

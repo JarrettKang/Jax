@@ -368,6 +368,8 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 从任意入口开始或恢复 Event 时自动确保当前 Jax day plan 存在。Event 完成后保留在当天 Today，下一 Jax day 不继承；跨 23:00 仍 running 的 Event 自动进入新 Today，且不自动暂停。
 - Routine 不需要手动规划。跨 23:00 仍 running 的上一 occurrence 继续使用同一 RoutineExecution，新 Today 显示它且不创建同名第二 occurrence；时间统计仍按 23:00 裁剪。
 - Today Event 显示 ancestor breadcrumb，但不复制 hierarchy、Category CRUD 或完整 World tree。Today 与日常/World 可共用现有 Core 执行动作，全局 Event + RoutineExecution 最多一个 running 的约束不变。
+- Today 使用紧凑执行列表而非逐项大 Card：名称为主视觉，Category 与 breadcrumb/recurrence 合并为弱化辅助信息，状态靠近右侧操作区，条目以 divider 分隔。宽屏采用横向“一行半”布局并限制舒适阅读宽度，窄屏折为信息区与状态/操作区两段且不得横向溢出。
+- running 条目使用 Category 色左侧细条与轻背景强调，其余条目仅显示轻量 Category 色点；未分类继续使用主题中性色。空 Event 分区提供直接前往 World 的紧凑入口，不新增规划流程。
 - Today plan 本身不产生执行时间；日/周记录继续只统计 Event 与 Routine run segments。
 
 ## 14. Record 今日时间分布

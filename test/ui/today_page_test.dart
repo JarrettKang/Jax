@@ -198,7 +198,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('星期五日常'), findsOneWidget);
     expect(find.text('星期四日常'), findsNothing);
-    expect(find.text('跨日执行'), findsNWidgets(2));
+    expect(find.text('跨日执行'), findsOneWidget);
     expect(repo.routineExecutions, hasLength(1));
   });
 
@@ -279,6 +279,55 @@ void main() {
         findsNothing,
       );
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('empty Today offers a direct compact route to World', (
+    tester,
+  ) async {
+    final repo = MemoryRepository(const [], false);
+    await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂无今日事项'), findsOneWidget);
+    expect(find.byKey(const ValueKey('today-open-world')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('today-open-world')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('world-overview')), findsOneWidget);
+  });
+
+  testWidgets(
+    'Today items use divider rows without Cards on wide and narrow screens',
+    (tester) async {
+      final repo = MemoryRepository([event('事项', EventStatus.pending)], false)
+        ..eventDayPlans.add(
+          EventDayPlan(
+            eventId: '事项',
+            dayKey: '2026-08-27',
+            order: 0,
+            createdAt: now,
+          ),
+        );
+      for (final size in [const Size(1200, 800), const Size(360, 800)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+        await tester.pumpAndSettle();
+        final row = find.byKey(const ValueKey('today-event-事项'));
+        if (row.evaluate().isEmpty) {
+          await tester.tap(find.text('今日').last);
+          await tester.pumpAndSettle();
+        }
+        expect(row, findsOneWidget);
+        expect(
+          find.descendant(of: row, matching: find.byType(Card)),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      }
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
     },
   );
 }
