@@ -369,7 +369,8 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 
 ## 14. Record 今日时间分布
 
-- 日总结依次展示分类时间统计、今日时间分布和执行记录。今日时间分布回答 execution segments 在 JaxDay 23:00→23:00 内实际发生的时段。
-- 时间轴块一一对应真实 Event/Routine segment，不按对象聚合或合并；位置和高度严格按时间与 duration 比例计算，空白不解释、不补齐。
+- 日总结依次展示分类时间统计、今日时间分布和执行记录。今日时间分布使用 24 行×60 分钟的紧凑栅格，行顺序严格为 JaxDay 的 23:00、00:00…22:00。
+- 每个小时行高度一致，横向位置和宽度分别表示小时内的开始分钟与 duration；15/30/45 分钟只使用轻量 guide。空白不解释、不补齐。
+- 真实 Event/Routine segment 不按对象聚合或合并。跨小时只生成持有同一 segment identity 的 rendering fragments；点击任意 fragment 显示完整真实 segment，而非该小时切片。
 - 跨 JaxDay segment 仅按窗口 overlap 绘制，open segment 绘制至当前时间；底层 segment 不拆分，统计和历史事实来源不变。
-- Category 颜色 identity 区分 Event 与 Routine 来源；短块允许扩大 hit area，但可视高度不得失真。第一版只提供 tooltip/tap 信息与既有编辑入口，不支持图形化拖动或 resize。
+- Category 颜色 identity 区分 Event 与 Routine 来源；窄 fragment 允许扩大横向 hit area，但可视宽度不得失真。第一版只提供 tooltip/tap 信息与既有编辑入口，不支持图形化拖动或 resize。

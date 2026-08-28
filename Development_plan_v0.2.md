@@ -176,7 +176,7 @@
 
 ## 12. F11：Record 今日时间分布
 
-- F11.1 日总结在分类统计与执行记录之间新增纵向 24 小时时间轴，严格映射 JaxDay 23:00→23:00；每个真实 execution segment 独立绘制，跨日和 open segment 只做 display clipping。
-- F11.2 `DailyTimelineBlock` 作为无 Flutter 依赖的展示计算模型，提供相对起点与真实 duration 比例；短 segment 仅扩大交互区域，不改变可视块高度，空白时间保持空白。
+- F11.1 日总结在分类统计与执行记录之间使用紧凑的 24×60 小时栅格，固定 24 行依次映射 JaxDay 23:00、00:00…22:00；每行从左到右严格表示该小时的 0→60 分钟。
+- F11.2 `DailyTimelineLayout` 作为无 Flutter 依赖的展示计算模型，先做 JaxDay clipping，再把同一真实 segment 投影为按小时 rendering fragments；fragment 横向位置和宽度表示分钟与 duration，始终保留底层 segment identity，绝不拆分数据库事实。
 - F11.3 Event/Routine segment DTO 携带来源明确的 Category bucket identity，时间轴与分类统计共享稳定色彩映射；相同裸 ID 或名称不合并。
-- F11.4 Windows 使用 hover tooltip，Android/Windows 均可点击 block 复用既有 segment 入口；不加入 drag、resize、merge 或第二套历史模型。schema 保持 v10。
+- F11.4 小时行高度和 block 高度固定，短 fragment 仅扩大横向交互区域；Windows 使用 hover tooltip，Android/Windows 均可点击任意 fragment 查看完整真实 segment 并复用既有入口。不加入 drag、resize、merge 或第二套历史模型。schema 保持 v10。
