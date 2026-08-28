@@ -220,14 +220,16 @@ v0.1 至少需要通过以下行为验证：
 ## 9. v0.2 F1：首页
 
 - Jax 在 Windows 和 Android 的导航中均按“首页 / 事件 / 记录”排列，并默认从首页启动；两端共用首页内容和业务规则，仅导航外壳可响应屏幕宽度变化。
-- 首页顶部按设备当前本地时间显示“早上好，我是 Jax”“上午好，我是 Jax”“中午好，我是 Jax”“下午好，我是 Jax”或“晚上好，我是 Jax”。时间区间为：`05:00 <= time < 09:00` 早上、`09:00 <= time < 11:00` 上午、`11:00 <= time < 14:00` 中午、`14:00 <= time < 17:00` 下午，其余时间为晚上。问候语在进入、返回首页及跨越区间边界后按当前时间刷新，不作为业务数据持久化。
-- 当前没有 `running` 事件时，首页显示可点击的“我们来做点什么？”；点击后只切换至事件栏目，不创建或开始事件。
-- 当前存在 `running` 事件时，首页以工作上下文卡片展示正在推进的主体及步骤状态，不提供暂停、完成或其他快捷操作。running Event 有直接上层时以该上层为工作主体，并按任意深度显示主体的祖先路径；running Event 为顶级时以自身为主体。
-- 工作上下文中的步骤取自工作主体的直接下层并严格遵循既有同级顺序，以清晰但不改变业务的视觉状态区分 `completed`、`running`、`paused` 与 `pending`；顶级 running Event 以自身作为唯一当前步骤。running 步骤显示既有直接运行计时。
-- 步骤较多时首页只显示包含 running Event 的邻近有序窗口，并提示前后存在省略内容；不得用百分比、完成比例或状态重排暗示强制工作流。
-- 首页只读取现有事件系统的 `running` 状态，不维护或持久化独立的当前任务数据，不改变现有 SQLite schema。
+- 首页顶部按设备当前本地时间显示弱化的“早上好”“上午好”“中午好”“下午好”或“晚上好”。时间区间沿用既有规则，问候语在进入、返回首页及跨越区间边界后刷新，不作为业务数据持久化。
+- 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event ancestor breadcrumb 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
+- Running Hero 直接提供“暂停”主操作；More 对 Event 提供“完成 / 等待”，对 Routine 提供“完成”。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
+- Event 的当前 parent 上下文可在 Hero 底部以紧凑 direct children 列表和“已完成数 / 总数”呈现；它只辅助理解当前执行位置，不得取代 running 名称或扩展为预测、百分比进度条。
+- Hero 之后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
+- 没有 running 时，首页显示“现在没有正在执行的事项”和“接下来可以做”，仍提供 Today 候选启动入口；无候选时可进入今日页。
+- Waiting 区域只列出 status 为 waiting 的 Event，位于“接下来”之后并采用低权重紧凑列表；Routine 不具有 waiting。
+- 首页只组合现有 running、Today plan、hierarchy、category、recurrence、run segment 与 waiting 事实，不持久化第二份首页数据，不修改 SQLite schema。
 
-F1 验收须覆盖上述问候时间边界、两种首页状态、事件开始/暂停/恢复/完成后的同步、Windows 与 Android 的三项响应式导航、重启恢复后的首页状态，并确认 v0.1 行为无回归。
+F1 验收须覆盖弱化问候、Running Event、Running Routine、真实持续时间、Hero 直接操作、无 running 的候选启动、稳定候选顺序、全局单 running、Waiting 低权重列表、窄屏无 overflow、重启恢复后的首页状态，并确认既有行为无回归。
 
 ## 10. v0.2 F2：事件层级
 

@@ -15,7 +15,8 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
     expect(_navigationLabels(tester), ['首页', '今日', '世界', '日常', '记录']);
-    expect(find.text('我们来做点什么？'), findsOneWidget);
+    expect(find.text('现在没有正在执行的事项'), findsOneWidget);
+    expect(find.text('接下来可以做'), findsOneWidget);
     expect(find.text('已加载本地数据'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -33,7 +34,8 @@ void main() {
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     expect(_navigationLabels(tester), ['首页', '今日', '世界', '日常', '记录']);
-    expect(find.text('我们来做点什么？'), findsOneWidget);
+    expect(find.text('现在没有正在执行的事项'), findsOneWidget);
+    expect(find.text('接下来可以做'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
