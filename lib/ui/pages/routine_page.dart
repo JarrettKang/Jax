@@ -5,8 +5,6 @@ import '../../core/entities/routine_category.dart';
 import '../../core/preferences/routine_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/routine_reorder_buttons.dart';
-import '../widgets/execution_time_editor.dart';
-import '../../core/entities/execution_time_segment.dart';
 
 class RoutinePage extends StatefulWidget {
   const RoutinePage({
@@ -207,35 +205,10 @@ class _RoutinePageState extends State<RoutinePage> {
                       if (v == 'disable') {
                         widget.controller.setRoutineActive(items[i], false);
                       }
-                      if (v == 'time') _editTimes(context, items[i]);
-                      if (v == 'adjustPause') {
-                        _adjust(context, items[i], false);
-                      }
-                      if (v == 'adjustComplete') {
-                        _adjust(context, items[i], true);
-                      }
                     },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'edit', child: Text('编辑')),
-                      const PopupMenuItem(value: 'disable', child: Text('停用')),
-                      if (widget.controller.executionFor(items[i])?.status
-                          case RoutineExecutionStatus.paused ||
-                              RoutineExecutionStatus.completed)
-                        const PopupMenuItem(
-                          value: 'time',
-                          child: Text('编辑执行时间'),
-                        ),
-                      if (widget.controller.executionFor(items[i])?.status ==
-                          RoutineExecutionStatus.running) ...[
-                        const PopupMenuItem(
-                          value: 'adjustPause',
-                          child: Text('调整结束并暂停'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'adjustComplete',
-                          child: Text('调整结束并完成'),
-                        ),
-                      ],
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('编辑')),
+                      PopupMenuItem(value: 'disable', child: Text('停用')),
                     ],
                   ),
                 ],
@@ -255,44 +228,6 @@ class _RoutinePageState extends State<RoutinePage> {
       null => null,
     };
     return [_routineLabel(r.recurrence), ?status].join(' · ');
-  }
-
-  Future<void> _editTimes(BuildContext c, Routine r) async {
-    final execution = widget.controller.executionFor(r);
-    if (execution == null) {
-      ScaffoldMessenger.of(c)
-          .showSnackBar(const SnackBar(content: Text('该日常今天还没有执行记录')));
-      return;
-    }
-    if (execution.status == RoutineExecutionStatus.running) {
-      return;
-    }
-    await showExecutionTimeEditor(
-      c,
-      controller: widget.controller,
-      ownerType: ExecutionOwnerType.routine,
-      ownerId: execution.id,
-      ownerName: r.name,
-      contextLabel: 'Routine',
-    );
-  }
-
-  Future<void> _adjust(BuildContext c, Routine r, bool complete) async {
-    final execution = widget.controller.executionFor(r);
-    if (execution?.status != RoutineExecutionStatus.running) return;
-    final items = await widget.controller.executionSegments(
-      ExecutionOwnerType.routine,
-      execution!.id,
-    );
-    final open = items.where((s) => s.endedAt == null).firstOrNull;
-    if (open != null && c.mounted) {
-      await showFinishRunningAtDialog(
-        c,
-        controller: widget.controller,
-        segment: open,
-        complete: complete,
-      );
-    }
   }
 
   Future<void> _editRoutine(BuildContext c, [Routine? r]) => showDialog<void>(

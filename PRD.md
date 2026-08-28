@@ -151,7 +151,7 @@ v0.1 的目标是在 Codex 工作区内完成一个仅支持 Windows 的最小�
 - 用户可以查看历史执行记录。
 - 用户可以删除某一条历史记录。
 - 删除历史记录时，同时删除该已完成事件及其执行记录。
-- v0.1 不支持编辑已完成的历史记录；v0.2 的执行时间纠错能力按下述规则提供受约束的片段编辑。
+- v0.1 不支持编辑已完成的历史记录。
 
 ### 5.4 保存系统
 
@@ -310,15 +310,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 时间按 Event 的当前 hierarchy 向上找到 root，并按 root 当前 Category 动态归属；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
 - 日总结显示按时长降序的 Category 横向条与占比；周总结显示七天真实时长的 Category 堆叠柱和全周 Category 汇总。Category identity 基于 id，未分类使用中性样式。
 
-### 10.12 v0.2：执行时间纠错
-
-- Event 与 RoutineExecution 共用同一套执行时间编辑规则和界面。paused/completed 记录可以新增、编辑和删除 closed segment；这些操作只修正时间事实，不改变 owner 状态、层级、顺序、分类或 occurrence。
-- running owner 不直接编辑开放片段的开始时间，而可指定不晚于当前时间且晚于开始时间的实际结束时间，并原子地进入 paused 或 completed；Event completed 仍遵守未完成直接下层约束。
-- 所有 Event 与 RoutineExecution segment 共用全局时间冲突检查，区间按 `[start, end)` 判定，相邻端点合法，开放片段按当前时间参与冲突；跨 23:00 和跨日记录合法并由总结按 Jax day 边界裁剪。
-- “记录”提供跨来源的纠错入口，World/Today/Routine 的对象菜单提供上下文入口；零片段的 paused/completed owner 也可补录。开放片段不在普通 closed-segment 编辑器中暴露。
-- 本能力复用现有 `run_segments` 与 `routine_run_segments`，不新增 schema，也不创建汇总快照；日/周总结在刷新后从修正后的事实动态重算。
-
-### 10.13 v0.2 F8：Routine / 日常
+### 10.12 v0.2 F8：Routine / 日常
 
 - Routine 是独立于 Event 的长期重复事项模板，不创建或复用 Event，不进入 World，也没有 Event hierarchy 或 completed 生命周期；主导航新增“日常”。
 - Routine 使用独立于 World/Event Category 的 nullable Routine Category，支持每天、工作日、周末和至少选择一天的指定星期；“今日”按本地日历日期动态派生，不提前生成 pending execution。

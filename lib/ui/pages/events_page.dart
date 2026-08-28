@@ -5,8 +5,6 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/execution_action_buttons.dart';
-import '../widgets/execution_time_editor.dart';
-import '../../core/entities/execution_time_segment.dart';
 
 class EventsPage extends StatelessWidget {
   const EventsPage({required this.controller, super.key});
@@ -131,16 +129,6 @@ class _EventRow extends StatelessWidget {
                   icon: const Icon(Icons.arrow_downward),
                 ),
               ..._actions(context),
-              if (event.status == EventStatus.running)
-                PopupMenuButton<bool>(
-                  key: ValueKey('today-adjust-time-${event.id}'),
-                  tooltip: '更多时间操作',
-                  onSelected: (complete) => _adjust(context, complete),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: false, child: Text('调整结束并暂停')),
-                    PopupMenuItem(value: true, child: Text('调整结束并完成')),
-                  ],
-                ),
               if (event.status != EventStatus.running &&
                   event.status != EventStatus.completed)
                 IconButton(
@@ -221,22 +209,6 @@ class _EventRow extends StatelessWidget {
     },
   );
 
-  Future<void> _adjust(BuildContext context, bool complete) async {
-    final items = await controller.executionSegments(
-      ExecutionOwnerType.event,
-      event.id,
-    );
-    final open = items.where((s) => s.endedAt == null).firstOrNull;
-    if (open != null && context.mounted) {
-      await showFinishRunningAtDialog(
-        context,
-        controller: controller,
-        segment: open,
-        complete: complete,
-      );
-    }
-  }
-
   String _status(JaxEvent event) => switch (event.status) {
     EventStatus.pending => '未开始',
     EventStatus.running => '正在执行',
@@ -316,41 +288,11 @@ class _RoutineRow extends StatelessWidget {
                   RoutineExecutionStatus.completed => const [],
                 },
               ),
-              if (execution?.status == RoutineExecutionStatus.running)
-                PopupMenuButton<bool>(
-                  key: ValueKey('today-routine-adjust-${routine.id}'),
-                  onSelected: (complete) =>
-                      _adjust(context, execution!, complete),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: false, child: Text('调整结束并暂停')),
-                    PopupMenuItem(value: true, child: Text('调整结束并完成')),
-                  ],
-                ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _adjust(
-    BuildContext context,
-    RoutineExecution execution,
-    bool complete,
-  ) async {
-    final items = await controller.executionSegments(
-      ExecutionOwnerType.routine,
-      execution.id,
-    );
-    final open = items.where((s) => s.endedAt == null).firstOrNull;
-    if (open != null && context.mounted) {
-      await showFinishRunningAtDialog(
-        context,
-        controller: controller,
-        segment: open,
-        complete: complete,
-      );
-    }
   }
 
   Widget _button(

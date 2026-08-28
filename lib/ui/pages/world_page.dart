@@ -9,8 +9,6 @@ import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
 import '../widgets/event_more_menu_button.dart';
 import '../widgets/event_reorder_buttons.dart';
-import '../widgets/execution_time_editor.dart';
-import '../../core/entities/execution_time_segment.dart';
 import 'event_hierarchy_dialog.dart';
 import 'history_detail_dialog.dart';
 
@@ -423,31 +421,6 @@ class _WorldPageState extends State<WorldPage> {
           value: _WorldAction.restore,
           child: ListTile(leading: Icon(Icons.restore), title: Text('恢复事件')),
         ),
-      if (e.status == EventStatus.paused || e.status == EventStatus.completed)
-        PopupMenuItem(
-          key: ValueKey('world-edit-time-${e.id}'),
-          value: _WorldAction.editTime,
-          child: const ListTile(
-            leading: Icon(Icons.schedule),
-            title: Text('编辑执行时间'),
-          ),
-        ),
-      if (e.status == EventStatus.running) ...[
-        PopupMenuItem(
-          value: _WorldAction.adjustPause,
-          child: const ListTile(
-            leading: Icon(Icons.more_time),
-            title: Text('调整结束并暂停'),
-          ),
-        ),
-        PopupMenuItem(
-          value: _WorldAction.adjustComplete,
-          child: const ListTile(
-            leading: Icon(Icons.task_alt),
-            title: Text('调整结束并完成'),
-          ),
-        ),
-      ],
       if (e.status == EventStatus.completed)
         PopupMenuItem(
           key: ValueKey('world-investment-${e.id}'),
@@ -618,19 +591,6 @@ class _WorldPageState extends State<WorldPage> {
         _confirmRestore(c, e);
       case _WorldAction.investment:
         showHistoryDetailDialog(c, controller: widget.controller, event: e);
-      case _WorldAction.editTime:
-        showExecutionTimeEditor(
-          c,
-          controller: widget.controller,
-          ownerType: ExecutionOwnerType.event,
-          ownerId: e.id,
-          ownerName: e.name,
-          contextLabel: 'Event',
-        );
-      case _WorldAction.adjustPause:
-        _adjustRunning(c, e, false);
-      case _WorldAction.adjustComplete:
-        _adjustRunning(c, e, true);
       case _WorldAction.deleteHistory:
         _confirmDeleteHistory(c, e);
       case _WorldAction.addToday:
@@ -649,22 +609,6 @@ class _WorldPageState extends State<WorldPage> {
         widget.controller.wait(e.id);
       case _WorldAction.delete:
         _confirmDelete(c, e);
-    }
-  }
-
-  Future<void> _adjustRunning(BuildContext c, JaxEvent e, bool complete) async {
-    final items = await widget.controller.executionSegments(
-      ExecutionOwnerType.event,
-      e.id,
-    );
-    final open = items.where((s) => s.endedAt == null).firstOrNull;
-    if (open != null && c.mounted) {
-      await showFinishRunningAtDialog(
-        c,
-        controller: widget.controller,
-        segment: open,
-        complete: complete,
-      );
     }
   }
 
@@ -1136,9 +1080,6 @@ enum _WorldAction {
   restore,
   investment,
   deleteHistory,
-  editTime,
-  adjustPause,
-  adjustComplete,
 }
 
 enum _CatAction { rename, up, down, delete }
