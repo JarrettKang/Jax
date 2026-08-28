@@ -118,6 +118,7 @@ class EventController extends ChangeNotifier {
   Timer? _ticker;
   Timer? _dayBoundaryTimer;
   Future<void> _reorderTail = Future.value();
+  Future<void> _routineReorderTail = Future.value();
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
@@ -469,8 +470,46 @@ class EventController extends ChangeNotifier {
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>
       _change(() => _routineService!.setActive(r, active));
-  Future<String?> reorderRoutine(String id, int targetIndex) =>
-      _change(() => _routineRepository!.reorderRoutine(id, targetIndex));
+  Future<String?> reorderRoutine(String id, int targetIndex) {
+    final repository = _routineRepository;
+    if (repository == null) return Future.value('日常不可用');
+    return _enqueueRoutineReorder(
+      () => _change(() => repository.reorderRoutine(id, targetIndex)),
+    );
+  }
+
+  Future<String?> moveRoutineUp(String id) => _moveRoutine(id, -1);
+  Future<String?> moveRoutineDown(String id) => _moveRoutine(id, 1);
+
+  Future<String?> _moveRoutine(String id, int direction) {
+    final repository = _routineRepository;
+    if (repository == null) return Future.value('日常不可用');
+    return _enqueueRoutineReorder(() async {
+      final routines = await repository.getRoutines();
+      final current = routines.where((routine) => routine.id == id).firstOrNull;
+      if (current == null) return '日常不存在';
+      final group = routines
+          .where((routine) => routine.isActive == current.isActive)
+          .toList(growable: false);
+      final index = group.indexWhere((routine) => routine.id == id);
+      final targetInGroup = index + direction;
+      if (index < 0 || targetInGroup < 0 || targetInGroup >= group.length) {
+        return null;
+      }
+      final targetId = group[targetInGroup].id;
+      final targetIndex = routines.indexWhere(
+        (routine) => routine.id == targetId,
+      );
+      return _change(() => repository.reorderRoutine(id, targetIndex));
+    });
+  }
+
+  Future<String?> _enqueueRoutineReorder(Future<String?> Function() action) {
+    final queued = _routineReorderTail.then((_) => action());
+    _routineReorderTail = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
+  }
+
   Future<String?> startRoutine(Routine r) =>
       _change(() => _routineService!.start(r, execution: executionFor(r)));
   Future<String?> pauseRoutine(Routine r) =>

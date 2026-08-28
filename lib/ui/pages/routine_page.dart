@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
+import '../widgets/routine_reorder_buttons.dart';
 
 class RoutinePage extends StatelessWidget {
   const RoutinePage({required this.controller, super.key});
@@ -11,6 +12,9 @@ class RoutinePage extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
+      final activeRoutines = controller.routines
+          .where((routine) => routine.isActive)
+          .toList(growable: false);
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -28,39 +32,30 @@ class RoutinePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          for (final r in controller.routines.where((r) => r.isActive))
+          for (var index = 0; index < activeRoutines.length; index++)
             ListTile(
-              title: Text(r.name),
-              subtitle: Text(_managementLabel(r)),
+              key: ValueKey('routine-${activeRoutines[index].id}'),
+              title: Text(activeRoutines[index].name),
+              subtitle: Text(_managementLabel(activeRoutines[index])),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (controller.routines.indexOf(r) > 0)
-                    IconButton(
-                      key: ValueKey('routine-up-${r.id}'),
-                      tooltip: '上移',
-                      onPressed: () => controller.reorderRoutine(
-                        r.id,
-                        controller.routines.indexOf(r) - 1,
-                      ),
-                      icon: const Icon(Icons.arrow_upward),
-                    ),
-                  if (controller.routines.indexOf(r) <
-                      controller.routines.length - 1)
-                    IconButton(
-                      key: ValueKey('routine-down-${r.id}'),
-                      tooltip: '下移',
-                      onPressed: () => controller.reorderRoutine(
-                        r.id,
-                        controller.routines.indexOf(r) + 1,
-                      ),
-                      icon: const Icon(Icons.arrow_downward),
-                    ),
+                  RoutineReorderButtons(
+                    controller: controller,
+                    routineId: activeRoutines[index].id,
+                    index: index,
+                    count: activeRoutines.length,
+                  ),
                   PopupMenuButton<String>(
-                    key: ValueKey('routine-more-${r.id}'),
+                    key: ValueKey('routine-more-${activeRoutines[index].id}'),
                     onSelected: (v) {
-                      if (v == 'edit') _edit(context, r);
-                      if (v == 'disable') controller.setRoutineActive(r, false);
+                      if (v == 'edit') _edit(context, activeRoutines[index]);
+                      if (v == 'disable') {
+                        controller.setRoutineActive(
+                          activeRoutines[index],
+                          false,
+                        );
+                      }
                     },
                     itemBuilder: (_) => const [
                       PopupMenuItem(value: 'edit', child: Text('编辑')),
