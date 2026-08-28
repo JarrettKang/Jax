@@ -300,6 +300,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 系统提供不可编辑的虚拟“未分类”分组；用户 Category 支持创建、重命名、删除和独立排序。删除 Category 只将所属 roots 归入未分类，不删除 Event 或破坏 hierarchy。
 - hierarchy 移动到下层时清除旧的直接 Category；下层解除关系成为新 root 时继承原 root Category。Category 不拥有 status、duration、run_segments、completion 或 Category 状态。
 - World overview 按 Category 用户顺序从左到右、从上到下展示卡片；有未分类 root Event 时追加虚拟“未分类”卡片，空用户 Category 仍显示。Category detail 只展示该 Category 的 root trees 与 descendants，Event sibling ordering 保持原有相对顺序。
+- World overview 保持 Category 卡片入口结构，但使用紧凑宽卡：名称与颜色点为主视觉，Event 数与顶级 Event 数合并为相邻的单行 metadata；宽/中/窄屏分别采用约 4/3/2 列且卡片不随剩余高度拉伸。内部存在 running Event 时仅使用轻边框、极淡色调和小状态标识，未分类使用更弱的中性视觉。
 - 从 Category detail 新建 root Event 时直接采用当前 Category；从虚拟“未分类”detail 创建时 `category_id` 保持 null。下层 Event 继续从父 Event 菜单创建并继承 root Category；Routine 不进入 World。
 - 两层结构不再提供 Category 展开/折叠 UI；既有 Category collapse preference 作为无害兼容数据保留但不再参与 World 展示，不为此增加 migration。Event tree 的 session 内展开/折叠继续保留。
 - World Category 与 Routine Category 各自以稳定 ID 保持独立 identity，并正式拥有 `colorKey`。用户从 Jax 内置 8 色 palette 选择；新建时综合两类 Category 的使用次数预选最少使用色，同次数按 palette 顺序，允许用户重复选色。重命名、排序和折叠不改变颜色。

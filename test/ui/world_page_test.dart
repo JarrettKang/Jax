@@ -84,9 +84,9 @@ void main() {
       for (final id in ['dev', 'research', 'empty', null]) {
         expect(find.byKey(ValueKey('world-category-$id')), findsOneWidget);
       }
-      expect(find.text('2 个事件'), findsOneWidget);
-      expect(find.text('1 个顶级事件'), findsNWidgets(3));
-      expect(find.text('0 个事件'), findsOneWidget);
+      expect(find.text('2 个事件 · 1 个顶级事件'), findsOneWidget);
+      expect(find.text('1 个事件 · 1 个顶级事件'), findsNWidgets(2));
+      expect(find.text('0 个事件 · 0 个顶级事件'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('world-category-active-research')),
         findsOneWidget,
@@ -221,7 +221,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('world-back-overview')));
     await tester.pumpAndSettle();
-    expect(find.text('1 个事件'), findsNWidgets(2));
+    expect(find.text('1 个事件 · 1 个顶级事件'), findsNWidgets(2));
     await openDetail(tester, null);
     await tester.tap(find.byKey(const ValueKey('world-new-event')));
     await tester.pumpAndSettle();
@@ -320,6 +320,48 @@ void main() {
     expect(find.text('正在执行'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'overview keeps compact cards in responsive 4 3 and 2 column grids',
+    (tester) async {
+      final repository = MemoryRepository()
+        ..categories.addAll([
+          for (var i = 0; i < 5; i++) category('c$i', '分类 $i', i),
+        ]);
+      Future<void> verify(Size size, int columns) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+        await tester.pumpAndSettle();
+        await openWorld(tester);
+        final cards = [
+          for (var i = 0; i < 5; i++)
+            find.byKey(ValueKey('world-category-c$i')),
+        ];
+        expect({
+          for (final card in cards.take(columns)) tester.getTopLeft(card).dy,
+        }, hasLength(1));
+        if (columns < cards.length) {
+          expect(
+            tester.getTopLeft(cards[columns]).dy,
+            greaterThan(tester.getTopLeft(cards.first).dy),
+          );
+        }
+        for (final card in cards) {
+          expect(tester.getSize(card).height, 92);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+
+      await verify(const Size(1400, 900), 4);
+      await verify(const Size(900, 900), 3);
+      await verify(const Size(360, 800), 2);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+    },
+  );
 
   testWidgets(
     'Category detail batch selection appends visible independent unfinished Events to Today',

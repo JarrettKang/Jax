@@ -6,6 +6,7 @@ import '../../core/entities/world_display_state.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
+import '../theme/category_palette_colors.dart';
 import '../widgets/category_selector.dart';
 import '../widgets/category_color_picker.dart';
 import '../widgets/category_edit_dialog.dart';
@@ -86,73 +87,83 @@ class _WorldPageState extends State<WorldPage> {
     List<String?> keys,
     Map<String?, List<JaxEvent>> groups,
     Map<String, Category> categoriesById,
-  ) => ListView(
-    key: const ValueKey('world-overview'),
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-    children: [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.tonalIcon(
-          key: const ValueKey('world-new-category'),
-          onPressed: () => _createCategory(context),
-          icon: const Icon(Icons.create_new_folder_outlined),
-          label: const Text('新建分类'),
-        ),
-      ),
-      if (keys.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 72),
-          child: Center(child: Text('你的世界还没有分类')),
-        )
-      else ...[
-        const SizedBox(height: 20),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = (constraints.maxWidth / 260).ceil().clamp(1, 4);
-            final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.2;
-            return GridView.builder(
-              key: const ValueKey('world-category-grid'),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: largeText ? .8 : 1.25,
-              ),
-              itemCount: keys.length,
-              itemBuilder: (context, index) {
-                final id = keys[index];
-                final category = id == null ? null : categoriesById[id];
-                final roots = groups[id] ?? const <JaxEvent>[];
-                final eventCount = roots.fold<int>(
-                  0,
-                  (count, root) => count + 1 + _descendantCount(root.id),
-                );
-                final active = _categoryContainsRunning(roots);
-                return _CategoryOverviewCard(
-                  key: ValueKey('world-category-$id'),
-                  categoryId: id,
-                  name: category?.name ?? '未分类',
-                  colorKey: category?.colorKey,
-                  eventCount: eventCount,
-                  rootCount: roots.length,
-                  active: active,
-                  onTap: () => _enterDetail(id),
-                  menu: category == null
-                      ? null
-                      : _categoryMenu(
-                          context,
-                          category,
-                          widget.controller.categories.indexOf(category),
-                        ),
+  ) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1120),
+      child: ListView(
+        key: const ValueKey('world-overview'),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              key: const ValueKey('world-new-category'),
+              onPressed: () => _createCategory(context),
+              icon: const Icon(Icons.create_new_folder_outlined),
+              label: const Text('新建分类'),
+            ),
+          ),
+          if (keys.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 72),
+              child: Center(child: Text('你的世界还没有分类')),
+            )
+          else ...[
+            const SizedBox(height: 20),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 980
+                    ? 4
+                    : constraints.maxWidth >= 700
+                    ? 3
+                    : 2;
+                final largeText =
+                    MediaQuery.textScalerOf(context).scale(1) > 1.2;
+                return GridView.builder(
+                  key: const ValueKey('world-category-grid'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: largeText ? 112 : 92,
+                  ),
+                  itemCount: keys.length,
+                  itemBuilder: (context, index) {
+                    final id = keys[index];
+                    final category = id == null ? null : categoriesById[id];
+                    final roots = groups[id] ?? const <JaxEvent>[];
+                    final eventCount = roots.fold<int>(
+                      0,
+                      (count, root) => count + 1 + _descendantCount(root.id),
+                    );
+                    final active = _categoryContainsRunning(roots);
+                    return _CategoryOverviewCard(
+                      key: ValueKey('world-category-$id'),
+                      categoryId: id,
+                      name: category?.name ?? '未分类',
+                      colorKey: category?.colorKey,
+                      eventCount: eventCount,
+                      rootCount: roots.length,
+                      active: active,
+                      onTap: () => _enterDetail(id),
+                      menu: category == null
+                          ? null
+                          : _categoryMenu(
+                              context,
+                              category,
+                              widget.controller.categories.indexOf(category),
+                            ),
+                    );
+                  },
                 );
               },
-            );
-          },
-        ),
-      ],
-    ],
+            ),
+          ],
+        ],
+      ),
+    ),
   );
 
   Widget _detail(
@@ -916,6 +927,9 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final accent = widget.colorKey == null
+        ? CategoryPaletteColors.neutral(context)
+        : CategoryPaletteColors.resolve(context, widget.colorKey!);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovering = true),
@@ -923,19 +937,21 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
       child: Card(
         elevation: 0,
         color: widget.active
-            ? colors.primaryContainer.withValues(alpha: .24)
+            ? accent.withValues(alpha: .07)
             : _hovering
             ? colors.surfaceContainerHighest.withValues(alpha: .68)
+            : widget.categoryId == null
+            ? colors.surfaceContainerLow.withValues(alpha: .65)
             : colors.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: widget.active
-                ? colors.primary.withValues(alpha: .72)
+                ? accent.withValues(alpha: .62)
                 : _hovering
                 ? colors.outline.withValues(alpha: .48)
                 : colors.outlineVariant,
-            width: widget.active ? 1.5 : 1,
+            width: widget.active ? 1.25 : 1,
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -946,7 +962,7 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
                 key: ValueKey('world-category-open-${widget.categoryId}'),
                 onTap: widget.onTap,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -954,17 +970,6 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
                         children: [
                           CategoryColorDot(colorKey: widget.colorKey),
                           const SizedBox(width: 7),
-                          if (widget.active) ...[
-                            Icon(
-                              Icons.circle,
-                              key: ValueKey(
-                                'world-category-active-${widget.categoryId}',
-                              ),
-                              size: 8,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 6),
-                          ],
                           Expanded(
                             child: Padding(
                               padding: EdgeInsets.only(
@@ -984,24 +989,31 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
                           ),
                         ],
                       ),
-                      const Spacer(),
-                      Text(
-                        '${widget.eventCount} 个事件',
-                        key: ValueKey(
-                          'world-category-event-count-${widget.categoryId}',
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${widget.rootCount} 个顶级事件',
-                        key: ValueKey(
-                          'world-category-root-count-${widget.categoryId}',
-                        ),
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: colors.onSurfaceVariant),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${widget.eventCount} 个事件 · ${widget.rootCount} 个顶级事件',
+                              key: ValueKey(
+                                'world-category-event-count-${widget.categoryId}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: colors.onSurfaceVariant),
+                            ),
+                          ),
+                          if (widget.active)
+                            Icon(
+                              Icons.play_arrow_rounded,
+                              key: ValueKey(
+                                'world-category-active-${widget.categoryId}',
+                              ),
+                              size: 16,
+                              color: accent,
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -1009,7 +1021,11 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
               ),
             ),
             if (widget.menu case final menu?)
-              Positioned(top: 4, right: 4, child: menu),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Opacity(opacity: _hovering ? 1 : .62, child: menu),
+              ),
           ],
         ),
       ),
