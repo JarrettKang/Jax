@@ -19,24 +19,35 @@ class RoutineReorderButtons extends StatelessWidget {
   final int count;
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      if (index > 0)
-        IconButton(
-          key: ValueKey('routine-up-$routineId'),
-          tooltip: '上移',
-          onPressed: () => _move(context, true),
-          icon: const Icon(Icons.arrow_upward),
+  Widget build(BuildContext context) => SizedBox(
+    key: ValueKey('routine-reorder-slot-$routineId'),
+    width: 96,
+    child: Row(
+      children: [
+        SizedBox(
+          width: 48,
+          child: index > 0
+              ? IconButton(
+                  key: ValueKey('routine-up-$routineId'),
+                  tooltip: '上移',
+                  onPressed: () => _move(context, true),
+                  icon: const Icon(Icons.arrow_upward),
+                )
+              : null,
         ),
-      if (index < count - 1)
-        IconButton(
-          key: ValueKey('routine-down-$routineId'),
-          tooltip: '下移',
-          onPressed: () => _move(context, false),
-          icon: const Icon(Icons.arrow_downward),
+        SizedBox(
+          width: 48,
+          child: index < count - 1
+              ? IconButton(
+                  key: ValueKey('routine-down-$routineId'),
+                  tooltip: '下移',
+                  onPressed: () => _move(context, false),
+                  icon: const Icon(Icons.arrow_downward),
+                )
+              : null,
         ),
-    ],
+      ],
+    ),
   );
 
   Future<void> _move(BuildContext context, bool up) async {

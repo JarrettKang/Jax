@@ -198,39 +198,63 @@ class _RoutinePageState extends State<RoutinePage> {
                 ),
               ),
               if (category != null) ...[
-                if (categoryIndex > 0)
-                  IconButton(
-                    key: ValueKey('routine-category-up-${category.id}'),
-                    tooltip: '上移',
-                    onPressed: () => widget.controller.reorderRoutineCategory(
-                      category.id,
-                      categoryIndex - 1,
-                    ),
-                    icon: const Icon(Icons.arrow_upward),
-                    visualDensity: VisualDensity.compact,
+                SizedBox(
+                  key: ValueKey('routine-category-reorder-slot-${category.id}'),
+                  width: 96,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 48,
+                        child: categoryIndex > 0
+                            ? IconButton(
+                                key: ValueKey(
+                                  'routine-category-up-${category.id}',
+                                ),
+                                tooltip: '上移',
+                                onPressed: () =>
+                                    widget.controller.reorderRoutineCategory(
+                                      category.id,
+                                      categoryIndex - 1,
+                                    ),
+                                icon: const Icon(Icons.arrow_upward),
+                              )
+                            : null,
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child:
+                            categoryIndex <
+                                widget.controller.routineCategories.length - 1
+                            ? IconButton(
+                                key: ValueKey(
+                                  'routine-category-down-${category.id}',
+                                ),
+                                tooltip: '下移',
+                                onPressed: () =>
+                                    widget.controller.reorderRoutineCategory(
+                                      category.id,
+                                      categoryIndex + 1,
+                                    ),
+                                icon: const Icon(Icons.arrow_downward),
+                              )
+                            : null,
+                      ),
+                    ],
                   ),
-                if (categoryIndex <
-                    widget.controller.routineCategories.length - 1)
-                  IconButton(
-                    key: ValueKey('routine-category-down-${category.id}'),
-                    tooltip: '下移',
-                    onPressed: () => widget.controller.reorderRoutineCategory(
-                      category.id,
-                      categoryIndex + 1,
-                    ),
-                    icon: const Icon(Icons.arrow_downward),
-                    visualDensity: VisualDensity.compact,
+                ),
+                SizedBox(
+                  width: 48,
+                  child: PopupMenuButton<String>(
+                    key: ValueKey('routine-category-more-${category.id}'),
+                    onSelected: (v) {
+                      if (v == 'rename') _editCategory(context, category);
+                      if (v == 'delete') _deleteCategory(context, category);
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'rename', child: Text('重命名')),
+                      PopupMenuItem(value: 'delete', child: Text('删除分类')),
+                    ],
                   ),
-                PopupMenuButton<String>(
-                  key: ValueKey('routine-category-more-${category.id}'),
-                  onSelected: (v) {
-                    if (v == 'rename') _editCategory(context, category);
-                    if (v == 'delete') _deleteCategory(context, category);
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'rename', child: Text('重命名')),
-                    PopupMenuItem(value: 'delete', child: Text('删除分类')),
-                  ],
                 ),
               ],
             ],
@@ -270,23 +294,27 @@ class _RoutinePageState extends State<RoutinePage> {
             index: index,
             count: count,
           ),
-          PopupMenuButton<String>(
-            key: ValueKey('routine-more-${routine.id}'),
-            onSelected: (v) {
-              if (v == 'edit') _editRoutine(context, routine);
-              if (v == 'disable') {
-                widget.controller.setRoutineActive(routine, false);
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('编辑')),
-              PopupMenuItem(value: 'disable', child: Text('停用')),
-            ],
+          SizedBox(
+            width: 48,
+            child: PopupMenuButton<String>(
+              key: ValueKey('routine-more-${routine.id}'),
+              onSelected: (v) {
+                if (v == 'edit') _editRoutine(context, routine);
+                if (v == 'disable') {
+                  widget.controller.setRoutineActive(routine, false);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: Text('编辑')),
+                PopupMenuItem(value: 'disable', child: Text('停用')),
+              ],
+            ),
           ),
         ],
       );
       final recurrence = Text(
         _label(routine),
+        key: ValueKey('routine-recurrence-${routine.id}'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall

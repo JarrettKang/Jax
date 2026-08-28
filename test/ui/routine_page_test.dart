@@ -159,4 +159,82 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'wide Routine and Category columns stay aligned across reorder boundaries',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final now = DateTime(2026, 8, 29, 8);
+      final repo = MemoryRepository()
+        ..routineCategories.addAll([
+          RoutineCategory(
+            id: 'life',
+            name: '日常起居',
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          RoutineCategory(
+            id: 'single',
+            name: '单项分类',
+            sortOrder: 1,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ]);
+      Routine routine(String id, String name, String category, int order) =>
+          Routine(
+            id: id,
+            name: name,
+            routineCategoryId: category,
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: order,
+            createdAt: now,
+            updatedAt: now,
+          );
+      repo.routines.addAll([
+        routine('wash', '晚上洗漱', 'life', 0),
+        routine('sleep', '睡觉', 'life', 1),
+        routine('morning', '起床洗漱', 'life', 2),
+        routine('lunch', '午饭', 'life', 3),
+        routine('dinner', '晚饭', 'life', 4),
+        routine('only', '唯一事项', 'single', 0),
+      ]);
+      await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('日常'));
+      await tester.pumpAndSettle();
+
+      const ids = ['wash', 'sleep', 'morning', 'lunch', 'dinner', 'only'];
+      double x(String prefix, String id) =>
+          tester.getTopLeft(find.byKey(ValueKey('$prefix-$id'))).dx;
+      final recurrenceXs = [for (final id in ids) x('routine-recurrence', id)];
+      final reorderXs = [for (final id in ids) x('routine-reorder-slot', id)];
+      final moreXs = [for (final id in ids) x('routine-more', id)];
+      expect(recurrenceXs.toSet(), hasLength(1));
+      expect(reorderXs.toSet(), hasLength(1));
+      expect(moreXs.toSet(), hasLength(1));
+      expect(find.byKey(const ValueKey('routine-up-wash')), findsNothing);
+      expect(find.byKey(const ValueKey('routine-down-wash')), findsOneWidget);
+      expect(find.byKey(const ValueKey('routine-up-sleep')), findsOneWidget);
+      expect(find.byKey(const ValueKey('routine-down-sleep')), findsOneWidget);
+      expect(find.byKey(const ValueKey('routine-up-dinner')), findsOneWidget);
+      expect(find.byKey(const ValueKey('routine-down-dinner')), findsNothing);
+      expect(find.byKey(const ValueKey('routine-up-only')), findsNothing);
+      expect(find.byKey(const ValueKey('routine-down-only')), findsNothing);
+      expect(
+        x('routine-category-reorder-slot', 'life'),
+        x('routine-category-reorder-slot', 'single'),
+      );
+      expect(
+        x('routine-category-more', 'life'),
+        x('routine-category-more', 'single'),
+      );
+    },
+  );
 }
