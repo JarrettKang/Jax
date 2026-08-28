@@ -29,6 +29,9 @@ class _SummaryPageState extends State<SummaryPage> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) => FutureBuilder<List<Object>>(
+      key: ValueKey(
+        'record-summary-${_week ? 'week' : 'day'}-${_anchor.year}-${_anchor.month}-${_anchor.day}',
+      ),
       future: Future.wait([
         _week
             ? widget.controller.weeklySummary(_anchor)

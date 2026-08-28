@@ -69,5 +69,23 @@ void main() {
     expect(find.text('周日'), findsOneWidget);
     expect(find.byType(Scrollable), findsWidgets);
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('日总结'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+    expect(find.text('今日时间分布'), findsOneWidget);
+    for (var switchIndex = 0; switchIndex < 3; switchIndex++) {
+      await tester.tap(find.text('周总结'));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('日总结'));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('今天 · 进行中'), findsOneWidget);
+    expect(find.text('今日时间分布'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('执行记录'), 500);
+    expect(find.text('执行记录'), findsOneWidget);
   });
 }
