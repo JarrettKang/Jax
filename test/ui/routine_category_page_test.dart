@@ -66,12 +66,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('洗漱'), findsOneWidget);
       expect(find.text('吃饭'), findsOneWidget);
+      expect(find.text('1 项'), findsNWidgets(2));
       await tester.tap(
         find.byKey(const ValueKey('routine-category-toggle-life')),
       );
       await tester.pumpAndSettle();
       expect(find.text('洗漱'), findsNothing);
       expect(find.text('吃饭'), findsOneWidget);
+      expect(find.text('1 项'), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       await tester.pumpWidget(app());
