@@ -354,6 +354,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 13. v0.2 今日统一执行入口
 
 - 一级导航固定为“首页 / 今日 / 世界 / 日常 / 记录”：首页回答现在正在做什么，今日回答今天准备做什么，世界管理 Event 长期结构，日常管理 Routine definition，记录复盘过去时间。
+- Routine 的当天执行（开始、暂停、恢复、完成）统一由“今日”的“今日日常”承担；“日常”只管理 Routine definition、recurrence、Category、顺序及启停，可轻量展示已有 execution 状态但不提供执行操作。
 - “今日事项”只包含明确加入当前 Jax day 的 Event，不等于全部 unfinished Event；“今日日常”包含 active 且 recurrence 命中当前 Jax day 显示日期的 Routine。两个分区分别排序，不建立 Event/Routine 混合顺序。
 - Jax day 使用设备本地时间 23:00 切换。逻辑日期 `YYYY-MM-DD` 表示前一自然日 23:00 至该日 23:00；Today、Routine occurrence/weekday 和 Daily Summary 共用同一个 JaxDay 规则。
 - Event 今日计划是独立的按日关联，包含 Event、逻辑日期和当日顺序；不改变 status、hierarchy、Category、World sibling order、duration 或 history。加入时追加到当日末尾，使用上移/下移调整独立顺序。

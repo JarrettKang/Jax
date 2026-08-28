@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
-import '../widgets/execution_action_buttons.dart';
 
 class RoutinePage extends StatelessWidget {
   const RoutinePage({required this.controller, super.key});
@@ -12,7 +11,6 @@ class RoutinePage extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
-      final today = controller.todayRoutines;
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -30,23 +28,10 @@ class RoutinePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Text('今日备用执行', style: Theme.of(context).textTheme.titleLarge),
-          const Text('主要执行入口已统一到“今日”。'),
-          const SizedBox(height: 8),
-          if (today.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: Text('当前 Jax day 没有命中的日常'),
-              ),
-            ),
-          for (final r in today) _card(context, r),
-          const Divider(height: 40),
-          Text('管理日常', style: Theme.of(context).textTheme.titleLarge),
           for (final r in controller.routines.where((r) => r.isActive))
             ListTile(
               title: Text(r.name),
-              subtitle: Text(_label(r.recurrence)),
+              subtitle: Text(_managementLabel(r)),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -103,188 +88,161 @@ class RoutinePage extends StatelessWidget {
       );
     },
   );
-  Widget _card(BuildContext context, Routine r) {
-    final e = controller.executionFor(r);
-    final elapsed = _duration(controller.routineElapsed(r));
-    final status = e == null
-        ? '未开始'
-        : switch (e.status) {
-            RoutineExecutionStatus.running => '正在执行 · $elapsed',
-            RoutineExecutionStatus.paused => '已暂停 · 已执行 $elapsed',
-            RoutineExecutionStatus.completed => '完成 · $elapsed',
-          };
-    final actions = <Widget>[];
-    if (e == null) {
-      actions.add(
-        _action(ExecutionAction.start, () => controller.startRoutine(r)),
-      );
-    } else if (e.status == RoutineExecutionStatus.running) {
-      actions.add(
-        _action(ExecutionAction.pause, () => controller.pauseRoutine(r)),
-      );
-      actions.add(_complete(r));
-    } else if (e.status == RoutineExecutionStatus.paused) {
-      actions.add(
-        _action(ExecutionAction.resume, () => controller.startRoutine(r)),
-      );
-      actions.add(_complete(r));
-    }
+  String _managementLabel(Routine r) {
     final category =
         controller.categories
             .where((c) => c.id == r.categoryId)
             .firstOrNull
             ?.name ??
         '未分类';
-    return Card(
-      key: ValueKey('routine-${r.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 180, maxWidth: 520),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    r.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Text('$category · ${_label(r.recurrence)}'),
-                  Text(status),
-                ],
-              ),
-            ),
-            ExecutionActionRow(children: actions),
-          ],
-        ),
-      ),
-    );
+    final execution = controller.executionFor(r);
+    final status = switch (execution?.status) {
+      RoutineExecutionStatus.running => '正在执行',
+      RoutineExecutionStatus.paused => '已暂停',
+      RoutineExecutionStatus.completed => '已完成',
+      null => null,
+    };
+    return [_label(r.recurrence), category, ?status].join(' · ');
   }
 
-  Widget _action(ExecutionAction action, VoidCallback tap) =>
-      ExecutionActionButton(action: action, onPressed: tap);
-  Widget _complete(Routine r) => ExecutionActionButton(
-    action: ExecutionAction.complete,
-    onPressed: () => controller.completeRoutine(r),
-  );
-  String _label(RoutineRecurrence r) => switch (r) {
-    RoutineRecurrence.daily => '每天',
-    RoutineRecurrence.weekdays => '工作日',
-    RoutineRecurrence.weekends => '周末',
-    RoutineRecurrence.selectedWeekdays => '指定星期',
-  };
-  String _duration(Duration d) =>
-      '${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
-  Future<void> _edit(BuildContext context, [Routine? routine]) async {
-    final name = TextEditingController(text: routine?.name);
-    var recurrence = routine?.recurrence ?? RoutineRecurrence.daily;
-    var mask = routine?.weekdayMask ?? 0;
-    String? category = routine?.categoryId;
-    String? errorText;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(routine == null ? '新建日常' : '编辑日常'),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: '名称'),
-                  ),
-                  CategorySelector(
-                    categories: controller.categories,
-                    value: category,
-                    onChanged: (value) => setState(() => category = value),
-                  ),
-                  DropdownButtonFormField<RoutineRecurrence>(
-                    initialValue: recurrence,
-                    decoration: const InputDecoration(labelText: '重复'),
-                    items: RoutineRecurrence.values
-                        .map(
-                          (v) => DropdownMenuItem(
-                            value: v,
-                            child: Text(_label(v)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() => recurrence = v!),
-                  ),
-                  if (recurrence == RoutineRecurrence.selectedWeekdays)
-                    Wrap(
-                      children: [
-                        for (var i = 0; i < 7; i++)
-                          FilterChip(
-                            label: Text('一二三四五六日'[i]),
-                            selected: mask & (1 << i) != 0,
-                            onSelected: (yes) => setState(() {
-                              if (yes) {
-                                mask |= 1 << i;
-                              } else {
-                                mask &= ~(1 << i);
-                              }
-                            }),
-                          ),
-                      ],
+  String _label(RoutineRecurrence r) => _routineLabel(r);
+  Future<void> _edit(BuildContext context, [Routine? routine]) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) =>
+            _RoutineEditDialog(controller: controller, routine: routine),
+      );
+}
+
+String _routineLabel(RoutineRecurrence r) => switch (r) {
+  RoutineRecurrence.daily => '每天',
+  RoutineRecurrence.weekdays => '工作日',
+  RoutineRecurrence.weekends => '周末',
+  RoutineRecurrence.selectedWeekdays => '指定星期',
+};
+
+class _RoutineEditDialog extends StatefulWidget {
+  const _RoutineEditDialog({required this.controller, this.routine});
+
+  final EventController controller;
+  final Routine? routine;
+
+  @override
+  State<_RoutineEditDialog> createState() => _RoutineEditDialogState();
+}
+
+class _RoutineEditDialogState extends State<_RoutineEditDialog> {
+  late final TextEditingController _name;
+  late RoutineRecurrence _recurrence;
+  late int _mask;
+  String? _category;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.routine?.name);
+    _recurrence = widget.routine?.recurrence ?? RoutineRecurrence.daily;
+    _mask = widget.routine?.weekdayMask ?? 0;
+    _category = widget.routine?.categoryId;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.routine == null ? '新建日常' : '编辑日常'),
+    content: SizedBox(
+      width: 420,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: '名称'),
+            ),
+            CategorySelector(
+              categories: widget.controller.categories,
+              value: _category,
+              onChanged: (value) => setState(() => _category = value),
+            ),
+            DropdownButtonFormField<RoutineRecurrence>(
+              initialValue: _recurrence,
+              decoration: const InputDecoration(labelText: '重复'),
+              items: RoutineRecurrence.values
+                  .map(
+                    (v) => DropdownMenuItem(
+                      value: v,
+                      child: Text(_routineLabel(v)),
                     ),
-                  if (errorText != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        errorText!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => _recurrence = v!),
+            ),
+            if (_recurrence == RoutineRecurrence.selectedWeekdays)
+              Wrap(
+                children: [
+                  for (var i = 0; i < 7; i++)
+                    FilterChip(
+                      label: Text('一二三四五六日'[i]),
+                      selected: _mask & (1 << i) != 0,
+                      onSelected: (yes) => setState(() {
+                        if (yes) {
+                          _mask |= 1 << i;
+                        } else {
+                          _mask &= ~(1 << i);
+                        }
+                      }),
                     ),
                 ],
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final error = routine == null
-                    ? await controller.createRoutine(
-                        name.text,
-                        category,
-                        recurrence,
-                        mask,
-                      )
-                    : await controller.updateRoutine(
-                        routine,
-                        name.text,
-                        category,
-                        recurrence,
-                        mask,
-                      );
-                if (error == null && dialogContext.mounted) {
-                  Navigator.pop(dialogContext);
-                } else if (error != null) {
-                  setState(() => errorText = error);
-                }
-              },
-              child: const Text('保存'),
-            ),
+            if (_errorText != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
           ],
         ),
       ),
-    );
-    name.dispose();
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
+      ),
+      FilledButton(onPressed: _save, child: const Text('保存')),
+    ],
+  );
+
+  Future<void> _save() async {
+    final routine = widget.routine;
+    final error = routine == null
+        ? await widget.controller.createRoutine(
+            _name.text,
+            _category,
+            _recurrence,
+            _mask,
+          )
+        : await widget.controller.updateRoutine(
+            routine,
+            _name.text,
+            _category,
+            _recurrence,
+            _mask,
+          );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _errorText = error);
+    }
   }
 }
