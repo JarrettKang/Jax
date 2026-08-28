@@ -52,7 +52,8 @@ void main() {
       expect(find.text('今日备用执行'), findsNothing);
       expect(find.text('管理日常'), findsNothing);
       expect(find.textContaining('非常长的早上洗漱'), findsOneWidget);
-      expect(find.text('每天 · 未分类'), findsNWidgets(2));
+      expect(find.text('未分类'), findsOneWidget);
+      expect(find.text('每天'), findsNWidgets(2));
       expect(find.text('开始'), findsNothing);
       expect(find.text('暂停'), findsNothing);
       expect(find.text('恢复'), findsNothing);
@@ -90,7 +91,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('日常'));
       await tester.pumpAndSettle();
-      expect(find.text('每天 · 未分类 · 正在执行'), findsOneWidget);
+      expect(find.text('每天 · 正在执行'), findsOneWidget);
       expect(find.text('开始'), findsNothing);
       expect(tester.takeException(), isNull);
     },

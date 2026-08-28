@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import 'core/repositories/event_repository.dart';
 import 'core/preferences/world_category_collapse_store.dart';
+import 'core/preferences/routine_category_collapse_store.dart';
 import 'core/services/save_service.dart';
 import 'core/use_cases/create_event.dart';
 import 'core/use_cases/prepare_for_shutdown.dart';
@@ -32,18 +33,23 @@ class JaxApp extends StatefulWidget {
     required this.repository,
     SaveService? saveService,
     WorldCategoryCollapseStore? worldCategoryCollapseStore,
+    RoutineCategoryCollapseStore? routineCategoryCollapseStore,
     IdGenerator? newId,
     Clock? now,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
            worldCategoryCollapseStore ?? InMemoryWorldCategoryCollapseStore(),
+       routineCategoryCollapseStore =
+           routineCategoryCollapseStore ??
+           InMemoryRoutineCategoryCollapseStore(),
        newId = newId ?? const Uuid().v4,
        now = now ?? DateTime.now;
 
   final EventRepository repository;
   final SaveService saveService;
   final WorldCategoryCollapseStore worldCategoryCollapseStore;
+  final RoutineCategoryCollapseStore routineCategoryCollapseStore;
   final IdGenerator newId;
   final Clock now;
 
@@ -161,7 +167,10 @@ class _JaxAppState extends State<JaxApp> {
         controller: _controller,
         worldCategoryCollapseStore: widget.worldCategoryCollapseStore,
       ),
-      RoutinePage(controller: _controller),
+      RoutinePage(
+        controller: _controller,
+        collapseStore: widget.routineCategoryCollapseStore,
+      ),
       SummaryPage(controller: _controller),
     ];
 

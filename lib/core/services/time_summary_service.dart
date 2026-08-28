@@ -3,6 +3,7 @@ import '../entities/jax_day.dart';
 import '../entities/time_summary.dart';
 import '../repositories/event_repository.dart';
 import '../repositories/routine_repository.dart';
+import '../entities/routine_category.dart';
 
 class TimeSummaryService {
   TimeSummaryService(this._repository, this._now);
@@ -59,9 +60,11 @@ class TimeSummaryService {
     final categoryById = {
       for (final category in categories) category.id: category,
     };
-    final totals = <String?, Duration>{};
+    final totals = <String, Duration>{};
+    const unclassified = 'unclassified';
     for (final event in events) {
-      final bucket = _rootCategory(event, byId)?.categoryId;
+      final categoryId = _rootCategory(event, byId)?.categoryId;
+      final bucket = categoryId == null ? unclassified : 'event:$categoryId';
       for (final segment in await _repository.getRunSegments(event.id)) {
         final segmentEnd = (segment.endedAt ?? now).toLocal();
         final segmentStart = segment.startedAt.toLocal();
@@ -75,8 +78,12 @@ class TimeSummaryService {
       }
     }
     final routineRepository = _routines;
+    var routineCategories = const <RoutineCategory>[];
+    var routineCategoryById = const <String, RoutineCategory>{};
     if (routineRepository != null) {
       final routines = await routineRepository.getRoutines();
+      routineCategories = await routineRepository.getRoutineCategories();
+      routineCategoryById = {for (final c in routineCategories) c.id: c};
       final routineById = {for (final r in routines) r.id: r};
       for (final execution in await routineRepository.getRoutineExecutions()) {
         final routine = routineById[execution.routineId];
@@ -91,8 +98,12 @@ class TimeSummaryService {
               : start;
           final overlapEnd = segmentEnd.isBefore(end) ? segmentEnd : end;
           if (overlapEnd.isAfter(overlapStart)) {
-            totals[routine.categoryId] =
-                (totals[routine.categoryId] ?? Duration.zero) +
+            final categoryId = routine.routineCategoryId;
+            final bucket = categoryId == null
+                ? unclassified
+                : 'routine:$categoryId';
+            totals[bucket] =
+                (totals[bucket] ?? Duration.zero) +
                 overlapEnd.difference(overlapStart);
           }
         }
@@ -102,14 +113,30 @@ class TimeSummaryService {
         totals.entries.where((entry) => entry.value > Duration.zero).map((
           entry,
         ) {
-          final category = entry.key == null ? null : categoryById[entry.key];
+          final isEvent = entry.key.startsWith('event:');
+          final isRoutine = entry.key.startsWith('routine:');
+          final id = entry.key.contains(':')
+              ? entry.key.substring(entry.key.indexOf(':') + 1)
+              : null;
+          final category = isEvent && id != null ? categoryById[id] : null;
+          final RoutineCategory? routineCategory = isRoutine && id != null
+              ? routineCategoryById[id]
+              : null;
           return CategoryDuration(
-            categoryId: category?.id,
-            name: category?.name ?? '未分类',
+            categoryId: id,
+            bucketKey: entry.key,
+            source: isEvent
+                ? SummaryCategorySource.event
+                : isRoutine
+                ? SummaryCategorySource.routine
+                : SummaryCategorySource.unclassified,
+            name: category?.name ?? routineCategory?.name ?? '未分类',
             duration: entry.value,
-            order: category == null
-                ? categories.length
-                : categories.indexOf(category),
+            order: category != null
+                ? categories.indexOf(category)
+                : routineCategory != null
+                ? categories.length + routineCategories.indexOf(routineCategory)
+                : categories.length + routineCategories.length,
           );
         }).toList()..sort((a, b) {
           final duration = b.duration.compareTo(a.duration);

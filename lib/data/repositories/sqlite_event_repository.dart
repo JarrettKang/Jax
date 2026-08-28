@@ -6,6 +6,7 @@ import '../../core/entities/run_segment.dart';
 import '../../core/entities/category.dart';
 import '../../core/entities/event_day_plan.dart';
 import '../../core/entities/routine.dart';
+import '../../core/entities/routine_category.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/event_day_plan_repository.dart';
 import '../../core/repositories/routine_repository.dart';
@@ -651,6 +652,88 @@ class SqliteEventRepository
         orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
       )).map(_routineFromRow).toList();
   @override
+  Future<List<RoutineCategory>> getRoutineCategories() async =>
+      (await _appDatabase.database.query(
+        'routine_categories',
+        orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+      )).map(_routineCategoryFromRow).toList();
+  @override
+  Future<void> insertRoutineCategory(RoutineCategory c) async => _appDatabase
+      .database
+      .insert('routine_categories', _routineCategoryToRow(c));
+  @override
+  Future<void> updateRoutineCategory(RoutineCategory c) async {
+    if (await _appDatabase.database.update(
+          'routine_categories',
+          _routineCategoryToRow(c),
+          where: 'id = ?',
+          whereArgs: [c.id],
+        ) !=
+        1) {
+      throw StateError('Routine Category not found');
+    }
+  }
+
+  @override
+  Future<void> reorderRoutineCategory(String id, int targetIndex) async =>
+      _appDatabase.database.transaction((tx) async {
+        final items = (await tx.query(
+          'routine_categories',
+          orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+        )).map(_routineCategoryFromRow).toList();
+        final current = items.indexWhere((c) => c.id == id);
+        if (current < 0 || targetIndex < 0 || targetIndex >= items.length) {
+          return;
+        }
+        final moved = items.removeAt(current);
+        items.insert(targetIndex, moved);
+        for (var i = 0; i < items.length; i++) {
+          await tx.update(
+            'routine_categories',
+            {'sort_order': i},
+            where: 'id = ?',
+            whereArgs: [items[i].id],
+          );
+        }
+      });
+  @override
+  Future<void> deleteRoutineCategory(String id) async =>
+      _appDatabase.database.transaction((tx) async {
+        final maximum =
+            (await tx.rawQuery(
+                  'SELECT MAX(sort_order) maximum FROM routines WHERE routine_category_id IS NULL',
+                )).single['maximum']
+                as int?;
+        final destination = (maximum ?? -1) + 1;
+        final moved = await tx.query(
+          'routines',
+          where: 'routine_category_id = ?',
+          whereArgs: [id],
+          orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+        );
+        for (var i = 0; i < moved.length; i++) {
+          await tx.update(
+            'routines',
+            {'routine_category_id': null, 'sort_order': destination + i},
+            where: 'id = ?',
+            whereArgs: [moved[i]['id']],
+          );
+        }
+        await tx.delete('routine_categories', where: 'id = ?', whereArgs: [id]);
+        final remaining = await tx.query(
+          'routine_categories',
+          orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+        );
+        for (var i = 0; i < remaining.length; i++) {
+          await tx.update(
+            'routine_categories',
+            {'sort_order': i},
+            where: 'id = ?',
+            whereArgs: [remaining[i]['id']],
+          );
+        }
+      });
+  @override
   Future<void> insertRoutine(Routine r) async =>
       _appDatabase.database.insert('routines', _routineToRow(r));
   @override
@@ -669,8 +752,20 @@ class SqliteEventRepository
   @override
   Future<void> reorderRoutine(String id, int targetIndex) async =>
       _appDatabase.database.transaction((tx) async {
+        final source = await tx.query(
+          'routines',
+          where: 'id = ?',
+          whereArgs: [id],
+          limit: 1,
+        );
+        if (source.isEmpty) throw StateError('Routine not found');
+        final categoryId = source.single['routine_category_id'];
         final rows = await tx.query(
           'routines',
+          where: categoryId == null
+              ? 'routine_category_id IS NULL'
+              : 'routine_category_id = ?',
+          whereArgs: categoryId == null ? null : [categoryId],
           orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
         );
         final routines = rows.map(_routineFromRow).toList();
@@ -857,7 +952,7 @@ class SqliteEventRepository
   Map<String, Object?> _routineToRow(Routine r) => {
     'id': r.id,
     'name': r.name,
-    'category_id': r.categoryId,
+    'routine_category_id': r.routineCategoryId,
     'recurrence_type': r.recurrence.name,
     'weekday_mask': r.weekdayMask,
     'is_active': r.isActive ? 1 : 0,
@@ -868,7 +963,7 @@ class SqliteEventRepository
   Routine _routineFromRow(Map<String, Object?> r) => Routine(
     id: r['id'] as String,
     name: r['name'] as String,
-    categoryId: r['category_id'] as String?,
+    routineCategoryId: r['routine_category_id'] as String?,
     recurrence: RoutineRecurrence.values.byName(r['recurrence_type'] as String),
     weekdayMask: r['weekday_mask'] as int,
     isActive: (r['is_active'] as int) == 1,
@@ -882,6 +977,27 @@ class SqliteEventRepository
       isUtc: true,
     ),
   );
+  Map<String, Object?> _routineCategoryToRow(RoutineCategory c) => {
+    'id': c.id,
+    'name': c.name,
+    'sort_order': c.sortOrder,
+    'created_at_utc': c.createdAt.toUtc().millisecondsSinceEpoch,
+    'updated_at_utc': c.updatedAt.toUtc().millisecondsSinceEpoch,
+  };
+  RoutineCategory _routineCategoryFromRow(Map<String, Object?> r) =>
+      RoutineCategory(
+        id: r['id'] as String,
+        name: r['name'] as String,
+        sortOrder: r['sort_order'] as int,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          r['created_at_utc'] as int,
+          isUtc: true,
+        ),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(
+          r['updated_at_utc'] as int,
+          isUtc: true,
+        ),
+      );
   Map<String, Object?> _executionToRow(RoutineExecution e) => {
     'id': e.id,
     'routine_id': e.routineId,

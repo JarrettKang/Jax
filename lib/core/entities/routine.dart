@@ -10,10 +10,10 @@ class Routine {
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
-    this.categoryId,
+    this.routineCategoryId,
   });
   final String id, name;
-  final String? categoryId;
+  final String? routineCategoryId;
   final RoutineRecurrence recurrence;
   final int weekdayMask, sortOrder;
   final bool isActive;
@@ -27,7 +27,7 @@ class Routine {
   };
   Routine copyWith({
     String? name,
-    String? categoryId,
+    String? routineCategoryId,
     bool clearCategory = false,
     RoutineRecurrence? recurrence,
     int? weekdayMask,
@@ -37,7 +37,9 @@ class Routine {
   }) => Routine(
     id: id,
     name: name ?? this.name,
-    categoryId: clearCategory ? null : categoryId ?? this.categoryId,
+    routineCategoryId: clearCategory
+        ? null
+        : routineCategoryId ?? this.routineCategoryId,
     recurrence: recurrence ?? this.recurrence,
     weekdayMask: weekdayMask ?? this.weekdayMask,
     isActive: isActive ?? this.isActive,

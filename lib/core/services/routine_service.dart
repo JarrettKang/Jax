@@ -16,7 +16,7 @@ class RoutineService {
   static String occurrence(DateTime date) => JaxDay.containing(date).key;
   Future<void> create(
     String name,
-    String? categoryId,
+    String? routineCategoryId,
     RoutineRecurrence recurrence,
     int mask,
   ) async {
@@ -26,16 +26,24 @@ class RoutineService {
       throw const DomainFailure('请至少选择一天');
     }
     final t = now().toUtc();
-    final all = await repository.getRoutines();
+    final all = (await repository.getRoutines())
+        .where((r) => r.routineCategoryId == routineCategoryId)
+        .toList();
+    final nextOrder =
+        all.fold<int>(
+          -1,
+          (value, r) => r.sortOrder > value ? r.sortOrder : value,
+        ) +
+        1;
     await repository.insertRoutine(
       Routine(
         id: newId(),
         name: clean,
-        categoryId: categoryId,
+        routineCategoryId: routineCategoryId,
         recurrence: recurrence,
         weekdayMask: mask,
         isActive: true,
-        sortOrder: all.length,
+        sortOrder: nextOrder,
         createdAt: t,
         updatedAt: t,
       ),
@@ -45,7 +53,7 @@ class RoutineService {
   Future<void> update(
     Routine routine,
     String name,
-    String? categoryId,
+    String? routineCategoryId,
     RoutineRecurrence recurrence,
     int mask,
   ) async {
@@ -54,11 +62,25 @@ class RoutineService {
     if (recurrence == RoutineRecurrence.selectedWeekdays && mask == 0) {
       throw const DomainFailure('请至少选择一天');
     }
+    final changedCategory = routine.routineCategoryId != routineCategoryId;
+    final destinationItems = changedCategory
+        ? (await repository.getRoutines()).where(
+            (r) => r.routineCategoryId == routineCategoryId,
+          )
+        : const <Routine>[];
+    final destination = changedCategory
+        ? destinationItems.fold<int>(
+                -1,
+                (value, r) => r.sortOrder > value ? r.sortOrder : value,
+              ) +
+              1
+        : routine.sortOrder;
     await repository.updateRoutine(
       routine.copyWith(
         name: clean,
-        categoryId: categoryId,
-        clearCategory: categoryId == null,
+        routineCategoryId: routineCategoryId,
+        clearCategory: routineCategoryId == null,
+        sortOrder: destination,
         recurrence: recurrence,
         weekdayMask: mask,
         updatedAt: now().toUtc(),

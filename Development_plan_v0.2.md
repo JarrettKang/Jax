@@ -150,6 +150,13 @@
 - F8.5：新增五栏导航“日常”、今日派生列表、创建/编辑 recurrence、开始/暂停/恢复/完成、停用/重新启用及首页 running Routine 简洁展示；World 保持纯 Event。
 - F8 测试覆盖 recurrence、occurrence 唯一性、跨类型 running、segments、inactive/reactivate、Category 删除与动态历史、23:00 Summary、v6 migration、窄屏 UI、Windows/Android lifecycle 和完整回归。
 
+### F8.6：Routine Category 独立化
+
+- schema v9→v10 新增独立 `routine_categories`、Routine nullable `routine_category_id` 与 UI-only 折叠 preference；旧 Routine 安全迁入未分类，不复制或删除 World Category，execution/segment/history 保持。
+- 日常页按 flat Routine Category 分组，支持 CRUD、分类顺序、分类内 Routine 顺序及稳定 ID 折叠记忆；未分类为虚拟分组。Today/Home 读取 Routine Category，World 不受影响。
+- TimeSummaryService 使用带来源的稳定 bucket identity，Event/Routine 同 ID 或同名保持独立，仅显式合并两类未分类；历史仍按 Routine 当前分类动态解释，不增加 snapshot。
+- 测试覆盖 CRUD、删除归还未分类、分类内排序、停用/启用、折叠跨重建、v9 migration、同 ID summary、全量回归和 Windows/Android Debug。
+
 ## 10. F9：Today / 今日统一执行入口
 
 - F9.1 抽取无 Flutter 依赖的 `JaxDay`，统一 Today、Routine recurrence 和 TimeSummaryService 的设备本地 23:00 日界线及显示日期 weekday。

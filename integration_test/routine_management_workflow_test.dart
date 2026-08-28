@@ -71,9 +71,34 @@ void main() {
     await tester.tap(find.text('日常'));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const ValueKey('create-routine-category')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('routine-category-name')),
+      '日常起居',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('日常起居'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('routine-category-toggle-unclassified')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('晚上洗漱'), findsNothing);
+    await tester.tap(find.text('今日'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日常'));
+    await tester.pumpAndSettle();
+    expect(find.text('晚上洗漱'), findsNothing);
+    await tester.tap(
+      find.byKey(const ValueKey('routine-category-toggle-unclassified')),
+    );
+    await tester.pumpAndSettle();
+
     expect(find.text('今日备用执行'), findsNothing);
     expect(find.text('管理日常'), findsNothing);
-    expect(find.text('每天 · 未分类'), findsNWidgets(2));
+    expect(find.text('未分类'), findsOneWidget);
+    expect(find.text('每天'), findsNWidgets(2));
     expect(find.text('开始'), findsNothing);
     expect(find.text('暂停'), findsNothing);
     expect(find.text('完成'), findsNothing);
@@ -98,7 +123,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('create-routine')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '新增日常');
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(
       (await repository.getRoutines()).any((r) => r.name == '新增日常'),
@@ -112,7 +137,7 @@ void main() {
     expect(find.byKey(const ValueKey('today-routine-pause-wash')), findsOne);
     await tester.tap(find.text('日常'));
     await tester.pumpAndSettle();
-    expect(find.text('每天 · 未分类 · 正在执行'), findsOne);
+    expect(find.text('每天 · 正在执行'), findsOne);
     expect(find.text('暂停'), findsNothing);
     expect(tester.takeException(), isNull);
   });

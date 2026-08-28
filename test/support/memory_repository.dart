@@ -4,6 +4,7 @@ import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_day_plan.dart';
 import 'package:jax/core/entities/routine.dart';
+import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 import 'package:jax/core/repositories/event_day_plan_repository.dart';
 import 'package:jax/core/repositories/routine_repository.dart';
@@ -19,6 +20,7 @@ class MemoryRepository
   final List<RunSegment> segments = [];
   final List<Category> categories = [];
   final List<Routine> routines = [];
+  final List<RoutineCategory> routineCategories = [];
   final List<RoutineExecution> routineExecutions = [];
   final List<RoutineRunSegment> routineSegments = [];
   final List<EventDayPlan> eventDayPlans = [];
@@ -206,11 +208,6 @@ class MemoryRepository
         events[i] = events[i].copyWith(categoryId: null);
       }
     }
-    for (var i = 0; i < routines.length; i++) {
-      if (routines[i].categoryId == id) {
-        routines[i] = routines[i].copyWith(clearCategory: true);
-      }
-    }
   }
 
   @override
@@ -302,8 +299,60 @@ class MemoryRepository
   }
 
   @override
-  Future<List<Routine>> getRoutines() async =>
-      List.of(routines)..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  Future<List<Routine>> getRoutines() async => List.of(routines)
+    ..sort((a, b) {
+      final category = (a.routineCategoryId ?? '').compareTo(
+        b.routineCategoryId ?? '',
+      );
+      return category != 0 ? category : a.sortOrder.compareTo(b.sortOrder);
+    });
+  @override
+  Future<List<RoutineCategory>> getRoutineCategories() async =>
+      List.of(routineCategories)
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  @override
+  Future<void> insertRoutineCategory(RoutineCategory c) async =>
+      routineCategories.add(c);
+  @override
+  Future<void> updateRoutineCategory(RoutineCategory c) async =>
+      routineCategories[routineCategories.indexWhere((x) => x.id == c.id)] = c;
+  @override
+  Future<void> reorderRoutineCategory(String id, int targetIndex) async {
+    final items = await getRoutineCategories();
+    final current = items.indexWhere((c) => c.id == id);
+    if (current < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+    final moved = items.removeAt(current);
+    items.insert(targetIndex, moved);
+    for (var i = 0; i < items.length; i++) {
+      routineCategories[routineCategories.indexWhere(
+        (c) => c.id == items[i].id,
+      )] = items[i].copyWith(
+        sortOrder: i,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteRoutineCategory(String id) async {
+    routineCategories.removeWhere((c) => c.id == id);
+    var next =
+        routines
+            .where((r) => r.routineCategoryId == null)
+            .fold<int>(
+              -1,
+              (value, r) => r.sortOrder > value ? r.sortOrder : value,
+            ) +
+        1;
+    for (var i = 0; i < routines.length; i++) {
+      if (routines[i].routineCategoryId == id) {
+        routines[i] = routines[i].copyWith(
+          clearCategory: true,
+          sortOrder: next++,
+        );
+      }
+    }
+  }
+
   @override
   Future<void> insertRoutine(Routine r) async {
     if (routines.any((x) => x.id == r.id)) throw StateError('duplicate');
@@ -315,7 +364,10 @@ class MemoryRepository
       routines[routines.indexWhere((x) => x.id == r.id)] = r;
   @override
   Future<void> reorderRoutine(String id, int targetIndex) async {
-    final ordered = await getRoutines();
+    final source = routines.firstWhere((r) => r.id == id);
+    final ordered = (await getRoutines())
+        .where((r) => r.routineCategoryId == source.routineCategoryId)
+        .toList();
     final current = ordered.indexWhere((r) => r.id == id);
     if (current < 0 || targetIndex < 0 || targetIndex >= ordered.length) {
       throw StateError('Invalid Routine order');

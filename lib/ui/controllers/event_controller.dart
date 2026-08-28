@@ -17,8 +17,10 @@ import '../../core/services/world_display_state_service.dart';
 import '../../core/services/time_summary_service.dart';
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/routine.dart';
+import '../../core/entities/routine_category.dart';
 import '../../core/repositories/routine_repository.dart';
 import '../../core/services/routine_service.dart';
+import '../../core/services/routine_category_service.dart';
 import '../../core/services/category_service.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
@@ -68,6 +70,13 @@ class EventController extends ChangeNotifier {
                now: now,
              )
            : null,
+       _routineCategoryService = repository is RoutineRepository
+           ? RoutineCategoryService(
+               repository: repository as RoutineRepository,
+               newId: newId,
+               now: now,
+             )
+           : null,
        _categories = CategoryService(
          repository: repository,
          newId: newId,
@@ -94,6 +103,7 @@ class EventController extends ChangeNotifier {
   final EventDayPlanRepository? _dayPlans;
   final RoutineRepository? _routineRepository;
   final RoutineService? _routineService;
+  final RoutineCategoryService? _routineCategoryService;
   final CategoryService _categories;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
@@ -106,6 +116,7 @@ class EventController extends ChangeNotifier {
   Map<String, WorldDisplayState> _worldStates = const {};
   List<Category> _categoryItems = const [];
   List<Routine> _routines = const [];
+  List<RoutineCategory> _routineCategories = const [];
   final Map<String, RoutineExecution?> _todayExecutions = {};
   final Map<String, List<RoutineRunSegment>> _routineSegments = {};
   List<EventDayPlan> _todayPlans = const [];
@@ -127,6 +138,8 @@ class EventController extends ChangeNotifier {
       _worldStates[eventId] ?? WorldDisplayState.pending;
   List<Category> get categories => List.unmodifiable(_categoryItems);
   List<Routine> get routines => List.unmodifiable(_routines);
+  List<RoutineCategory> get routineCategories =>
+      List.unmodifiable(_routineCategories);
   JaxDay get currentJaxDay => JaxDay.containing(_now());
   List<JaxEvent> get todayEvents {
     final byId = {for (final event in _worldEvents) event.id: event};
@@ -243,6 +256,7 @@ class EventController extends ChangeNotifier {
     }
     _todayPlans = plans;
     if (_routineRepository != null) {
+      _routineCategories = await _routineRepository.getRoutineCategories();
       _routines = await _routineRepository.getRoutines();
       _todayExecutions.clear();
       _routineSegments.clear();
@@ -470,6 +484,14 @@ class EventController extends ChangeNotifier {
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>
       _change(() => _routineService!.setActive(r, active));
+  Future<String?> createRoutineCategory(String name) =>
+      _change(() => _routineCategoryService!.create(name));
+  Future<String?> renameRoutineCategory(RoutineCategory c, String name) =>
+      _change(() => _routineCategoryService!.rename(c, name));
+  Future<String?> deleteRoutineCategory(String id) =>
+      _change(() => _routineCategoryService!.delete(id));
+  Future<String?> reorderRoutineCategory(String id, int target) =>
+      _change(() => _routineCategoryService!.reorder(id, target));
   Future<String?> reorderRoutine(String id, int targetIndex) {
     final repository = _routineRepository;
     if (repository == null) return Future.value('日常不可用');
@@ -489,7 +511,11 @@ class EventController extends ChangeNotifier {
       final current = routines.where((routine) => routine.id == id).firstOrNull;
       if (current == null) return '日常不存在';
       final group = routines
-          .where((routine) => routine.isActive == current.isActive)
+          .where(
+            (routine) =>
+                routine.isActive == current.isActive &&
+                routine.routineCategoryId == current.routineCategoryId,
+          )
           .toList(growable: false);
       final index = group.indexWhere((routine) => routine.id == id);
       final targetInGroup = index + direction;
@@ -497,9 +523,7 @@ class EventController extends ChangeNotifier {
         return null;
       }
       final targetId = group[targetInGroup].id;
-      final targetIndex = routines.indexWhere(
-        (routine) => routine.id == targetId,
-      );
+      final targetIndex = group.indexWhere((routine) => routine.id == targetId);
       return _change(() => repository.reorderRoutine(id, targetIndex));
     });
   }

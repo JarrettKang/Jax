@@ -4,13 +4,19 @@ class CategoryDuration {
     required this.name,
     required this.duration,
     required this.order,
+    this.bucketKey = '',
+    this.source = SummaryCategorySource.event,
   });
 
   final String? categoryId;
   final String name;
   final Duration duration;
   final int order;
+  final String bucketKey;
+  final SummaryCategorySource source;
 }
+
+enum SummaryCategorySource { event, routine, unclassified }
 
 class TimeSummary {
   const TimeSummary({

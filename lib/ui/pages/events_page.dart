@@ -226,8 +226,8 @@ class _RoutineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final execution = controller.executionFor(routine);
-    final category = controller.categories
-        .where((c) => c.id == routine.categoryId)
+    final category = controller.routineCategories
+        .where((c) => c.id == routine.routineCategoryId)
         .firstOrNull;
     return Card(
       key: ValueKey('today-routine-${routine.id}'),

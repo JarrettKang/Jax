@@ -5,6 +5,7 @@ import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/services/time_summary_service.dart';
 import 'package:jax/core/entities/routine.dart';
+import 'package:jax/core/entities/routine_category.dart';
 
 import '../support/memory_repository.dart';
 
@@ -247,4 +248,79 @@ void main() {
     repo.events[0] = root.copyWith(categoryId: 'dev');
     expect((await service.day(base)).categories.single.name, '开发');
   });
+
+  test(
+    'Event and Routine categories with the same id and name remain distinct',
+    () async {
+      final repo = MemoryRepository([event('event', category: 'same')])
+        ..categories.add(
+          Category(
+            id: 'same',
+            name: '生活',
+            sortOrder: 0,
+            createdAt: base,
+            updatedAt: base,
+          ),
+        )
+        ..routineCategories.add(
+          RoutineCategory(
+            id: 'same',
+            name: '生活',
+            sortOrder: 0,
+            createdAt: base,
+            updatedAt: base,
+          ),
+        )
+        ..segments.add(
+          segment(
+            'event-segment',
+            'event',
+            DateTime(2026, 8, 27, 8),
+            DateTime(2026, 8, 27, 10),
+          ),
+        )
+        ..routines.add(
+          Routine(
+            id: 'routine',
+            name: '洗漱',
+            routineCategoryId: 'same',
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: base,
+            updatedAt: base,
+          ),
+        )
+        ..routineExecutions.add(
+          RoutineExecution(
+            id: 'execution',
+            routineId: 'routine',
+            occurrenceDate: '2026-08-27',
+            status: RoutineExecutionStatus.completed,
+            createdAt: base,
+            updatedAt: base,
+          ),
+        )
+        ..routineSegments.add(
+          RoutineRunSegment(
+            id: 'routine-segment',
+            executionId: 'execution',
+            startedAt: DateTime(2026, 8, 27, 10),
+            endedAt: DateTime(2026, 8, 27, 10, 30),
+            createdAt: base,
+          ),
+        );
+      final result = await TimeSummaryService(
+        repo,
+        () => DateTime(2026, 8, 28),
+      ).day(base);
+      expect(result.total, const Duration(hours: 2, minutes: 30));
+      expect(result.categories, hasLength(2));
+      expect(result.categories.map((c) => c.bucketKey).toSet(), {
+        'event:same',
+        'routine:same',
+      });
+    },
+  );
 }

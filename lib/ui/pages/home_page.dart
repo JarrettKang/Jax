@@ -183,7 +183,7 @@ class _HomePageState extends State<HomePage> {
                                     .headlineSmall,
                               ),
                               Text(
-                                '日常 · ${widget.controller.categories.where((c) => c.id == runningRoutine.categoryId).firstOrNull?.name ?? '未分类'}',
+                                '日常 · ${widget.controller.routineCategories.where((c) => c.id == runningRoutine.routineCategoryId).firstOrNull?.name ?? '未分类'}',
                               ),
                               Text(
                                 widget.controller

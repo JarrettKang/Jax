@@ -147,7 +147,9 @@ class _SummaryPageState extends State<SummaryPage> {
   static String _duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color _color(BuildContext context, CategoryDuration item) {
-    if (item.categoryId == null) return Theme.of(context).colorScheme.outline;
+    if (item.source == SummaryCategorySource.unclassified) {
+      return Theme.of(context).colorScheme.outline;
+    }
     const colors = [
       Colors.teal,
       Colors.indigo,
@@ -155,7 +157,7 @@ class _SummaryPageState extends State<SummaryPage> {
       Colors.purple,
       Colors.pink,
     ];
-    return colors[item.categoryId.hashCode.abs() % colors.length];
+    return colors[item.bucketKey.hashCode.abs() % colors.length];
   }
 }
 
@@ -243,8 +245,8 @@ class _WeeklyBars extends StatelessWidget {
                                       final match = summary.days[day].categories
                                           .where(
                                             (item) =>
-                                                item.categoryId ==
-                                                category.categoryId,
+                                                item.bucketKey ==
+                                                category.bucketKey,
                                           )
                                           .firstOrNull;
                                       if (match == null) {
@@ -287,7 +289,9 @@ class SummaryPageState {
   static String duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color color(BuildContext context, CategoryDuration item) {
-    if (item.categoryId == null) return Theme.of(context).colorScheme.outline;
+    if (item.source == SummaryCategorySource.unclassified) {
+      return Theme.of(context).colorScheme.outline;
+    }
     const colors = [
       Colors.teal,
       Colors.indigo,
@@ -295,6 +299,6 @@ class SummaryPageState {
       Colors.purple,
       Colors.pink,
     ];
-    return colors[item.categoryId.hashCode.abs() % colors.length];
+    return colors[item.bucketKey.hashCode.abs() % colors.length];
   }
 }

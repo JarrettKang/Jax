@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 9;
+  static const schemaVersion = 10;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -49,6 +49,7 @@ class AppDatabase {
       updated_at_utc INTEGER NOT NULL
     )''');
     await _createRunSegments(database);
+    await _createRoutineCategoryTables(database);
     await _createRoutineTables(database);
     await _createEventDayPlans(database);
     await _createWorldCategoryCollapsePreferences(database);
@@ -94,6 +95,7 @@ class AppDatabase {
     if (oldVersion < 7) await _createRoutineTables(database);
     if (oldVersion < 8) await _createEventDayPlans(database);
     if (oldVersion < 9) await _createWorldCategoryCollapsePreferences(database);
+    if (oldVersion < 10) await _migrateToRoutineCategories(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -147,7 +149,7 @@ class AppDatabase {
     await database.execute('''CREATE TABLE routines (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
-      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+      routine_category_id TEXT REFERENCES routine_categories(id) ON DELETE SET NULL,
       recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekdays','weekends','selectedWeekdays')),
       weekday_mask INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
@@ -188,6 +190,40 @@ class AppDatabase {
   ) => database.execute('''CREATE TABLE world_category_collapse_preferences (
         section_key TEXT PRIMARY KEY
       )''');
+
+  static Future<void> _createRoutineCategoryTables(Database database) async {
+    await database.execute('''CREATE TABLE routine_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+      sort_order INTEGER NOT NULL,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL
+    )''');
+    await database.execute(
+      '''CREATE TABLE routine_category_collapse_preferences (
+      section_key TEXT PRIMARY KEY
+    )''',
+    );
+  }
+
+  static Future<void> _migrateToRoutineCategories(Database database) async {
+    await _createRoutineCategoryTables(database);
+    final routineTable = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routines'",
+    );
+    if (routineTable.isEmpty) {
+      await _createRoutineTables(database);
+      return;
+    }
+    final columns = await database.rawQuery('PRAGMA table_info(routines)');
+    if (!columns.any((row) => row['name'] == 'routine_category_id')) {
+      await database.execute(
+        'ALTER TABLE routines ADD COLUMN routine_category_id TEXT REFERENCES routine_categories(id) ON DELETE SET NULL',
+      );
+    }
+    // Old World Category assignments are deliberately not copied.
+    await database.execute('UPDATE routines SET routine_category_id = NULL');
+  }
 
   Future<void> close() => database.close();
 }
