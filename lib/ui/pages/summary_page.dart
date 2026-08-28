@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/time_summary.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/execution_time_editor.dart';
 
 class SummaryPage extends StatefulWidget {
   const SummaryPage({required this.controller, super.key});
@@ -35,6 +36,18 @@ class _SummaryPageState extends State<SummaryPage> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
           children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const ValueKey('execution-time-correction'),
+                onPressed: () => showExecutionTimeOwnerPicker(
+                  context,
+                  controller: widget.controller,
+                ),
+                icon: const Icon(Icons.edit_calendar_outlined),
+                label: const Text('执行时间纠错'),
+              ),
+            ),
             SegmentedButton<bool>(
               segments: const [
                 ButtonSegment(

@@ -8,9 +8,15 @@ import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 import 'package:jax/core/repositories/event_day_plan_repository.dart';
 import 'package:jax/core/repositories/routine_repository.dart';
+import 'package:jax/core/repositories/execution_time_repository.dart';
+import 'package:jax/core/entities/execution_time_segment.dart';
 
 class MemoryRepository
-    implements EventRepository, EventDayPlanRepository, RoutineRepository {
+    implements
+        EventRepository,
+        EventDayPlanRepository,
+        RoutineRepository,
+        ExecutionTimeRepository {
   MemoryRepository([
     Iterable<JaxEvent> seed = const [],
     this.autoPlanSeedEvents = true,
@@ -457,6 +463,168 @@ class MemoryRepository
     );
     if (s != null) {
       routineSegments[routineSegments.indexOf(s)] = s.copyWith(endedAt: now);
+    }
+  }
+
+  @override
+  Future<List<ExecutionTimeSegment>> getAllExecutionTimeSegments() async => [
+    for (final s in segments)
+      ExecutionTimeSegment(
+        id: s.id,
+        ownerType: ExecutionOwnerType.event,
+        ownerId: s.eventId,
+        ownerName:
+            events.where((e) => e.id == s.eventId).firstOrNull?.name ??
+            s.eventId,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        createdAt: s.createdAt,
+      ),
+    for (final s in routineSegments)
+      ExecutionTimeSegment(
+        id: s.id,
+        ownerType: ExecutionOwnerType.routine,
+        ownerId: s.executionId,
+        ownerName:
+            routines
+                .where(
+                  (r) =>
+                      routineExecutions
+                          .where((e) => e.id == s.executionId)
+                          .firstOrNull
+                          ?.routineId ==
+                      r.id,
+                )
+                .firstOrNull
+                ?.name ??
+            s.executionId,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        createdAt: s.createdAt,
+      ),
+  ];
+  @override
+  Future<List<ExecutionTimeOwner>> getEditableExecutionTimeOwners() async => [
+    for (final e in events.where(
+      (e) =>
+          e.status == EventStatus.paused || e.status == EventStatus.completed,
+    ))
+      ExecutionTimeOwner(
+        type: ExecutionOwnerType.event,
+        id: e.id,
+        name: e.name,
+        status: e.status.name,
+      ),
+    for (final x in routineExecutions.where(
+      (x) => x.status != RoutineExecutionStatus.running,
+    ))
+      ExecutionTimeOwner(
+        type: ExecutionOwnerType.routine,
+        id: x.id,
+        name:
+            routines.where((r) => r.id == x.routineId).firstOrNull?.name ??
+            x.routineId,
+        status: x.status.name,
+        detail: x.occurrenceDate,
+      ),
+  ];
+  @override
+  Future<bool> canCompleteExecutionOwner(
+    ExecutionOwnerType type,
+    String ownerId,
+  ) async =>
+      type == ExecutionOwnerType.routine ||
+      !events.any(
+        (event) =>
+            event.parentEventId == ownerId &&
+            event.status != EventStatus.completed,
+      );
+  @override
+  Future<void> insertExecutionTimeSegment(ExecutionTimeSegment s) async {
+    if (s.ownerType == ExecutionOwnerType.event) {
+      segments.add(
+        RunSegment(
+          id: s.id,
+          eventId: s.ownerId,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          createdAt: s.createdAt,
+        ),
+      );
+    } else {
+      routineSegments.add(
+        RoutineRunSegment(
+          id: s.id,
+          executionId: s.ownerId,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          createdAt: s.createdAt,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<void> updateExecutionTimeSegment(ExecutionTimeSegment s) async {
+    if (s.ownerType == ExecutionOwnerType.event) {
+      final i = segments.indexWhere((x) => x.id == s.id);
+      segments[i] = RunSegment(
+        id: s.id,
+        eventId: s.ownerId,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        createdAt: s.createdAt,
+      );
+    } else {
+      final i = routineSegments.indexWhere((x) => x.id == s.id);
+      routineSegments[i] = RoutineRunSegment(
+        id: s.id,
+        executionId: s.ownerId,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        createdAt: s.createdAt,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteExecutionTimeSegment(
+    ExecutionOwnerType type,
+    String id,
+  ) async {
+    type == ExecutionOwnerType.event
+        ? segments.removeWhere((s) => s.id == id)
+        : routineSegments.removeWhere((s) => s.id == id);
+  }
+
+  @override
+  Future<void> finishRunningAt({
+    required ExecutionOwnerType ownerType,
+    required String ownerId,
+    required String segmentId,
+    required DateTime endedAt,
+    required bool complete,
+  }) async {
+    if (ownerType == ExecutionOwnerType.event) {
+      final si = segments.indexWhere((s) => s.id == segmentId);
+      segments[si] = segments[si].copyWith(endedAt: endedAt);
+      final ei = events.indexWhere((e) => e.id == ownerId);
+      events[ei] = events[ei].copyWith(
+        status: complete ? EventStatus.completed : EventStatus.paused,
+        updatedAt: endedAt,
+        completedAt: complete ? endedAt : null,
+      );
+    } else {
+      final si = routineSegments.indexWhere((s) => s.id == segmentId);
+      routineSegments[si] = routineSegments[si].copyWith(endedAt: endedAt);
+      final ei = routineExecutions.indexWhere((e) => e.id == ownerId);
+      routineExecutions[ei] = routineExecutions[ei].copyWith(
+        status: complete
+            ? RoutineExecutionStatus.completed
+            : RoutineExecutionStatus.paused,
+        updatedAt: endedAt,
+        completedAt: complete ? endedAt : null,
+      );
     }
   }
 }

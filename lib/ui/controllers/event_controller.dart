@@ -21,6 +21,9 @@ import '../../core/entities/routine_category.dart';
 import '../../core/repositories/routine_repository.dart';
 import '../../core/services/routine_service.dart';
 import '../../core/services/routine_category_service.dart';
+import '../../core/services/execution_time_service.dart';
+import '../../core/repositories/execution_time_repository.dart';
+import '../../core/entities/execution_time_segment.dart';
 import '../../core/services/category_service.dart';
 import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
@@ -77,6 +80,13 @@ class EventController extends ChangeNotifier {
                now: now,
              )
            : null,
+       _executionTimes = repository is ExecutionTimeRepository
+           ? ExecutionTimeService(
+               repository: repository as ExecutionTimeRepository,
+               newId: newId,
+               now: now,
+             )
+           : null,
        _categories = CategoryService(
          repository: repository,
          newId: newId,
@@ -104,6 +114,7 @@ class EventController extends ChangeNotifier {
   final RoutineRepository? _routineRepository;
   final RoutineService? _routineService;
   final RoutineCategoryService? _routineCategoryService;
+  final ExecutionTimeService? _executionTimes;
   final CategoryService _categories;
   final UpdateEventParent _updateParent;
   final ReorderSibling _reorder;
@@ -581,6 +592,41 @@ class EventController extends ChangeNotifier {
   Future<TimeSummary> dailySummary(DateTime date) => _summaries.day(date);
   Future<WeeklyTimeSummary> weeklySummary(DateTime date) =>
       _summaries.week(date);
+  Future<List<ExecutionTimeSegment>> executionSegments(
+    ExecutionOwnerType type,
+    String ownerId,
+  ) => _executionTimes!.segmentsFor(type, ownerId);
+  Future<List<ExecutionTimeOwner>> executionTimeOwners() =>
+      (_repository as ExecutionTimeRepository).getEditableExecutionTimeOwners();
+  Future<String?> addExecutionSegment(
+    ExecutionOwnerType type,
+    String ownerId,
+    String ownerName,
+    DateTime start,
+    DateTime end,
+  ) => _change(
+    () => _executionTimes!.add(
+      type: type,
+      ownerId: ownerId,
+      ownerName: ownerName,
+      start: start,
+      end: end,
+    ),
+  );
+  Future<String?> editExecutionSegment(
+    ExecutionTimeSegment segment,
+    DateTime start,
+    DateTime end,
+  ) => _change(() => _executionTimes!.edit(segment, start, end));
+  Future<String?> deleteExecutionSegment(ExecutionTimeSegment segment) =>
+      _change(() => _executionTimes!.delete(segment));
+  Future<String?> finishRunningAt(
+    ExecutionTimeSegment segment,
+    DateTime end, {
+    required bool complete,
+  }) => _change(
+    () => _executionTimes!.finishRunning(segment, end, complete: complete),
+  );
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,

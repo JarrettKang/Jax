@@ -148,6 +148,12 @@
 - F8.3：SQLite transaction 统一 Event/Routine running slot，跨类型开始会关闭另一类型开放片段并暂停；Windows shutdown 同时处理两类 running，Android lifecycle 不改变既有语义。
 - F8.4：TimeSummaryService 将 Event 与 Routine segments 归一到同一个 overlap/Category 聚合流程；不新增 summary 表或 category snapshot。
 - F8.5：新增五栏导航“日常”、今日派生列表、创建/编辑 recurrence、开始/暂停/恢复/完成、停用/重新启用及首页 running Routine 简洁展示；World 保持纯 Event。
+
+### 执行时间纠错增量
+
+- 在 Core 增加跨 Event/RoutineExecution 的统一 segment view、owner view 与 `ExecutionTimeService`，集中执行状态资格、时间合法性、全局 `[start,end)` 冲突和 Event 完成层级约束。
+- Data 层复用 schema v10 的两类 segment 表；closed segment CRUD 与 running 实际结束采用校验更新/事务，不新增 migration、依赖或汇总表。
+- UI 使用共享时间编辑器，由 Record 提供跨来源入口，并在 World、Today、Routine 上下文菜单提供快捷入口；自动测试覆盖新增/编辑/删除、跨来源冲突、开放片段、23:00、零片段 Routine、层级完成约束和 SQLite 持久化，双平台使用同一集成工作流验收。
 - F8 测试覆盖 recurrence、occurrence 唯一性、跨类型 running、segments、inactive/reactivate、Category 删除与动态历史、23:00 Summary、v6 migration、窄屏 UI、Windows/Android lifecycle 和完整回归。
 
 ### F8.6：Routine Category 独立化

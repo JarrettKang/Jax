@@ -10,10 +10,16 @@ import '../../core/entities/routine_category.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/event_day_plan_repository.dart';
 import '../../core/repositories/routine_repository.dart';
+import '../../core/repositories/execution_time_repository.dart';
+import '../../core/entities/execution_time_segment.dart';
 import '../database/app_database.dart';
 
 class SqliteEventRepository
-    implements EventRepository, EventDayPlanRepository, RoutineRepository {
+    implements
+        EventRepository,
+        EventDayPlanRepository,
+        RoutineRepository,
+        ExecutionTimeRepository {
   const SqliteEventRepository(this._appDatabase);
   final AppDatabase _appDatabase;
 
@@ -1054,4 +1060,178 @@ class SqliteEventRepository
           isUtc: true,
         ),
       );
+
+  @override
+  Future<List<ExecutionTimeSegment>> getAllExecutionTimeSegments() async {
+    final rows = await _appDatabase.database.rawQuery('''
+      SELECT s.id, 'event' owner_type, s.event_id owner_id, e.name owner_name,
+        s.started_at_utc, s.ended_at_utc, s.created_at_utc
+      FROM run_segments s JOIN events e ON e.id = s.event_id
+      UNION ALL
+      SELECT s.id, 'routine' owner_type, s.routine_execution_id owner_id,
+        r.name owner_name, s.started_at_utc, s.ended_at_utc, s.created_at_utc
+      FROM routine_run_segments s
+      JOIN routine_executions x ON x.id = s.routine_execution_id
+      JOIN routines r ON r.id = x.routine_id
+      ORDER BY started_at_utc ASC''');
+    return rows.map(_executionTimeFromRow).toList();
+  }
+
+  @override
+  Future<List<ExecutionTimeOwner>> getEditableExecutionTimeOwners() async {
+    final rows = await _appDatabase.database.rawQuery('''
+      SELECT 'event' owner_type,id,name,status,NULL detail,updated_at_utc ordered
+      FROM events WHERE status IN ('paused','completed')
+      UNION ALL
+      SELECT 'routine' owner_type,x.id,r.name,x.status,x.occurrence_date detail,x.updated_at_utc ordered
+      FROM routine_executions x JOIN routines r ON r.id=x.routine_id
+      WHERE x.status IN ('paused','completed') ORDER BY ordered DESC''');
+    return rows
+        .map(
+          (r) => ExecutionTimeOwner(
+            type: r['owner_type'] == 'event'
+                ? ExecutionOwnerType.event
+                : ExecutionOwnerType.routine,
+            id: r['id'] as String,
+            name: r['name'] as String,
+            status: r['status'] as String,
+            detail: r['detail'] as String?,
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<bool> canCompleteExecutionOwner(
+    ExecutionOwnerType type,
+    String ownerId,
+  ) async {
+    if (type == ExecutionOwnerType.routine) return true;
+    final rows = await _appDatabase.database.rawQuery(
+      "SELECT 1 FROM events WHERE parent_event_id = ? AND status != 'completed' LIMIT 1",
+      [ownerId],
+    );
+    return rows.isEmpty;
+  }
+
+  ExecutionTimeSegment _executionTimeFromRow(Map<String, Object?> row) =>
+      ExecutionTimeSegment(
+        id: row['id'] as String,
+        ownerType: row['owner_type'] == 'event'
+            ? ExecutionOwnerType.event
+            : ExecutionOwnerType.routine,
+        ownerId: row['owner_id'] as String,
+        ownerName: row['owner_name'] as String,
+        startedAt: DateTime.fromMillisecondsSinceEpoch(
+          row['started_at_utc'] as int,
+          isUtc: true,
+        ),
+        endedAt: row['ended_at_utc'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                row['ended_at_utc'] as int,
+                isUtc: true,
+              ),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          row['created_at_utc'] as int,
+          isUtc: true,
+        ),
+      );
+
+  String _segmentTable(ExecutionOwnerType type) =>
+      type == ExecutionOwnerType.event
+      ? 'run_segments'
+      : 'routine_run_segments';
+  String _ownerColumn(ExecutionOwnerType type) =>
+      type == ExecutionOwnerType.event ? 'event_id' : 'routine_execution_id';
+  Map<String, Object?> _executionTimeRow(ExecutionTimeSegment s) => {
+    'id': s.id,
+    _ownerColumn(s.ownerType): s.ownerId,
+    'started_at_utc': s.startedAt.toUtc().millisecondsSinceEpoch,
+    'ended_at_utc': s.endedAt?.toUtc().millisecondsSinceEpoch,
+    'created_at_utc': s.createdAt.toUtc().millisecondsSinceEpoch,
+  };
+  @override
+  Future<void> insertExecutionTimeSegment(ExecutionTimeSegment s) async =>
+      _appDatabase.database.insert(
+        _segmentTable(s.ownerType),
+        _executionTimeRow(s),
+      );
+  @override
+  Future<void> updateExecutionTimeSegment(ExecutionTimeSegment s) async {
+    if (await _appDatabase.database.update(
+          _segmentTable(s.ownerType),
+          _executionTimeRow(s),
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [s.id],
+        ) !=
+        1) {
+      throw StateError('Closed segment not found');
+    }
+  }
+
+  @override
+  Future<void> deleteExecutionTimeSegment(
+    ExecutionOwnerType type,
+    String id,
+  ) async {
+    if (await _appDatabase.database.delete(
+          _segmentTable(type),
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [id],
+        ) !=
+        1) {
+      throw StateError('Closed segment not found');
+    }
+  }
+
+  @override
+  Future<void> finishRunningAt({
+    required ExecutionOwnerType ownerType,
+    required String ownerId,
+    required String segmentId,
+    required DateTime endedAt,
+    required bool complete,
+  }) async => _appDatabase.database.transaction((tx) async {
+    final table = _segmentTable(ownerType);
+    if (await tx.update(
+          table,
+          {'ended_at_utc': endedAt.toUtc().millisecondsSinceEpoch},
+          where:
+              'id = ? AND ${_ownerColumn(ownerType)} = ? AND ended_at_utc IS NULL',
+          whereArgs: [segmentId, ownerId],
+        ) !=
+        1) {
+      throw StateError('Open segment not found');
+    }
+    if (ownerType == ExecutionOwnerType.event) {
+      final changed = await tx.update(
+        'events',
+        {
+          'status': complete ? 'completed' : 'paused',
+          'completed_at_utc': complete
+              ? endedAt.toUtc().millisecondsSinceEpoch
+              : null,
+          'updated_at_utc': endedAt.toUtc().millisecondsSinceEpoch,
+        },
+        where: "id = ? AND status = 'running'",
+        whereArgs: [ownerId],
+      );
+      if (changed != 1) throw StateError('Running event not found');
+    } else {
+      final changed = await tx.update(
+        'routine_executions',
+        {
+          'status': complete ? 'completed' : 'paused',
+          'completed_at_utc': complete
+              ? endedAt.toUtc().millisecondsSinceEpoch
+              : null,
+          'updated_at_utc': endedAt.toUtc().millisecondsSinceEpoch,
+        },
+        where: "id = ? AND status = 'running'",
+        whereArgs: [ownerId],
+      );
+      if (changed != 1) throw StateError('Running routine execution not found');
+    }
+  });
 }
