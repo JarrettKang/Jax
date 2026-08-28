@@ -91,13 +91,14 @@ class RoutineRunSegment {
   final String id, executionId;
   final DateTime startedAt, createdAt;
   final DateTime? endedAt;
-  RoutineRunSegment copyWith({DateTime? endedAt}) => RoutineRunSegment(
-    id: id,
-    executionId: executionId,
-    startedAt: startedAt,
-    createdAt: createdAt,
-    endedAt: endedAt ?? this.endedAt,
-  );
+  RoutineRunSegment copyWith({DateTime? startedAt, DateTime? endedAt}) =>
+      RoutineRunSegment(
+        id: id,
+        executionId: executionId,
+        startedAt: startedAt ?? this.startedAt,
+        createdAt: createdAt,
+        endedAt: endedAt ?? this.endedAt,
+      );
   Duration durationAt(DateTime now) =>
       (endedAt ?? now.toUtc()).difference(startedAt);
 }

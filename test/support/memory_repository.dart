@@ -61,6 +61,27 @@ class MemoryRepository
   Future<List<RunSegment>> getRunSegments(String eventId) async =>
       segments.where((segment) => segment.eventId == eventId).toList();
   @override
+  Future<List<RunSegment>> getAllRunSegments() async => List.of(segments);
+  @override
+  Future<void> insertHistoricalRunSegment(RunSegment segment) async =>
+      segments.add(segment);
+  @override
+  Future<void> updateClosedRunSegment(RunSegment segment) async {
+    final index = segments.indexWhere(
+      (s) => s.id == segment.id && s.endedAt != null,
+    );
+    if (index < 0) throw StateError('Closed run segment not found');
+    segments[index] = segment;
+  }
+
+  @override
+  Future<void> deleteClosedRunSegment(String id) async {
+    final index = segments.indexWhere((s) => s.id == id && s.endedAt != null);
+    if (index < 0) throw StateError('Closed run segment not found');
+    segments.removeAt(index);
+  }
+
+  @override
   Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
     await updateEvent(event);
     segments[segments.indexWhere((item) => item.id == segment.id)] = segment;
@@ -396,6 +417,38 @@ class MemoryRepository
   @override
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
       routineSegments.where((s) => s.executionId == id).toList();
+  @override
+  Future<List<RoutineRunSegment>> getAllRoutineRunSegments() async =>
+      List.of(routineSegments);
+  @override
+  Future<void> insertHistoricalRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s,
+  ) async {
+    if (!routineExecutions.any((item) => item.id == e.id)) {
+      routineExecutions.add(e);
+    }
+    routineSegments.add(s);
+  }
+
+  @override
+  Future<void> updateClosedRoutineRunSegment(RoutineRunSegment s) async {
+    final index = routineSegments.indexWhere(
+      (item) => item.id == s.id && item.endedAt != null,
+    );
+    if (index < 0) throw StateError('Closed routine segment not found');
+    routineSegments[index] = s;
+  }
+
+  @override
+  Future<void> deleteClosedRoutineRunSegment(String id) async {
+    final index = routineSegments.indexWhere(
+      (item) => item.id == id && item.endedAt != null,
+    );
+    if (index < 0) throw StateError('Closed routine segment not found');
+    routineSegments.removeAt(index);
+  }
+
   @override
   Future<void> startRoutineExecution(
     RoutineExecution e,

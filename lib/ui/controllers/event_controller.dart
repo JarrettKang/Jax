@@ -16,6 +16,8 @@ import '../../core/services/hierarchy_duration_service.dart';
 import '../../core/services/world_display_state_service.dart';
 import '../../core/services/time_summary_service.dart';
 import '../../core/entities/time_summary.dart';
+import '../../core/entities/daily_execution_segment.dart';
+import '../../core/services/execution_segment_service.dart';
 import '../../core/entities/routine.dart';
 import '../../core/entities/routine_category.dart';
 import '../../core/repositories/routine_repository.dart';
@@ -57,6 +59,11 @@ class EventController extends ChangeNotifier {
        _durations = HierarchyDurationService(repository, now: now),
        _worldDisplayStates = const WorldDisplayStateService(),
        _summaries = TimeSummaryService(repository, now),
+       _executionSegments = ExecutionSegmentService(
+         repository: repository,
+         now: now,
+       ),
+       _newId = newId,
        _dayPlans = repository is EventDayPlanRepository
            ? repository as EventDayPlanRepository
            : null,
@@ -100,6 +107,8 @@ class EventController extends ChangeNotifier {
   final HierarchyDurationService _durations;
   final WorldDisplayStateService _worldDisplayStates;
   final TimeSummaryService _summaries;
+  final ExecutionSegmentService _executionSegments;
+  final IdGenerator _newId;
   final EventDayPlanRepository? _dayPlans;
   final RoutineRepository? _routineRepository;
   final RoutineService? _routineService;
@@ -581,6 +590,36 @@ class EventController extends ChangeNotifier {
   Future<TimeSummary> dailySummary(DateTime date) => _summaries.day(date);
   Future<WeeklyTimeSummary> weeklySummary(DateTime date) =>
       _summaries.week(date);
+  Future<List<DailyExecutionSegment>> dailyExecutionSegments(DateTime date) =>
+      _executionSegments.forJaxDay(date);
+  Future<String?> updateClosedExecutionSegment(
+    DailyExecutionSegment segment,
+    DateTime start,
+    DateTime end,
+  ) => _change(() => _executionSegments.updateClosed(segment, start, end));
+  Future<String?> deleteClosedExecutionSegment(DailyExecutionSegment segment) =>
+      _change(() => _executionSegments.deleteClosed(segment));
+  Future<String?> addHistoricalEventSegment(
+    String eventId,
+    DateTime start,
+    DateTime end,
+  ) =>
+      _change(() => _executionSegments.addEvent(eventId, _newId(), start, end));
+  Future<String?> addHistoricalRoutineSegment(
+    String routineId,
+    DateTime day,
+    DateTime start,
+    DateTime end,
+  ) => _change(
+    () => _executionSegments.addRoutine(
+      routineId,
+      _newId(),
+      _newId(),
+      JaxDay.forDisplayDate(day).key,
+      start,
+      end,
+    ),
+  );
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/entities/time_summary.dart';
+import '../../core/entities/daily_execution_segment.dart';
 import '../controllers/event_controller.dart';
 
 class SummaryPage extends StatefulWidget {
@@ -26,12 +27,18 @@ class _SummaryPageState extends State<SummaryPage> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
-    builder: (context, _) => FutureBuilder<TimeSummary>(
-      future: _week
-          ? widget.controller.weeklySummary(_anchor)
-          : widget.controller.dailySummary(_anchor),
+    builder: (context, _) => FutureBuilder<List<Object>>(
+      future: Future.wait([
+        _week
+            ? widget.controller.weeklySummary(_anchor)
+            : widget.controller.dailySummary(_anchor),
+        if (!_week) widget.controller.dailyExecutionSegments(_anchor),
+      ]),
       builder: (context, snapshot) {
-        final summary = snapshot.data;
+        final summary = snapshot.data?.firstOrNull as TimeSummary?;
+        final segments = !_week && snapshot.data != null
+            ? snapshot.data![1] as List<DailyExecutionSegment>
+            : const <DailyExecutionSegment>[];
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
           children: [
@@ -69,6 +76,34 @@ class _SummaryPageState extends State<SummaryPage> {
                 '${_time(summary.start)} – ${_time(summary.end)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (!_week) ...[
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    Text(
+                      '执行时间',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _addSegment(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('添加执行记录'),
+                    ),
+                  ],
+                ),
+                if (segments.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Text('这一天没有执行片段'),
+                  ),
+                for (final segment in segments)
+                  _SegmentRow(
+                    segment: segment,
+                    day: _anchor,
+                    onTap: () => _editSegment(context, segment, segments),
+                  ),
+              ],
               const SizedBox(height: 20),
               Text('已记录时间', style: Theme.of(context).textTheme.titleMedium),
               Text(
@@ -112,6 +147,216 @@ class _SummaryPageState extends State<SummaryPage> {
     ),
   );
 
+  DateTime _onDay(TimeOfDay value) {
+    final date = value.hour >= 23
+        ? _anchor.subtract(const Duration(days: 1))
+        : _anchor;
+    return DateTime(date.year, date.month, date.day, value.hour, value.minute);
+  }
+
+  Future<void> _editSegment(
+    BuildContext context,
+    DailyExecutionSegment segment,
+    List<DailyExecutionSegment> list,
+  ) async {
+    if (segment.isOpen) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('正在执行，请使用 Today 中的暂停或完成操作')));
+      return;
+    }
+    var start = segment.startedAt.toLocal();
+    var end = segment.endedAt!.toLocal();
+    final index = list.indexOf(segment);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => StatefulBuilder(
+        builder: (context, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(segment.name, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              _timeButton(context, '开始', start, () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(start),
+                );
+                if (t != null) setSheet(() => start = _onDay(t));
+              }),
+              _timeButton(context, '结束', end, () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(end),
+                );
+                if (t != null) setSheet(() => end = _onDay(t));
+              }),
+              if (index > 0) _contextLine('上一项', list[index - 1]),
+              if (index >= 0 && index < list.length - 1)
+                _contextLine('下一项', list[index + 1]),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () async {
+                      final error = await widget.controller
+                          .deleteClosedExecutionSegment(segment);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        if (error != null) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text(error)));
+                        }
+                      }
+                    },
+                    child: const Text('删除'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () async {
+                      final error = await widget.controller
+                          .updateClosedExecutionSegment(segment, start, end);
+                      if (context.mounted && error == null) {
+                        Navigator.pop(context);
+                      }
+                      if (context.mounted && error != null) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text(error)));
+                      }
+                    },
+                    child: const Text('保存'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _contextLine(String label, DailyExecutionSegment segment) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Text(
+      '$label  ${segment.name}  ${_clock(segment.startedAt)}–${segment.endedAt == null ? '现在' : _clock(segment.endedAt!)}',
+    ),
+  );
+  Widget _timeButton(
+    BuildContext context,
+    String label,
+    DateTime value,
+    VoidCallback tap,
+  ) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    title: Text(label),
+    trailing: TextButton(onPressed: tap, child: Text(_clock(value))),
+  );
+  Future<void> _addSegment(BuildContext context) async {
+    final candidates = <_Candidate>[
+      for (final e in widget.controller.todayEvents)
+        _Candidate.event(e.id, e.name),
+      for (final r in widget.controller.routines.where(
+        (r) => r.appliesTo(_anchor),
+      ))
+        _Candidate.routine(r.id, r.name),
+    ];
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('当天没有可补记的事项或日常')));
+      return;
+    }
+    final picked = await showModalBottomSheet<_Candidate>(
+      context: context,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(title: Text('选择要补记的事项')),
+          for (final c in candidates)
+            ListTile(
+              title: Text(c.name),
+              subtitle: Text(c.routine ? '日常' : '事项'),
+              onTap: () => Navigator.pop(context, c),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    var start = _onDay(const TimeOfDay(hour: 12, minute: 0));
+    var end = _onDay(const TimeOfDay(hour: 12, minute: 30));
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => StatefulBuilder(
+        builder: (context, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '补记 ${picked.name}',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              _timeButton(context, '开始', start, () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(start),
+                );
+                if (t != null) setSheet(() => start = _onDay(t));
+              }),
+              _timeButton(context, '结束', end, () async {
+                final t = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(end),
+                );
+                if (t != null) setSheet(() => end = _onDay(t));
+              }),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: () async {
+                    final error = picked.routine
+                        ? await widget.controller.addHistoricalRoutineSegment(
+                            picked.id,
+                            _anchor,
+                            start,
+                            end,
+                          )
+                        : await widget.controller.addHistoricalEventSegment(
+                            picked.id,
+                            start,
+                            end,
+                          );
+                    if (context.mounted && error == null) {
+                      Navigator.pop(context);
+                    }
+                    if (context.mounted && error != null) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(error)));
+                    }
+                  },
+                  child: const Text('添加'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _navigator() => Row(
     children: [
       IconButton(
@@ -144,6 +389,8 @@ class _SummaryPageState extends State<SummaryPage> {
   static String _date(DateTime value) => '${value.month} 月 ${value.day} 日';
   static String _time(DateTime value) =>
       '${_date(value)} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  static String _clock(DateTime value) =>
+      '${value.toLocal().hour.toString().padLeft(2, '0')}:${value.toLocal().minute.toString().padLeft(2, '0')}';
   static String _duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color _color(BuildContext context, CategoryDuration item) {
@@ -159,6 +406,60 @@ class _SummaryPageState extends State<SummaryPage> {
     ];
     return colors[item.bucketKey.hashCode.abs() % colors.length];
   }
+}
+
+class _SegmentRow extends StatelessWidget {
+  const _SegmentRow({
+    required this.segment,
+    required this.day,
+    required this.onTap,
+  });
+  final DailyExecutionSegment segment;
+  final DateTime day;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 118,
+            child: Text(
+              '${_clock(segment.startedAt)} → ${segment.endedAt == null ? '现在' : _clock(segment.endedAt!)}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(segment.name),
+                if (segment.detail != null || segment.isOpen)
+                  Text(
+                    segment.isOpen ? '正在执行' : segment.detail!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+String _clock(DateTime value) =>
+    '${value.toLocal().hour.toString().padLeft(2, '0')}:${value.toLocal().minute.toString().padLeft(2, '0')}';
+
+class _Candidate {
+  const _Candidate(this.id, this.name, this.routine);
+  final String id, name;
+  final bool routine;
+  const _Candidate.event(String id, String name) : this(id, name, false);
+  const _Candidate.routine(String id, String name) : this(id, name, true);
 }
 
 class _CategoryBar extends StatelessWidget {

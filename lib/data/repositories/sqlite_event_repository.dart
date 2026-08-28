@@ -119,6 +119,42 @@ class SqliteEventRepository
   }
 
   @override
+  Future<List<RunSegment>> getAllRunSegments() async =>
+      (await _appDatabase.database.query(
+        'run_segments',
+        orderBy: 'started_at_utc ASC',
+      )).map(_segmentFromRow).toList(growable: false);
+  @override
+  Future<void> insertHistoricalRunSegment(RunSegment segment) => _appDatabase
+      .database
+      .insert('run_segments', _segmentToRow(segment))
+      .then((_) {});
+  @override
+  Future<void> updateClosedRunSegment(RunSegment segment) async {
+    if (await _appDatabase.database.update(
+          'run_segments',
+          _segmentToRow(segment),
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [segment.id],
+        ) !=
+        1) {
+      throw StateError('Closed run segment not found');
+    }
+  }
+
+  @override
+  Future<void> deleteClosedRunSegment(String id) async {
+    if (await _appDatabase.database.delete(
+          'run_segments',
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [id],
+        ) !=
+        1) {
+      throw StateError('Closed run segment not found');
+    }
+  }
+
+  @override
   Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
     await _appDatabase.database.transaction((transaction) async {
       await transaction.update(
@@ -823,6 +859,56 @@ class SqliteEventRepository
         whereArgs: [id],
         orderBy: 'started_at_utc ASC',
       )).map(_routineSegmentFromRow).toList();
+  @override
+  Future<List<RoutineRunSegment>> getAllRoutineRunSegments() async =>
+      (await _appDatabase.database.query(
+        'routine_run_segments',
+        orderBy: 'started_at_utc ASC',
+      )).map(_routineSegmentFromRow).toList();
+  @override
+  Future<void> insertHistoricalRoutineExecution(
+    RoutineExecution execution,
+    RoutineRunSegment segment,
+  ) async {
+    await _appDatabase.database.transaction((tx) async {
+      final existing = await tx.query(
+        'routine_executions',
+        where: 'id = ?',
+        whereArgs: [execution.id],
+        limit: 1,
+      );
+      if (existing.isEmpty) {
+        await tx.insert('routine_executions', _executionToRow(execution));
+      }
+      await tx.insert('routine_run_segments', _routineSegmentToRow(segment));
+    });
+  }
+
+  @override
+  Future<void> updateClosedRoutineRunSegment(RoutineRunSegment segment) async {
+    if (await _appDatabase.database.update(
+          'routine_run_segments',
+          _routineSegmentToRow(segment),
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [segment.id],
+        ) !=
+        1) {
+      throw StateError('Closed routine segment not found');
+    }
+  }
+
+  @override
+  Future<void> deleteClosedRoutineRunSegment(String id) async {
+    if (await _appDatabase.database.delete(
+          'routine_run_segments',
+          where: 'id = ? AND ended_at_utc IS NOT NULL',
+          whereArgs: [id],
+        ) !=
+        1) {
+      throw StateError('Closed routine segment not found');
+    }
+  }
+
   @override
   Future<void> startRoutineExecution(
     RoutineExecution e,

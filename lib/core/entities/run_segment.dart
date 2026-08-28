@@ -13,10 +13,10 @@ class RunSegment {
   final DateTime? endedAt;
   Duration durationAt(DateTime now) =>
       (endedAt ?? now.toUtc()).difference(startedAt);
-  RunSegment copyWith({DateTime? endedAt}) => RunSegment(
+  RunSegment copyWith({DateTime? startedAt, DateTime? endedAt}) => RunSegment(
     id: id,
     eventId: eventId,
-    startedAt: startedAt,
+    startedAt: startedAt ?? this.startedAt,
     createdAt: createdAt,
     endedAt: endedAt ?? this.endedAt,
   );

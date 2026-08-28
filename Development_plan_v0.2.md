@@ -166,3 +166,10 @@
 - F9.5 跨日 running Routine 继续单一旧 execution，并覆盖当前日派生 occurrence，避免同名重复。Event/Routine 全局单 running、首页现在视角和 Record segment-only 统计保持不变。
 - F9.6 测试包括 22:59/23:00/23:01、v7 migration、计划唯一性/移除/独立排序、World start 自动规划、completed 当天留存、waiting、weekday recurrence、跨日 running Routine、导航、空状态、长 breadcrumb、小屏与全部历史能力迁移；完成全量测试、analyze 和 Windows/Android Debug 验收后独立提交。
 - F9.7 World Category detail 支持临时多选未完成 Event 批量追加到当前 Today；Repository 使用单次事务批量插入并依赖既有复合唯一约束保持幂等，新增项遵循 World 当前显示顺序且不触碰 Event 事实或 World order。
+
+## 11. F10：Record 日总结 execution segment 修正
+
+- F10.1 在既有 Event `run_segments` 与 Routine `routine_run_segments` 上提供统一的按 JaxDay 查询；展示按实际开始时间排序且允许同一对象重复出现，跨 23:00 只在读取时 overlap，不物理拆段。
+- F10.2 Core `ExecutionSegmentService` 负责 closed segment 的新增、修改、删除，以及 Event/Routine 全局 `[start,end)` 不重叠、start < end、非未来时间的校验；open segment 仅可继续通过 Today 状态机暂停/完成。
+- F10.3 Record 日总结提供低噪音顺序列表、上一项/下一项上下文、closed 编辑器与“添加执行记录”入口。补记复用已有 Event/Routine execution，不建立第二套历史事实来源；删除最后一个 segment 不改变 completed 状态。
+- F10.4 schema 保持 v10：两张现有 segment 表已经具备查询、插入、更新、删除所需字段，迁移不变。

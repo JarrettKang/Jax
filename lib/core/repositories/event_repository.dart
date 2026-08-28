@@ -11,6 +11,10 @@ abstract interface class EventRepository {
   Future<void> deleteEvent(String id);
   Future<void> startEvent(JaxEvent event, RunSegment segment);
   Future<List<RunSegment>> getRunSegments(String eventId);
+  Future<List<RunSegment>> getAllRunSegments();
+  Future<void> insertHistoricalRunSegment(RunSegment segment);
+  Future<void> updateClosedRunSegment(RunSegment segment);
+  Future<void> deleteClosedRunSegment(String id);
   Future<void> pauseEvent(JaxEvent event, RunSegment segment);
   Future<void> restoreCompletedEvents(List<JaxEvent> events);
   Future<JaxEvent?> getParent(String eventId);

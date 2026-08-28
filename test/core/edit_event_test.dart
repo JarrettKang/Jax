@@ -65,6 +65,14 @@ class _Repository implements EventRepository {
   @override
   Future<List<RunSegment>> getRunSegments(String eventId) async => const [];
   @override
+  Future<List<RunSegment>> getAllRunSegments() async => const [];
+  @override
+  Future<void> insertHistoricalRunSegment(RunSegment segment) async {}
+  @override
+  Future<void> updateClosedRunSegment(RunSegment segment) async {}
+  @override
+  Future<void> deleteClosedRunSegment(String id) async {}
+  @override
   @override
   Future<void> pauseEvent(JaxEvent event, RunSegment segment) async =>
       updateEvent(event);
