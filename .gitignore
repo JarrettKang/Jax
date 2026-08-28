@@ -25,3 +25,7 @@ coverage/
 *.sqlite-shm
 *.sqlite-wal
 *.log
+
+# Debug data-transfer artifacts (contain real user data)
+.debug_backups/
+.debug_snapshots/
