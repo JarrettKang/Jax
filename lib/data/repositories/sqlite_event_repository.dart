@@ -578,6 +578,7 @@ class SqliteEventRepository
     'id': category.id,
     'name': category.name,
     'sort_order': category.sortOrder,
+    'color_key': category.colorKey,
     'created_at_utc': category.createdAt.millisecondsSinceEpoch,
     'updated_at_utc': category.updatedAt.millisecondsSinceEpoch,
   };
@@ -586,6 +587,7 @@ class SqliteEventRepository
     id: row['id']! as String,
     name: row['name']! as String,
     sortOrder: row['sort_order']! as int,
+    colorKey: row['color_key']! as int,
     createdAt: DateTime.fromMillisecondsSinceEpoch(
       row['created_at_utc']! as int,
       isUtc: true,
@@ -1067,6 +1069,7 @@ class SqliteEventRepository
     'id': c.id,
     'name': c.name,
     'sort_order': c.sortOrder,
+    'color_key': c.colorKey,
     'created_at_utc': c.createdAt.toUtc().millisecondsSinceEpoch,
     'updated_at_utc': c.updatedAt.toUtc().millisecondsSinceEpoch,
   };
@@ -1075,6 +1078,7 @@ class SqliteEventRepository
         id: r['id'] as String,
         name: r['name'] as String,
         sortOrder: r['sort_order'] as int,
+        colorKey: r['color_key'] as int,
         createdAt: DateTime.fromMillisecondsSinceEpoch(
           r['created_at_utc'] as int,
           isUtc: true,

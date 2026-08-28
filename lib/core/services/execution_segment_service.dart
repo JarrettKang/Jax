@@ -188,6 +188,7 @@ class ExecutionSegmentService {
                 ? 'unclassified'
                 : 'event:${category.id}',
             categoryName: category?.name ?? '未分类',
+            categoryColorKey: category?.colorKey,
           ),
         );
       }
@@ -225,6 +226,7 @@ class ExecutionSegmentService {
                 ? 'unclassified'
                 : 'routine:${category.id}',
             categoryName: category?.name ?? '未分类',
+            categoryColorKey: category?.colorKey,
           ),
         );
       }

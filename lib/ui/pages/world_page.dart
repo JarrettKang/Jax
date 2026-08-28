@@ -7,6 +7,8 @@ import '../../core/entities/event_status.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_selector.dart';
+import '../widgets/category_color_picker.dart';
+import '../widgets/category_edit_dialog.dart';
 import '../widgets/event_more_menu_button.dart';
 import '../widgets/event_reorder_buttons.dart';
 import 'event_hierarchy_dialog.dart';
@@ -132,6 +134,7 @@ class _WorldPageState extends State<WorldPage> {
                   key: ValueKey('world-category-$id'),
                   categoryId: id,
                   name: category?.name ?? '未分类',
+                  colorKey: category?.colorKey,
                   eventCount: eventCount,
                   rootCount: roots.length,
                   active: active,
@@ -173,6 +176,7 @@ class _WorldPageState extends State<WorldPage> {
             label: const Text('世界'),
           ),
           const Icon(Icons.chevron_right, size: 18),
+          CategoryColorDot(colorKey: category?.colorKey),
           Text(
             category?.name ?? '未分类',
             key: const ValueKey('world-detail-title'),
@@ -222,7 +226,7 @@ class _WorldPageState extends State<WorldPage> {
         itemBuilder: (_) => [
           const PopupMenuItem(
             value: _CatAction.rename,
-            child: ListTile(leading: Icon(Icons.edit), title: Text('重命名')),
+            child: ListTile(leading: Icon(Icons.edit), title: Text('编辑分类')),
           ),
           if (index > 0)
             const PopupMenuItem(
@@ -670,8 +674,15 @@ class _WorldPageState extends State<WorldPage> {
   }
 
   Future<void> _createCategory(BuildContext c) async {
-    final n = await _name(c, '新建分类', null);
-    if (n != null) await widget.controller.createCategory(n);
+    await showDialog<void>(
+      context: c,
+      builder: (_) => CategoryEditDialog(
+        title: '新建分类',
+        initialColorKey: widget.controller.recommendedCategoryColorKey,
+        onSave: (name, colorKey) =>
+            widget.controller.createCategory(name, colorKey: colorKey),
+      ),
+    );
   }
 
   Future<void> _createTopLevelEvent(BuildContext c, String? categoryId) =>
@@ -805,8 +816,19 @@ class _WorldPageState extends State<WorldPage> {
   ) async {
     switch (a) {
       case _CatAction.rename:
-        final n = await _name(c, '重命名分类', x.name);
-        if (n != null) await widget.controller.renameCategory(x.id, n);
+        await showDialog<void>(
+          context: c,
+          builder: (_) => CategoryEditDialog(
+            title: '编辑分类',
+            initialName: x.name,
+            initialColorKey: x.colorKey,
+            onSave: (name, colorKey) => widget.controller.updateCategory(
+              x.id,
+              name,
+              colorKey: colorKey,
+            ),
+          ),
+        );
       case _CatAction.up:
         await widget.controller.reorderCategory(x.id, i - 1);
       case _CatAction.down:
@@ -867,6 +889,7 @@ class _CategoryOverviewCard extends StatefulWidget {
     required super.key,
     required this.categoryId,
     required this.name,
+    required this.colorKey,
     required this.eventCount,
     required this.rootCount,
     required this.active,
@@ -876,6 +899,7 @@ class _CategoryOverviewCard extends StatefulWidget {
 
   final String? categoryId;
   final String name;
+  final int? colorKey;
   final int eventCount;
   final int rootCount;
   final bool active;
@@ -928,6 +952,8 @@ class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
                     children: [
                       Row(
                         children: [
+                          CategoryColorDot(colorKey: widget.colorKey),
+                          const SizedBox(width: 7),
                           if (widget.active) ...[
                             Icon(
                               Icons.circle,

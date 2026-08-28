@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/daily_execution_segment.dart';
 import '../controllers/event_controller.dart';
+import '../theme/category_palette_colors.dart';
 import '../widgets/daily_time_distribution.dart';
 
 class SummaryPage extends StatefulWidget {
@@ -124,7 +125,12 @@ class _SummaryPageState extends State<SummaryPage> {
                   date: _anchor,
                   segments: segments,
                   now: widget.controller.currentTime,
-                  colorForBucket: (bucket) => _bucketColor(context, bucket),
+                  colorForSegment: (segment) => segment.categoryColorKey == null
+                      ? CategoryPaletteColors.neutral(context)
+                      : CategoryPaletteColors.resolve(
+                          context,
+                          segment.categoryColorKey!,
+                        ),
                   onSegmentTap: (segment) =>
                       _editSegment(context, segment, segments),
                 ),
@@ -440,21 +446,9 @@ class _SummaryPageState extends State<SummaryPage> {
   static String _duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color _color(BuildContext context, CategoryDuration item) {
-    return _bucketColor(context, item.bucketKey);
-  }
-
-  static Color _bucketColor(BuildContext context, String bucketKey) {
-    if (bucketKey == 'unclassified') {
-      return Theme.of(context).colorScheme.outline;
-    }
-    const colors = [
-      Colors.teal,
-      Colors.indigo,
-      Colors.orange,
-      Colors.purple,
-      Colors.pink,
-    ];
-    return colors[bucketKey.hashCode.abs() % colors.length];
+    return item.colorKey == null
+        ? CategoryPaletteColors.neutral(context)
+        : CategoryPaletteColors.resolve(context, item.colorKey!);
   }
 }
 
@@ -640,16 +634,8 @@ class SummaryPageState {
   static String duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color color(BuildContext context, CategoryDuration item) {
-    if (item.source == SummaryCategorySource.unclassified) {
-      return Theme.of(context).colorScheme.outline;
-    }
-    const colors = [
-      Colors.teal,
-      Colors.indigo,
-      Colors.orange,
-      Colors.purple,
-      Colors.pink,
-    ];
-    return colors[item.bucketKey.hashCode.abs() % colors.length];
+    return item.colorKey == null
+        ? CategoryPaletteColors.neutral(context)
+        : CategoryPaletteColors.resolve(context, item.colorKey!);
   }
 }

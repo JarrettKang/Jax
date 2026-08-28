@@ -180,3 +180,10 @@
 - F11.2 `DailyTimelineLayout` 作为无 Flutter 依赖的展示计算模型，先做 JaxDay clipping，再把同一真实 segment 投影为按小时 rendering fragments；fragment 横向位置和宽度表示分钟与 duration，始终保留底层 segment identity，绝不拆分数据库事实。
 - F11.3 Event/Routine segment DTO 携带来源明确的 Category bucket identity，时间轴与分类统计共享稳定色彩映射；相同裸 ID 或名称不合并。
 - F11.4 小时行高度和 block 高度固定，短 fragment 仅扩大横向交互区域；Windows 使用 hover tooltip，Android/Windows 均可点击任意 fragment 查看完整真实 segment 并复用既有入口。不加入 drag、resize、merge 或第二套历史模型。schema 保持 v10。
+
+## 13. F12：Category Color Palette
+
+- F12.1 schema v10→v11 为 `categories` 与 `routine_categories` 增加范围为 0–7 的非空 `color_key`；迁移按 World Category 排序后接 Routine Category 排序确定性循环分配，不改变名称、顺序、关系、history 或 segment。
+- F12.2 Core 集中定义固定 8 个 palette key，UI theme resolver 集中映射渲染色并预留 dark variant。World/Routine 新建与编辑使用 8 色 swatch；自动预选共同统计两类 Category 的最少使用色，允许重复颜色。
+- F12.3 World 与日常使用轻量色点；Record 日/周统计及今日时间分布读取同一 `colorKey`。Event child 继承当前 root Category 颜色，Routine 使用当前 Routine Category 颜色，未分类统一使用 theme neutral；bucket identity 仍显式区分 Event/Routine。
+- F12.4 测试覆盖双类型存储、共同分配、重复色、rename/reorder/delete 保色语义、v10 migration、8 色选择器、Record 颜色传递以及全量与双平台 Debug 回归。

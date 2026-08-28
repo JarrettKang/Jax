@@ -6,6 +6,7 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/event_day_plan.dart';
 import '../../core/entities/jax_day.dart';
 import '../../core/entities/category.dart';
+import '../../core/entities/category_palette.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
@@ -149,6 +150,10 @@ class EventController extends ChangeNotifier {
   List<Routine> get routines => List.unmodifiable(_routines);
   List<RoutineCategory> get routineCategories =>
       List.unmodifiable(_routineCategories);
+  int get recommendedCategoryColorKey => CategoryPalette.leastUsed([
+    ..._categoryItems.map((category) => category.colorKey),
+    ..._routineCategories.map((category) => category.colorKey),
+  ]);
   JaxDay get currentJaxDay => JaxDay.containing(_now());
   DateTime get currentTime => _now().toLocal();
   List<JaxEvent> get todayEvents {
@@ -372,10 +377,12 @@ class EventController extends ChangeNotifier {
   );
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
-  Future<String?> createCategory(String name) =>
-      _change(() => _categories.create(name));
+  Future<String?> createCategory(String name, {int? colorKey}) =>
+      _change(() => _categories.create(name, colorKey: colorKey));
+  Future<String?> updateCategory(String id, String name, {int? colorKey}) =>
+      _change(() => _categories.update(id, name, colorKey: colorKey));
   Future<String?> renameCategory(String id, String name) =>
-      _change(() => _categories.rename(id, name));
+      updateCategory(id, name);
   Future<String?> deleteCategory(String id) =>
       _change(() => _categories.delete(id));
   Future<String?> reorderCategory(String id, int index) =>
@@ -494,10 +501,17 @@ class EventController extends ChangeNotifier {
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>
       _change(() => _routineService!.setActive(r, active));
-  Future<String?> createRoutineCategory(String name) =>
-      _change(() => _routineCategoryService!.create(name));
+  Future<String?> createRoutineCategory(String name, {int? colorKey}) =>
+      _change(() => _routineCategoryService!.create(name, colorKey: colorKey));
+  Future<String?> updateRoutineCategory(
+    RoutineCategory c,
+    String name, {
+    int? colorKey,
+  }) => _change(
+    () => _routineCategoryService!.update(c, name, colorKey: colorKey),
+  );
   Future<String?> renameRoutineCategory(RoutineCategory c, String name) =>
-      _change(() => _routineCategoryService!.rename(c, name));
+      updateRoutineCategory(c, name);
   Future<String?> deleteRoutineCategory(String id) =>
       _change(() => _routineCategoryService!.delete(id));
   Future<String?> reorderRoutineCategory(String id, int target) =>

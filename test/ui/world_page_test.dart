@@ -257,7 +257,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('world-category-more-dev')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('重命名'));
+    await tester.tap(find.text('编辑分类'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '工程');
     await tester.tap(find.text('保存'));

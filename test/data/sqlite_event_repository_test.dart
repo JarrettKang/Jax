@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/use_cases/create_event.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
@@ -33,6 +34,21 @@ void main() {
     expect(loaded, [event]);
   });
 
+  test('persists Routine Category colorKey', () async {
+    final timestamp = DateTime.utc(2026, 8, 24, 12);
+    await repository.insertRoutineCategory(
+      RoutineCategory(
+        id: 'daily',
+        name: '日常',
+        sortOrder: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        colorKey: 7,
+      ),
+    );
+    expect((await repository.getRoutineCategories()).single.colorKey, 7);
+  });
+
   test(
     'persists root Category and child relationship at Event creation',
     () async {
@@ -44,6 +60,7 @@ void main() {
           sortOrder: 0,
           createdAt: createdAt,
           updatedAt: createdAt,
+          colorKey: 5,
         ),
       );
       var nextId = 0;
@@ -61,6 +78,7 @@ void main() {
       );
 
       expect((await repository.getEvent(root.id))!.categoryId, 'research');
+      expect((await repository.getCategories()).single.colorKey, 5);
       final storedChild = (await repository.getEvent(child.id))!;
       expect(storedChild.parentEventId, root.id);
       expect(storedChild.categoryId, isNull);

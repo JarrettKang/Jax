@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/routine.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/services/routine_category_service.dart';
 
 import '../support/memory_repository.dart';
@@ -69,4 +70,32 @@ void main() {
     );
     expect(repo.routines.singleWhere((r) => r.id == 'other').sortOrder, 0);
   });
+
+  test(
+    'Routine color allocation includes World categories and preserves color',
+    () async {
+      final now = DateTime.utc(2026, 8, 28);
+      final repo = MemoryRepository()
+        ..categories.add(
+          Category(
+            id: 'world',
+            name: '工作',
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+            colorKey: 0,
+          ),
+        );
+      final service = RoutineCategoryService(
+        repository: repo,
+        newId: () => 'routine',
+        now: () => now,
+      );
+      await service.create('生活');
+      final category = repo.routineCategories.single;
+      expect(category.colorKey, 1);
+      await service.rename(category, '起居');
+      expect(repo.routineCategories.single.colorKey, 1);
+    },
+  );
 }

@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 10;
+  static const schemaVersion = 11;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -33,6 +33,7 @@ class AppDatabase {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
       sort_order INTEGER NOT NULL,
+      color_key INTEGER NOT NULL CHECK(color_key BETWEEN 0 AND 7),
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL
     )''');
@@ -96,6 +97,7 @@ class AppDatabase {
     if (oldVersion < 8) await _createEventDayPlans(database);
     if (oldVersion < 9) await _createWorldCategoryCollapsePreferences(database);
     if (oldVersion < 10) await _migrateToRoutineCategories(database);
+    if (oldVersion < 11) await _migrateToCategoryColors(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -196,6 +198,7 @@ class AppDatabase {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
       sort_order INTEGER NOT NULL,
+      color_key INTEGER NOT NULL CHECK(color_key BETWEEN 0 AND 7),
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL
     )''');
@@ -223,6 +226,60 @@ class AppDatabase {
     }
     // Old World Category assignments are deliberately not copied.
     await database.execute('UPDATE routines SET routine_category_id = NULL');
+  }
+
+  static Future<void> _migrateToCategoryColors(Database database) async {
+    final eventColumns = await database.rawQuery(
+      'PRAGMA table_info(categories)',
+    );
+    final routineColumns = await database.rawQuery(
+      'PRAGMA table_info(routine_categories)',
+    );
+    if (eventColumns.isNotEmpty &&
+        !eventColumns.any((row) => row['name'] == 'color_key')) {
+      await database.execute(
+        'ALTER TABLE categories ADD COLUMN color_key INTEGER NOT NULL DEFAULT 0 CHECK(color_key BETWEEN 0 AND 7)',
+      );
+    }
+    if (routineColumns.isNotEmpty &&
+        !routineColumns.any((row) => row['name'] == 'color_key')) {
+      await database.execute(
+        'ALTER TABLE routine_categories ADD COLUMN color_key INTEGER NOT NULL DEFAULT 0 CHECK(color_key BETWEEN 0 AND 7)',
+      );
+    }
+    var paletteIndex = 0;
+    final eventCategories = eventColumns.isEmpty
+        ? const <Map<String, Object?>>[]
+        : await database.query(
+            'categories',
+            columns: ['id'],
+            orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+          );
+    for (final category in eventCategories) {
+      await database.update(
+        'categories',
+        {'color_key': paletteIndex % 8},
+        where: 'id = ?',
+        whereArgs: [category['id']],
+      );
+      paletteIndex++;
+    }
+    final routineCategories = routineColumns.isEmpty
+        ? const <Map<String, Object?>>[]
+        : await database.query(
+            'routine_categories',
+            columns: ['id'],
+            orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
+          );
+    for (final category in routineCategories) {
+      await database.update(
+        'routine_categories',
+        {'color_key': paletteIndex % 8},
+        where: 'id = ?',
+        whereArgs: [category['id']],
+      );
+      paletteIndex++;
+    }
   }
 
   Future<void> close() => database.close();

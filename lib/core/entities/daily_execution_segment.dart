@@ -12,6 +12,7 @@ class DailyExecutionSegment {
     this.detail,
     this.categoryBucketKey = 'unclassified',
     this.categoryName = '未分类',
+    this.categoryColorKey,
   });
   final String id, ownerId, name;
   final ExecutionSource source;
@@ -20,5 +21,6 @@ class DailyExecutionSegment {
   final String? detail;
   final String categoryBucketKey;
   final String categoryName;
+  final int? categoryColorKey;
   bool get isOpen => endedAt == null;
 }

@@ -6,6 +6,7 @@ class CategoryDuration {
     required this.order,
     this.bucketKey = '',
     this.source = SummaryCategorySource.event,
+    this.colorKey,
   });
 
   final String? categoryId;
@@ -14,6 +15,7 @@ class CategoryDuration {
   final int order;
   final String bucketKey;
   final SummaryCategorySource source;
+  final int? colorKey;
 }
 
 enum SummaryCategorySource { event, routine, unclassified }

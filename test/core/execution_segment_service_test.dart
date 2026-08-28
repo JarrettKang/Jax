@@ -81,6 +81,7 @@ void main() {
           sortOrder: 0,
           createdAt: now,
           updatedAt: now,
+          colorKey: 2,
         ),
       )
       ..segments.add(segment('event-segment', 'work', 8, 9))
@@ -91,6 +92,7 @@ void main() {
           sortOrder: 0,
           createdAt: now,
           updatedAt: now,
+          colorKey: 6,
         ),
       )
       ..routines.add(
@@ -133,6 +135,7 @@ void main() {
       'event:same',
       'routine:same',
     ]);
+    expect(result.map((item) => item.categoryColorKey), [2, 6]);
   });
 
   test('updates, adds and deletes closed segments while preserving adjacent boundaries', () async {

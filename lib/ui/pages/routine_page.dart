@@ -4,6 +4,8 @@ import '../../core/entities/routine.dart';
 import '../../core/entities/routine_category.dart';
 import '../../core/preferences/routine_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/category_color_picker.dart';
+import '../widgets/category_edit_dialog.dart';
 import '../widgets/routine_reorder_buttons.dart';
 
 class RoutinePage extends StatefulWidget {
@@ -137,9 +139,15 @@ class _RoutinePageState extends State<RoutinePage> {
             onPressed: () => _toggle(category?.id),
             icon: Icon(isCollapsed ? Icons.chevron_right : Icons.expand_more),
           ),
-          title: Text(
-            category?.name ?? '未分类',
-            style: Theme.of(context).textTheme.titleMedium,
+          title: Row(
+            children: [
+              CategoryColorDot(colorKey: category?.colorKey),
+              const SizedBox(width: 8),
+              Text(
+                category?.name ?? '未分类',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
           ),
           trailing: category == null
               ? null
@@ -239,35 +247,20 @@ class _RoutinePageState extends State<RoutinePage> {
     BuildContext c, [
     RoutineCategory? category,
   ]) async {
-    final input = TextEditingController(text: category?.name);
     await showDialog<void>(
       context: c,
-      builder: (d) => AlertDialog(
-        title: Text(category == null ? '新建日常分类' : '重命名日常分类'),
-        content: TextField(
-          key: const ValueKey('routine-category-name'),
-          controller: input,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '名称'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(d),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final error = category == null
-                  ? await widget.controller.createRoutineCategory(input.text)
-                  : await widget.controller.renameRoutineCategory(
-                      category,
-                      input.text,
-                    );
-              if (error == null && d.mounted) Navigator.pop(d);
-            },
-            child: const Text('保存'),
-          ),
-        ],
+      builder: (_) => CategoryEditDialog(
+        title: category == null ? '新建日常分类' : '编辑日常分类',
+        initialName: category?.name ?? '',
+        initialColorKey:
+            category?.colorKey ?? widget.controller.recommendedCategoryColorKey,
+        onSave: (name, colorKey) => category == null
+            ? widget.controller.createRoutineCategory(name, colorKey: colorKey)
+            : widget.controller.updateRoutineCategory(
+                category,
+                name,
+                colorKey: colorKey,
+              ),
       ),
     );
   }

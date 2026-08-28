@@ -8,7 +8,7 @@ class DailyTimeDistribution extends StatelessWidget {
     required this.date,
     required this.segments,
     required this.now,
-    required this.colorForBucket,
+    required this.colorForSegment,
     required this.onSegmentTap,
     super.key,
   });
@@ -16,7 +16,7 @@ class DailyTimeDistribution extends StatelessWidget {
   final DateTime date;
   final List<DailyExecutionSegment> segments;
   final DateTime now;
-  final Color Function(String bucketKey) colorForBucket;
+  final Color Function(DailyExecutionSegment segment) colorForSegment;
   final ValueChanged<DailyExecutionSegment> onSegmentTap;
 
   @override
@@ -123,7 +123,7 @@ class DailyTimeDistribution extends StatelessWidget {
     final width = trackWidth * fragment.durationFraction;
     final blockHeight = rowHeight - 8;
     final top = 4.0;
-    final color = colorForBucket(fragment.segment.categoryBucketKey);
+    final color = colorForSegment(fragment.segment);
     final tooltip = _tooltip(fragment.segment);
     final identity = '${fragment.segment.id}-$rowIndex-$fragmentIndex';
     final visual = Positioned(

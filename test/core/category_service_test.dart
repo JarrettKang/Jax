@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
+import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/services/category_service.dart';
 
@@ -24,6 +25,35 @@ void main() {
     await service.delete('c1');
     expect(repo.categories, isEmpty);
   });
+
+  test(
+    'color allocation counts World and Routine and manual repeats are valid',
+    () async {
+      final repo = MemoryRepository()
+        ..routineCategories.add(
+          RoutineCategory(
+            id: 'r',
+            name: '日常',
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+            colorKey: 0,
+          ),
+        );
+      var id = 0;
+      final service = CategoryService(
+        repository: repo,
+        newId: () => 'c${id++}',
+        now: () => now,
+      );
+      final automatic = await service.create('工作');
+      expect(automatic.colorKey, 1);
+      final repeated = await service.create('项目', colorKey: 0);
+      expect(repeated.colorKey, 0);
+      final renamed = await service.rename(automatic.id, '研究');
+      expect(renamed.colorKey, 1);
+    },
+  );
 
   test('root category follows detach and clears on root to child', () async {
     final root = JaxEvent(

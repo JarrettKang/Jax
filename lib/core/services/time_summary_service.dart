@@ -131,6 +131,7 @@ class TimeSummaryService {
                 ? SummaryCategorySource.routine
                 : SummaryCategorySource.unclassified,
             name: category?.name ?? routineCategory?.name ?? '未分类',
+            colorKey: category?.colorKey ?? routineCategory?.colorKey,
             duration: entry.value,
             order: category != null
                 ? categories.indexOf(category)

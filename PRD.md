@@ -302,6 +302,8 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - World overview 按 Category 用户顺序从左到右、从上到下展示卡片；有未分类 root Event 时追加虚拟“未分类”卡片，空用户 Category 仍显示。Category detail 只展示该 Category 的 root trees 与 descendants，Event sibling ordering 保持原有相对顺序。
 - 从 Category detail 新建 root Event 时直接采用当前 Category；从虚拟“未分类”detail 创建时 `category_id` 保持 null。下层 Event 继续从父 Event 菜单创建并继承 root Category；Routine 不进入 World。
 - 两层结构不再提供 Category 展开/折叠 UI；既有 Category collapse preference 作为无害兼容数据保留但不再参与 World 展示，不为此增加 migration。Event tree 的 session 内展开/折叠继续保留。
+- World Category 与 Routine Category 各自以稳定 ID 保持独立 identity，并正式拥有 `colorKey`。用户从 Jax 内置 8 色 palette 选择；新建时综合两类 Category 的使用次数预选最少使用色，同次数按 palette 顺序，允许用户重复选色。重命名、排序和折叠不改变颜色。
+- World 与日常仅以小圆点等轻量标识呈现 Category 色；虚拟“未分类”不占用 palette，始终使用主题中性色。颜色只承担视觉语义，不参与名称、裸 ID 或跨类型合并。
 
 ### 10.11 v0.2 F7：时间复盘
 
@@ -309,6 +311,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - Jax 统计日为本地时间前一日 23:00 至当日 23:00；segment 以与统计窗口的 overlap 裁剪，未结束的 running segment 截止当前时间。周从周一开始，至周日 23:00 结束；当前日/周可显示进行中数据。
 - 时间按 Event 的当前 hierarchy 向上找到 root，并按 root 当前 Category 动态归属；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
 - 日总结显示按时长降序的 Category 横向条与占比；周总结显示七天真实时长的 Category 堆叠柱和全周 Category 汇总。Category identity 基于 id，未分类使用中性样式。
+- 日/周分类统计和今日时间分布统一通过 Category `colorKey` 解析主题颜色。Event descendant 使用当前 root Event Category 色，Routine 使用当前 Routine Category 色；删除分类后按未分类中性色显示，历史动态归属语义不变。
 
 ### 10.12 v0.2 F8：Routine / 日常
 
