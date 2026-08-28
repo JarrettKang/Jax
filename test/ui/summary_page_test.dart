@@ -56,6 +56,12 @@ void main() {
     expect(find.text('一个很长的开发项目分类名称'), findsOneWidget);
     expect(find.textContaining('1h 00m · 100%'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.text('今日时间分布'), findsOneWidget);
+    expect(find.byKey(const ValueKey('timeline-visual-s')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('执行记录'), 500);
+    expect(find.text('执行记录'), findsOneWidget);
+    expect(find.text('08:00 → 09:00'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('周总结'), -500);
     await tester.tap(find.text('周总结'));
     await tester.pumpAndSettle();
     expect(find.text('每日时间分配'), findsOneWidget);

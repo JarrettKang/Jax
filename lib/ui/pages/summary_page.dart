@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/daily_execution_segment.dart';
 import '../controllers/event_controller.dart';
+import '../widgets/daily_time_distribution.dart';
 
 class SummaryPage extends StatefulWidget {
   const SummaryPage({required this.controller, super.key});
@@ -76,34 +77,6 @@ class _SummaryPageState extends State<SummaryPage> {
                 '${_time(summary.start)} – ${_time(summary.end)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (!_week) ...[
-                const SizedBox(height: 28),
-                Row(
-                  children: [
-                    Text(
-                      '执行时间',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => _addSegment(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加执行记录'),
-                    ),
-                  ],
-                ),
-                if (segments.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text('这一天没有执行片段'),
-                  ),
-                for (final segment in segments)
-                  _SegmentRow(
-                    segment: segment,
-                    day: _anchor,
-                    onTap: () => _editSegment(context, segment, segments),
-                  ),
-              ],
               const SizedBox(height: 20),
               Text('已记录时间', style: Theme.of(context).textTheme.titleMedium),
               Text(
@@ -140,6 +113,45 @@ class _SummaryPageState extends State<SummaryPage> {
                     color: _color(context, summary.categories[i]),
                   ),
               ],
+              if (!_week) ...[
+                const SizedBox(height: 32),
+                Text('今日时间分布', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                DailyTimeDistribution(
+                  date: _anchor,
+                  segments: segments,
+                  now: widget.controller.currentTime,
+                  colorForBucket: (bucket) => _bucketColor(context, bucket),
+                  onSegmentTap: (segment) =>
+                      _editSegment(context, segment, segments),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Text(
+                      '执行记录',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _addSegment(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('添加执行记录'),
+                    ),
+                  ],
+                ),
+                if (segments.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Text('这一天没有执行片段'),
+                  ),
+                for (final segment in segments)
+                  _SegmentRow(
+                    segment: segment,
+                    day: _anchor,
+                    onTap: () => _editSegment(context, segment, segments),
+                  ),
+              ],
             ],
           ],
         );
@@ -160,9 +172,7 @@ class _SummaryPageState extends State<SummaryPage> {
     List<DailyExecutionSegment> list,
   ) async {
     if (segment.isOpen) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('正在执行，请使用 Today 中的暂停或完成操作')));
+      await _showOpenSegment(context, segment);
       return;
     }
     var start = segment.startedAt.toLocal();
@@ -242,6 +252,39 @@ class _SummaryPageState extends State<SummaryPage> {
       ),
     );
   }
+
+  Future<void> _showOpenSegment(
+    BuildContext context,
+    DailyExecutionSegment segment,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    builder: (context) {
+      final elapsed = widget.controller.currentTime.difference(
+        segment.startedAt.toLocal(),
+      );
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(segment.name, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Text('${_clock(segment.startedAt)} → 现在'),
+            const SizedBox(height: 4),
+            Text(_duration(elapsed)),
+            const SizedBox(height: 4),
+            Text(segment.categoryName),
+            const SizedBox(height: 12),
+            Text(
+              '正在执行 · 请在 Today 中暂停或完成',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      );
+    },
+  );
 
   Widget _contextLine(String label, DailyExecutionSegment segment) => Padding(
     padding: const EdgeInsets.only(top: 12),
@@ -394,7 +437,11 @@ class _SummaryPageState extends State<SummaryPage> {
   static String _duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
   static Color _color(BuildContext context, CategoryDuration item) {
-    if (item.source == SummaryCategorySource.unclassified) {
+    return _bucketColor(context, item.bucketKey);
+  }
+
+  static Color _bucketColor(BuildContext context, String bucketKey) {
+    if (bucketKey == 'unclassified') {
       return Theme.of(context).colorScheme.outline;
     }
     const colors = [
@@ -404,7 +451,7 @@ class _SummaryPageState extends State<SummaryPage> {
       Colors.purple,
       Colors.pink,
     ];
-    return colors[item.bucketKey.hashCode.abs() % colors.length];
+    return colors[bucketKey.hashCode.abs() % colors.length];
   }
 }
 

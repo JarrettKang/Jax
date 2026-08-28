@@ -366,3 +366,10 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - Routine 不需要手动规划。跨 23:00 仍 running 的上一 occurrence 继续使用同一 RoutineExecution，新 Today 显示它且不创建同名第二 occurrence；时间统计仍按 23:00 裁剪。
 - Today Event 显示 ancestor breadcrumb，但不复制 hierarchy、Category CRUD 或完整 World tree。Today 与日常/World 可共用现有 Core 执行动作，全局 Event + RoutineExecution 最多一个 running 的约束不变。
 - Today plan 本身不产生执行时间；日/周记录继续只统计 Event 与 Routine run segments。
+
+## 14. Record 今日时间分布
+
+- 日总结依次展示分类时间统计、今日时间分布和执行记录。今日时间分布回答 execution segments 在 JaxDay 23:00→23:00 内实际发生的时段。
+- 时间轴块一一对应真实 Event/Routine segment，不按对象聚合或合并；位置和高度严格按时间与 duration 比例计算，空白不解释、不补齐。
+- 跨 JaxDay segment 仅按窗口 overlap 绘制，open segment 绘制至当前时间；底层 segment 不拆分，统计和历史事实来源不变。
+- Category 颜色 identity 区分 Event 与 Routine 来源；短块允许扩大 hit area，但可视高度不得失真。第一版只提供 tooltip/tap 信息与既有编辑入口，不支持图形化拖动或 resize。

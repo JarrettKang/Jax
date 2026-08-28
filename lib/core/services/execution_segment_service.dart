@@ -1,5 +1,6 @@
 import '../entities/daily_execution_segment.dart';
 import '../entities/jax_day.dart';
+import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
 import '../entities/routine.dart';
 import '../errors/domain_failure.dart';
@@ -161,10 +162,18 @@ class ExecutionSegmentService {
       ...await _events.getCompletedEvents(),
     ];
     final eventById = {for (final e in events) e.id: e};
+    final categories = await _events.getCategories();
+    final eventCategoryById = {
+      for (final category in categories) category.id: category,
+    };
     final result = <DailyExecutionSegment>[];
     for (final s in await _events.getAllRunSegments()) {
       final e = eventById[s.eventId];
       if (e != null) {
+        final root = _rootEvent(e, eventById);
+        final category = root.categoryId == null
+            ? null
+            : eventCategoryById[root.categoryId];
         result.add(
           DailyExecutionSegment(
             id: s.id,
@@ -174,6 +183,11 @@ class ExecutionSegmentService {
             startedAt: s.startedAt,
             endedAt: s.endedAt,
             createdAt: s.createdAt,
+            detail: category?.name ?? '未分类',
+            categoryBucketKey: category == null
+                ? 'unclassified'
+                : 'event:${category.id}',
+            categoryName: category?.name ?? '未分类',
           ),
         );
       }
@@ -183,6 +197,10 @@ class ExecutionSegmentService {
       return result;
     }
     final routines = {for (final r in await repo.getRoutines()) r.id: r};
+    final routineCategories = await repo.getRoutineCategories();
+    final routineCategoryById = {
+      for (final category in routineCategories) category.id: category,
+    };
     final executions = {
       for (final e in await repo.getRoutineExecutions()) e.id: e,
     };
@@ -190,6 +208,9 @@ class ExecutionSegmentService {
       final e = executions[s.executionId];
       final r = e == null ? null : routines[e.routineId];
       if (r != null) {
+        final category = r.routineCategoryId == null
+            ? null
+            : routineCategoryById[r.routineCategoryId];
         result.add(
           DailyExecutionSegment(
             id: s.id,
@@ -199,11 +220,28 @@ class ExecutionSegmentService {
             startedAt: s.startedAt,
             endedAt: s.endedAt,
             createdAt: s.createdAt,
-            detail: '日常',
+            detail: '${category?.name ?? '未分类'} · 日常',
+            categoryBucketKey: category == null
+                ? 'unclassified'
+                : 'routine:${category.id}',
+            categoryName: category?.name ?? '未分类',
           ),
         );
       }
     }
     return result;
+  }
+
+  JaxEvent _rootEvent(JaxEvent event, Map<String, JaxEvent> byId) {
+    var current = event;
+    final seen = <String>{};
+    while (current.parentEventId != null && seen.add(current.id)) {
+      final parent = byId[current.parentEventId];
+      if (parent == null) {
+        break;
+      }
+      current = parent;
+    }
+    return current;
   }
 }

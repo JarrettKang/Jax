@@ -173,3 +173,10 @@
 - F10.2 Core `ExecutionSegmentService` 负责 closed segment 的新增、修改、删除，以及 Event/Routine 全局 `[start,end)` 不重叠、start < end、非未来时间的校验；open segment 仅可继续通过 Today 状态机暂停/完成。
 - F10.3 Record 日总结提供低噪音顺序列表、上一项/下一项上下文、closed 编辑器与“添加执行记录”入口。补记复用已有 Event/Routine execution，不建立第二套历史事实来源；删除最后一个 segment 不改变 completed 状态。
 - F10.4 schema 保持 v10：两张现有 segment 表已经具备查询、插入、更新、删除所需字段，迁移不变。
+
+## 12. F11：Record 今日时间分布
+
+- F11.1 日总结在分类统计与执行记录之间新增纵向 24 小时时间轴，严格映射 JaxDay 23:00→23:00；每个真实 execution segment 独立绘制，跨日和 open segment 只做 display clipping。
+- F11.2 `DailyTimelineBlock` 作为无 Flutter 依赖的展示计算模型，提供相对起点与真实 duration 比例；短 segment 仅扩大交互区域，不改变可视块高度，空白时间保持空白。
+- F11.3 Event/Routine segment DTO 携带来源明确的 Category bucket identity，时间轴与分类统计共享稳定色彩映射；相同裸 ID 或名称不合并。
+- F11.4 Windows 使用 hover tooltip，Android/Windows 均可点击 block 复用既有 segment 入口；不加入 drag、resize、merge 或第二套历史模型。schema 保持 v10。

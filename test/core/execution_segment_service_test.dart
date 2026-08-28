@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/routine.dart';
+import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/services/execution_segment_service.dart';
 
@@ -10,12 +12,13 @@ import '../support/memory_repository.dart';
 
 void main() {
   final now = DateTime(2026, 8, 28, 20);
-  JaxEvent event(String id) => JaxEvent(
+  JaxEvent event(String id, {String? categoryId}) => JaxEvent(
     id: id,
     name: id,
     status: EventStatus.completed,
     createdAt: now,
     updatedAt: now,
+    categoryId: categoryId,
   );
   RunSegment segment(String id, String event, int start, int end) => RunSegment(
     id: id,
@@ -67,6 +70,69 @@ void main() {
       now: () => now,
     ).forJaxDay(now);
     expect(result.map((item) => item.id), ['first', 'lunch', 'second']);
+  });
+
+  test('keeps Event and Routine category identities distinct', () async {
+    final repo = MemoryRepository([event('work', categoryId: 'same')])
+      ..categories.add(
+        Category(
+          id: 'same',
+          name: '生活',
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      )
+      ..segments.add(segment('event-segment', 'work', 8, 9))
+      ..routineCategories.add(
+        RoutineCategory(
+          id: 'same',
+          name: '生活',
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      )
+      ..routines.add(
+        Routine(
+          id: 'routine',
+          name: '早餐',
+          routineCategoryId: 'same',
+          recurrence: RoutineRecurrence.daily,
+          weekdayMask: 0,
+          isActive: true,
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      )
+      ..routineExecutions.add(
+        RoutineExecution(
+          id: 'execution',
+          routineId: 'routine',
+          occurrenceDate: '2026-08-28',
+          status: RoutineExecutionStatus.completed,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      )
+      ..routineSegments.add(
+        RoutineRunSegment(
+          id: 'routine-segment',
+          executionId: 'execution',
+          startedAt: DateTime(2026, 8, 28, 9),
+          endedAt: DateTime(2026, 8, 28, 10),
+          createdAt: now,
+        ),
+      );
+    final result = await ExecutionSegmentService(
+      repository: repo,
+      now: () => now,
+    ).forJaxDay(now);
+    expect(result.map((item) => item.categoryBucketKey), [
+      'event:same',
+      'routine:same',
+    ]);
   });
 
   test('updates, adds and deletes closed segments while preserving adjacent boundaries', () async {

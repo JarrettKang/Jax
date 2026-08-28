@@ -150,6 +150,7 @@ class EventController extends ChangeNotifier {
   List<RoutineCategory> get routineCategories =>
       List.unmodifiable(_routineCategories);
   JaxDay get currentJaxDay => JaxDay.containing(_now());
+  DateTime get currentTime => _now().toLocal();
   List<JaxEvent> get todayEvents {
     final byId = {for (final event in _worldEvents) event.id: event};
     return _todayPlans.map((plan) => byId[plan.eventId]).nonNulls.toList();
