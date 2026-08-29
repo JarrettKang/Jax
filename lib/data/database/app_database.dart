@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 11;
+  static const schemaVersion = 12;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -98,6 +98,7 @@ class AppDatabase {
     if (oldVersion < 9) await _createWorldCategoryCollapsePreferences(database);
     if (oldVersion < 10) await _migrateToRoutineCategories(database);
     if (oldVersion < 11) await _migrateToCategoryColors(database);
+    if (oldVersion < 12) await _migrateToOnDemandRoutines(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -152,6 +153,7 @@ class AppDatabase {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
       routine_category_id TEXT REFERENCES routine_categories(id) ON DELETE SET NULL,
+      routine_type TEXT NOT NULL DEFAULT 'scheduled' CHECK(routine_type IN ('scheduled','onDemand')),
       recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekdays','weekends','selectedWeekdays')),
       weekday_mask INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
@@ -166,8 +168,7 @@ class AppDatabase {
       status TEXT NOT NULL CHECK(status IN ('running','paused','completed')),
       completed_at_utc INTEGER,
       created_at_utc INTEGER NOT NULL,
-      updated_at_utc INTEGER NOT NULL,
-      UNIQUE(routine_id, occurrence_date)
+      updated_at_utc INTEGER NOT NULL
     )''');
     await database.execute('''CREATE TABLE routine_run_segments (
       id TEXT PRIMARY KEY,
@@ -176,6 +177,47 @@ class AppDatabase {
       ended_at_utc INTEGER,
       created_at_utc INTEGER NOT NULL
     )''');
+  }
+
+  static Future<void> _migrateToOnDemandRoutines(Database database) async {
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routines'",
+    );
+    if (tables.isEmpty) return;
+    final columns = await database.rawQuery('PRAGMA table_info(routines)');
+    if (columns.any((column) => column['name'] == 'routine_type')) return;
+    await database.execute(
+      "ALTER TABLE routines ADD COLUMN routine_type TEXT NOT NULL DEFAULT 'scheduled' CHECK(routine_type IN ('scheduled','onDemand'))",
+    );
+    await database.execute('''CREATE TABLE routine_executions_v12 (
+      id TEXT PRIMARY KEY,
+      routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE RESTRICT,
+      occurrence_date TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('running','paused','completed')),
+      completed_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL
+    )''');
+    await database.execute('''INSERT INTO routine_executions_v12
+      SELECT id, routine_id, occurrence_date, status, completed_at_utc,
+        created_at_utc, updated_at_utc FROM routine_executions''');
+    await database.execute('''CREATE TABLE routine_run_segments_v12 (
+      id TEXT PRIMARY KEY,
+      routine_execution_id TEXT NOT NULL REFERENCES routine_executions_v12(id) ON DELETE CASCADE,
+      started_at_utc INTEGER NOT NULL,
+      ended_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL
+    )''');
+    await database.execute('''INSERT INTO routine_run_segments_v12
+      SELECT * FROM routine_run_segments''');
+    await database.execute('DROP TABLE routine_run_segments');
+    await database.execute('DROP TABLE routine_executions');
+    await database.execute(
+      'ALTER TABLE routine_executions_v12 RENAME TO routine_executions',
+    );
+    await database.execute(
+      'ALTER TABLE routine_run_segments_v12 RENAME TO routine_run_segments',
+    );
   }
 
   static Future<void> _createEventDayPlans(Database database) =>

@@ -188,4 +188,106 @@ void main() {
       expect(repo.routines.single.isActive, isTrue);
     },
   );
+
+  test(
+    'on-demand completion followed by start creates a new execution',
+    () async {
+      var now = DateTime.utc(2026, 8, 29, 10, 20);
+      var id = 0;
+      final repo = MemoryRepository();
+      final service = RoutineService(
+        repository: repo,
+        newId: () => 'id-${id++}',
+        now: () => now,
+      );
+      await service.create(
+        '复盘整理',
+        null,
+        RoutineRecurrence.daily,
+        0,
+        type: RoutineType.onDemand,
+      );
+      final routine = repo.routines.single;
+      expect(routine.type, RoutineType.onDemand);
+
+      await service.start(routine);
+      final first = repo.routineExecutions.single;
+      now = DateTime.utc(2026, 8, 29, 10, 35);
+      await service.complete(first);
+      now = DateTime.utc(2026, 8, 29, 15, 40);
+      await service.start(routine);
+      final second = repo.routineExecutions.last;
+      now = DateTime.utc(2026, 8, 29, 16, 5);
+      await service.complete(second);
+
+      expect(repo.routineExecutions, hasLength(2));
+      expect(first.id, isNot(second.id));
+      expect(repo.routineSegments, hasLength(2));
+      expect(repo.routineSegments.map((segment) => segment.durationAt(now)), [
+        const Duration(minutes: 15),
+        const Duration(minutes: 25),
+      ]);
+    },
+  );
+
+  test(
+    'on-demand pause and resume keeps one execution with two segments',
+    () async {
+      var now = DateTime.utc(2026, 8, 29, 10, 20);
+      var id = 0;
+      final repo = MemoryRepository();
+      final service = RoutineService(
+        repository: repo,
+        newId: () => 'id-${id++}',
+        now: () => now,
+      );
+      await service.create(
+        '整理思路',
+        null,
+        RoutineRecurrence.daily,
+        0,
+        type: RoutineType.onDemand,
+      );
+      final routine = repo.routines.single;
+      await service.start(routine);
+      final execution = repo.routineExecutions.single;
+      now = DateTime.utc(2026, 8, 29, 10, 30);
+      await service.pause(execution);
+      now = DateTime.utc(2026, 8, 29, 10, 40);
+      await service.start(routine);
+      now = DateTime.utc(2026, 8, 29, 10, 50);
+      await service.complete(repo.routineExecutions.single);
+
+      expect(repo.routineExecutions, hasLength(1));
+      expect(repo.routineSegments, hasLength(2));
+      expect(
+        repo.routineSegments.map((s) => s.durationAt(now)),
+        everyElement(const Duration(minutes: 10)),
+      );
+    },
+  );
+
+  test('cannot switch routine type while an execution is unfinished', () async {
+    var id = 0;
+    final repo = MemoryRepository();
+    final service = RoutineService(
+      repository: repo,
+      newId: () => 'id-${id++}',
+      now: () => DateTime.utc(2026, 8, 29, 10),
+    );
+    await service.create('复盘', null, RoutineRecurrence.daily, 0);
+    final routine = repo.routines.single;
+    await service.start(routine);
+    await expectLater(
+      service.update(
+        routine,
+        routine.name,
+        null,
+        routine.recurrence,
+        routine.weekdayMask,
+        type: RoutineType.onDemand,
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
 }

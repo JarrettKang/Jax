@@ -288,6 +288,15 @@ class _RoutinePageState extends State<RoutinePage> {
       final controls = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          SizedBox(
+            width: 76,
+            child: !routine.isScheduled && routine.isActive
+                ? _OnDemandAction(
+                    controller: widget.controller,
+                    routine: routine,
+                  )
+                : null,
+          ),
           RoutineReorderButtons(
             controller: widget.controller,
             routineId: routine.id,
@@ -432,6 +441,7 @@ String _routineLabel(RoutineRecurrence r) => switch (r) {
 };
 
 String _recurrenceLabel(Routine routine) {
+  if (!routine.isScheduled) return '按需';
   if (routine.recurrence != RoutineRecurrence.selectedWeekdays) {
     return _routineLabel(routine.recurrence);
   }
@@ -454,6 +464,7 @@ class _RoutineEditDialog extends StatefulWidget {
 class _RoutineEditDialogState extends State<_RoutineEditDialog> {
   late final TextEditingController name;
   late RoutineRecurrence recurrence;
+  late RoutineType type;
   late int mask;
   String? category, error;
   @override
@@ -461,6 +472,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
     super.initState();
     name = TextEditingController(text: widget.routine?.name);
     recurrence = widget.routine?.recurrence ?? RoutineRecurrence.daily;
+    type = widget.routine?.type ?? RoutineType.scheduled;
     mask = widget.routine?.weekdayMask ?? 0;
     category = widget.routine?.routineCategoryId;
   }
@@ -499,20 +511,37 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
               ],
               onChanged: (v) => setState(() => category = v),
             ),
-            DropdownButtonFormField<RoutineRecurrence>(
-              initialValue: recurrence,
-              decoration: const InputDecoration(labelText: '重复'),
-              items: RoutineRecurrence.values
-                  .map(
-                    (v) => DropdownMenuItem(
-                      value: v,
-                      child: Text(_routineLabel(v)),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => recurrence = v!),
+            DropdownButtonFormField<RoutineType>(
+              initialValue: type,
+              decoration: const InputDecoration(labelText: '类型'),
+              items: const [
+                DropdownMenuItem(
+                  value: RoutineType.scheduled,
+                  child: Text('计划型'),
+                ),
+                DropdownMenuItem(
+                  value: RoutineType.onDemand,
+                  child: Text('按需型'),
+                ),
+              ],
+              onChanged: (value) => setState(() => type = value!),
             ),
-            if (recurrence == RoutineRecurrence.selectedWeekdays)
+            if (type == RoutineType.scheduled)
+              DropdownButtonFormField<RoutineRecurrence>(
+                initialValue: recurrence,
+                decoration: const InputDecoration(labelText: '重复'),
+                items: RoutineRecurrence.values
+                    .map(
+                      (v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(_routineLabel(v)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => recurrence = v!),
+              ),
+            if (type == RoutineType.scheduled &&
+                recurrence == RoutineRecurrence.selectedWeekdays)
               Wrap(
                 children: [
                   for (var i = 0; i < 7; i++)
@@ -550,6 +579,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             category,
             recurrence,
             mask,
+            type: type,
           )
         : await widget.controller.updateRoutine(
             r,
@@ -557,6 +587,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             category,
             recurrence,
             mask,
+            type: type,
           );
     if (!mounted) return;
     if (result == null) {
@@ -564,5 +595,35 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
     } else {
       setState(() => error = result);
     }
+  }
+}
+
+class _OnDemandAction extends StatelessWidget {
+  const _OnDemandAction({required this.controller, required this.routine});
+  final EventController controller;
+  final Routine routine;
+
+  @override
+  Widget build(BuildContext context) {
+    final execution = controller.executionFor(routine);
+    if (execution?.status == RoutineExecutionStatus.running) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8),
+        child: Text('正在执行'),
+      );
+    }
+    final paused = execution?.status == RoutineExecutionStatus.paused;
+    return TextButton.icon(
+      key: ValueKey('routine-on-demand-start-${routine.id}'),
+      onPressed: () async {
+        final error = await controller.startRoutine(routine);
+        if (error != null && context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(error)));
+        }
+      },
+      icon: Icon(paused ? Icons.play_arrow : Icons.add, size: 18),
+      label: Text(paused ? '恢复' : '开始'),
+    );
   }
 }

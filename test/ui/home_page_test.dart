@@ -273,6 +273,69 @@ void main() {
     expect(find.byKey(const ValueKey('home-waiting-wait')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Home shows active on-demand shortcuts and resumes paused execution',
+    (tester) async {
+      final now = DateTime(2026, 8, 29, 12);
+      var id = 0;
+      final repository = MemoryRepository()
+        ..routines.addAll([
+          Routine(
+            id: 'review',
+            name: '复盘整理',
+            type: RoutineType.onDemand,
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+          ),
+          Routine(
+            id: 'hidden',
+            name: '已停用动作',
+            type: RoutineType.onDemand,
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: false,
+            sortOrder: 1,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ])
+        ..routineExecutions.add(
+          RoutineExecution(
+            id: 'paused',
+            routineId: 'review',
+            occurrenceDate: '2026-08-29',
+            status: RoutineExecutionStatus.paused,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      await tester.pumpWidget(
+        JaxApp(
+          repository: repository,
+          now: () => now,
+          newId: () => 'id-${id++}',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('快捷动作'), findsOneWidget);
+      expect(find.text('复盘整理'), findsOneWidget);
+      expect(find.text('已停用动作'), findsNothing);
+      expect(find.text('恢复'), findsOneWidget);
+      await tester.tap(find.text('恢复'));
+      await tester.pumpAndSettle();
+      expect(repository.routineExecutions, hasLength(1));
+      expect(
+        repository.routineExecutions.single.status,
+        RoutineExecutionStatus.running,
+      );
+      expect(find.byKey(const ValueKey('home-running-hero')), findsOneWidget);
+    },
+  );
 }
 
 double _nextY(WidgetTester tester, String id) =>

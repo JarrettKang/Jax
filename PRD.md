@@ -318,13 +318,14 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 
 ### 10.12 v0.2 F8：Routine / 日常
 
-- Routine 是独立于 Event 的长期重复事项模板，不创建或复用 Event，不进入 World，也没有 Event hierarchy 或 completed 生命周期；主导航新增“日常”。
-- Routine 使用独立于 World/Event Category 的 nullable Routine Category，支持每天、工作日、周末和至少选择一天的指定星期；“今日”按本地日历日期动态派生，不提前生成 pending execution。
-- RoutineExecution 以 `routine_id + occurrence_date` 保证每日最多一轮，真正开始时创建，状态仅为 running、paused、completed；completed 当日保留，次日按 recurrence 重新呈现未开始，不记录 missed。
+- Routine 是独立于 Event 的长期重复行为定义，不创建或复用 Event，不进入 World，也没有 Event hierarchy 或 completed 生命周期；分为计划型（Scheduled）与按需型（On-demand）。
+- 计划型 Routine 使用独立于 World/Event Category 的 nullable Routine Category，支持每天、工作日、周末和至少选择一天的指定星期；“今日”按本地 JaxDay 动态派生，不提前生成 pending execution。既有 Routine 在 v12 migration 后全部保持计划型。
+- 按需型 Routine 不由 recurrence 派生、不自动进入“今日日常”，而在用户从日常页或首页快捷动作主动启动时创建新的 RoutineExecution；同一 JaxDay 可完成零次、一次或多次，每次完成后再次开始均生成独立 execution identity。
+- RoutineExecution 状态仅为 running、paused、completed。按需型同一 Routine 最多一个 unfinished execution：暂停后“恢复”沿用同一 execution 并新开 segment，完成后才可创建下一次；切换 Routine 类型前必须先完成 unfinished execution。
 - RoutineExecution 使用独立 run segments。Event 与 RoutineExecution 共用全局唯一 running：开始任一类型会暂停另一类型并关闭其开放片段，完成后不自动恢复此前对象。
 - Windows 正常关闭暂停 running Event 或 RoutineExecution；Android 后台、锁屏和进程恢复继续依赖持久化状态与开放片段，不自动暂停。
 - Routine Category 是 flat、可创建/重命名/排序/删除的独立分组；删除只把 Routine 追加到虚拟“未分类”，不删除 execution 或 segment。日常页按分类显示可折叠 section，折叠状态按稳定 ID 本地持久化；未分类使用稳定虚拟 key，新分类默认展开。
-- 日常管理页采用有最大阅读宽度的紧凑分组列表：Category header 集中展示折叠箭头、颜色点、名称、数量、排序和菜单；Routine 在宽屏以名称、可读 recurrence、排序和菜单组成单行，窄屏紧凑折为名称/操作与 recurrence 两层。Routine 间使用 divider，不使用大 Card；已停用保持独立的轻量折叠 section。
+- 日常管理页采用有最大阅读宽度的紧凑分组列表：Category header 集中展示折叠箭头、颜色点、名称、数量、排序和菜单；Routine 在宽屏以名称、可读 recurrence/“按需”、排序和菜单组成单行，窄屏紧凑折为两层。按需型 active Routine 额外提供开始/恢复入口；已停用不提供入口并保持独立轻量 section。
 - Routine 在各自 Routine Category（含未分类）内独立排序；改分类时追加到目标分组末尾。停用保留分类，重新启用回到原分类；分类已删除则回到未分类。
 - Routine 时间与 Event direct segments 一起进入日/周总结，共用 23:00 overlap 与当前分类动态归属。统计 identity 显式区分 `event:<id>` 与 `routine:<id>`，同 ID/同名不自动合并；两类 null 只在聚合层明确合并为“未分类”。
 - 第一版 Routine Category 不提供 hierarchy；Routine 不提供物理删除、waiting、复杂 recurrence、SOP、提醒、streak、missed 或评分。
@@ -363,8 +364,8 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 13. v0.2 今日统一执行入口
 
 - 一级导航固定为“首页 / 今日 / 世界 / 日常 / 记录”：首页回答现在正在做什么，今日回答今天准备做什么，世界管理 Event 长期结构，日常管理 Routine definition，记录复盘过去时间。
-- Routine 的当天执行（开始、暂停、恢复、完成）统一由“今日”的“今日日常”承担；“日常”只管理 Routine definition、recurrence、Category、顺序及启停，可轻量展示已有 execution 状态但不提供执行操作。
-- “今日事项”只包含明确加入当前 Jax day 的 Event，不等于全部 unfinished Event；“今日日常”包含 active 且 recurrence 命中当前 Jax day 显示日期的 Routine。两个分区分别排序，不建立 Event/Routine 混合顺序。
+- 计划型 Routine 的当天执行由“今日”的“今日日常”承担；按需型 Routine 从“日常”管理行或首页“快捷动作”启动/恢复，不自动成为 Today checklist。Routine 创建/编辑明确选择计划型或按需型，按需型隐藏 recurrence picker。
+- “今日事项”只包含明确加入当前 Jax day 的 Event，不等于全部 unfinished Event；“今日日常”只包含 active 且 recurrence 命中当前 JaxDay 显示日期的计划型 Routine。两个分区分别排序，不建立 Event/Routine 混合顺序。
 - Jax day 使用设备本地时间 23:00 切换。逻辑日期 `YYYY-MM-DD` 表示前一自然日 23:00 至该日 23:00；Today、Routine occurrence/weekday 和 Daily Summary 共用同一个 JaxDay 规则。
 - Event 今日计划是独立的按日关联，包含 Event、逻辑日期和当日顺序；不改变 status、hierarchy、Category、World sibling order、duration 或 history。加入时追加到当日末尾，使用上移/下移调整独立顺序。
 - World 是 Event 正式创建和长期管理入口，并提供加入今日/移出今日。completed Event 不能主动加入或移出；恢复为 paused 后可重新加入。running Event 不能移出，waiting Event 可以移出且状态保持 waiting。

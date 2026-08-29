@@ -168,10 +168,16 @@ class EventController extends ChangeNotifier {
     final runningId = runningRoutineExecution?.routineId;
     return _routines
         .where(
-          (r) => (r.isActive && r.appliesTo(displayDate)) || r.id == runningId,
+          (r) =>
+              r.isScheduled &&
+              ((r.isActive && r.appliesTo(displayDate)) || r.id == runningId),
         )
         .toList();
   }
+
+  List<Routine> get activeOnDemandRoutines => _routines
+      .where((routine) => routine.isActive && !routine.isScheduled)
+      .toList(growable: false);
 
   RoutineExecution? executionFor(Routine r) => _todayExecutions[r.id];
   RoutineExecution? get runningRoutineExecution => _todayExecutions.values
@@ -277,7 +283,9 @@ class EventController extends ChangeNotifier {
       _routineSegments.clear();
       final day = currentJaxDay.key;
       for (final r in _routines) {
-        final e = await _routineRepository.getRoutineExecution(r.id, day);
+        final e = r.isScheduled
+            ? await _routineRepository.getRoutineExecution(r.id, day)
+            : await _routineRepository.getUnfinishedRoutineExecution(r.id);
         _todayExecutions[r.id] = e;
         if (e != null) {
           _routineSegments[e.id] = await _routineRepository
@@ -488,16 +496,27 @@ class EventController extends ChangeNotifier {
     String name,
     String? category,
     RoutineRecurrence recurrence,
-    int mask,
-  ) => _change(() => _routineService!.create(name, category, recurrence, mask));
+    int mask, {
+    RoutineType type = RoutineType.scheduled,
+  }) => _change(
+    () => _routineService!.create(name, category, recurrence, mask, type: type),
+  );
   Future<String?> updateRoutine(
     Routine r,
     String name,
     String? category,
     RoutineRecurrence recurrence,
-    int mask,
-  ) => _change(
-    () => _routineService!.update(r, name, category, recurrence, mask),
+    int mask, {
+    RoutineType? type,
+  }) => _change(
+    () => _routineService!.update(
+      r,
+      name,
+      category,
+      recurrence,
+      mask,
+      type: type,
+    ),
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>
       _change(() => _routineService!.setActive(r, active));

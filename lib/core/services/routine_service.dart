@@ -18,11 +18,14 @@ class RoutineService {
     String name,
     String? routineCategoryId,
     RoutineRecurrence recurrence,
-    int mask,
-  ) async {
+    int mask, {
+    RoutineType type = RoutineType.scheduled,
+  }) async {
     final clean = name.trim();
     if (clean.isEmpty) throw const DomainFailure('日常名称不能为空');
-    if (recurrence == RoutineRecurrence.selectedWeekdays && mask == 0) {
+    if (type == RoutineType.scheduled &&
+        recurrence == RoutineRecurrence.selectedWeekdays &&
+        mask == 0) {
       throw const DomainFailure('请至少选择一天');
     }
     final t = now().toUtc();
@@ -41,6 +44,7 @@ class RoutineService {
         name: clean,
         routineCategoryId: routineCategoryId,
         recurrence: recurrence,
+        type: type,
         weekdayMask: mask,
         isActive: true,
         sortOrder: nextOrder,
@@ -55,12 +59,20 @@ class RoutineService {
     String name,
     String? routineCategoryId,
     RoutineRecurrence recurrence,
-    int mask,
-  ) async {
+    int mask, {
+    RoutineType? type,
+  }) async {
     final clean = name.trim();
     if (clean.isEmpty) throw const DomainFailure('日常名称不能为空');
-    if (recurrence == RoutineRecurrence.selectedWeekdays && mask == 0) {
+    final nextType = type ?? routine.type;
+    if (nextType == RoutineType.scheduled &&
+        recurrence == RoutineRecurrence.selectedWeekdays &&
+        mask == 0) {
       throw const DomainFailure('请至少选择一天');
+    }
+    if (nextType != routine.type &&
+        await repository.getUnfinishedRoutineExecution(routine.id) != null) {
+      throw const DomainFailure('请先完成当前日常执行，再切换类型');
     }
     final changedCategory = routine.routineCategoryId != routineCategoryId;
     final destinationItems = changedCategory
@@ -82,6 +94,7 @@ class RoutineService {
         clearCategory: routineCategoryId == null,
         sortOrder: destination,
         recurrence: recurrence,
+        type: nextType,
         weekdayMask: mask,
         updatedAt: now().toUtc(),
       ),
@@ -94,8 +107,12 @@ class RoutineService {
   Future<void> start(Routine r, {RoutineExecution? execution}) async {
     final t = now().toUtc();
     final day = occurrence(t.toLocal());
-    if (execution?.status == RoutineExecutionStatus.completed) {
+    if (r.isScheduled &&
+        execution?.status == RoutineExecutionStatus.completed) {
       throw StateError('今天已经完成');
+    }
+    if (!r.isScheduled) {
+      execution ??= await repository.getUnfinishedRoutineExecution(r.id);
     }
     final e =
         execution ??

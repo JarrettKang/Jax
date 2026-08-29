@@ -832,6 +832,7 @@ class SqliteEventRepository
       'routine_executions',
       where: 'routine_id = ? AND occurrence_date = ?',
       whereArgs: [routineId, occurrenceDate],
+      orderBy: 'created_at_utc DESC',
       limit: 1,
     );
     return rows.isEmpty ? null : _executionFromRow(rows.single);
@@ -848,6 +849,20 @@ class SqliteEventRepository
       'routine_executions',
       where: 'status = ?',
       whereArgs: ['running'],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _executionFromRow(rows.single);
+  }
+
+  @override
+  Future<RoutineExecution?> getUnfinishedRoutineExecution(
+    String routineId,
+  ) async {
+    final rows = await _appDatabase.database.query(
+      'routine_executions',
+      where: "routine_id = ? AND status IN ('running','paused')",
+      whereArgs: [routineId],
+      orderBy: 'created_at_utc DESC',
       limit: 1,
     );
     return rows.isEmpty ? null : _executionFromRow(rows.single);
@@ -918,6 +933,28 @@ class SqliteEventRepository
     DateTime now,
   ) async {
     await _appDatabase.database.transaction((tx) async {
+      final routine = await tx.query(
+        'routines',
+        columns: ['routine_type'],
+        where: 'id = ?',
+        whereArgs: [e.routineId],
+        limit: 1,
+      );
+      if (routine.single['routine_type'] == RoutineType.onDemand.name) {
+        final unfinished = await tx.query(
+          'routine_executions',
+          columns: ['id'],
+          where:
+              "routine_id = ? AND id != ? AND status IN ('running','paused')",
+          whereArgs: [e.routineId, e.id],
+          limit: 1,
+        );
+        if (unfinished.isNotEmpty) {
+          throw StateError(
+            'On-demand Routine already has an unfinished execution',
+          );
+        }
+      }
       await _pauseRunningEventIn(tx, now);
       final other = await tx.query(
         'routine_executions',
@@ -1041,6 +1078,7 @@ class SqliteEventRepository
     'id': r.id,
     'name': r.name,
     'routine_category_id': r.routineCategoryId,
+    'routine_type': r.type.name,
     'recurrence_type': r.recurrence.name,
     'weekday_mask': r.weekdayMask,
     'is_active': r.isActive ? 1 : 0,
@@ -1052,6 +1090,7 @@ class SqliteEventRepository
     id: r['id'] as String,
     name: r['name'] as String,
     routineCategoryId: r['routine_category_id'] as String?,
+    type: RoutineType.values.byName(r['routine_type'] as String),
     recurrence: RoutineRecurrence.values.byName(r['recurrence_type'] as String),
     weekdayMask: r['weekday_mask'] as int,
     isActive: (r['is_active'] as int) == 1,

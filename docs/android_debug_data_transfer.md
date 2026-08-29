@@ -29,7 +29,7 @@
 
 ## 数据与安全
 
-默认源是 `%APPDATA%\Jax\jax.db`，目标是 Android app sandbox 中的 `databases/jax.db`。脚本会：检查唯一目标设备、更新 Debug APK、验证 `run-as`、force-stop App 并先拉取原始 Android DB/WAL/SHM 形成保留其原 schema 的一致备份；随后才启动当前 Debug App 一次以运行应用自身的正常 schema migration，并确认已到 v11；最后验证 Windows snapshot、移除目标旧 WAL/SHM、写入并逐字节回读校验，再启动 App。
+默认源是 `%APPDATA%\Jax\jax.db`，目标是 Android app sandbox 中的 `databases/jax.db`。脚本会：检查唯一目标设备、更新 Debug APK、验证 `run-as`、force-stop App 并先拉取原始 Android DB/WAL/SHM 形成保留其原 schema 的一致备份；随后才启动当前 Debug App 一次以运行应用自身的正常 schema migration，并确认已到 v12；最后验证 Windows snapshot、移除目标旧 WAL/SHM、写入并逐字节回读校验，再启动 App。
 
 Android 导入前备份保存在 `.debug_backups/android/<timestamp>/jax_android_before_import.db`。临时 Windows snapshot 位于 `.debug_snapshots/`，成功后删除。两个目录均被 Git 忽略，因为它们包含真实生活数据。
 
@@ -37,6 +37,6 @@ Android 导入前备份保存在 `.debug_backups/android/<timestamp>/jax_android
 
 时间戳保持原始 UTC 整数，不做时区转换。open segment 和 running 状态不会被改写或新建；Android 启动后仍由现有逻辑按 `startedAt → now` 计算 duration。
 
-常见失败会在覆盖前停止：ADB 不存在、设备未授权、无设备、多设备但未指定、包未安装或不可 `run-as`、源库缺失、schema 非 v11、integrity/foreign-key 检查失败、Android 备份或回读验证失败。
+常见失败会在覆盖前停止：ADB 不存在、设备未授权、无设备、多设备但未指定、包未安装或不可 `run-as`、源库缺失、schema 非 v12、integrity/foreign-key 检查失败、Android 备份或回读验证失败。
 
 复制完成后 Windows 与 Android 会独立变化，新记录不会自动同步或合并。

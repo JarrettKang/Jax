@@ -68,6 +68,7 @@ class _HomePageState extends State<HomePage> {
       final routine = widget.controller.runningRoutine;
       final waiting = widget.controller.homeWaitingItems;
       final next = _nextItems(event, routine);
+      final quickActions = _quickActions(routine);
       return SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 72),
@@ -103,6 +104,23 @@ class _HomePageState extends State<HomePage> {
                         item: item,
                         onStart: () => _start(item),
                       ),
+                  if (quickActions.isNotEmpty) ...[
+                    const Divider(height: 40),
+                    const _Title('快捷动作'),
+                    for (final item in quickActions)
+                      _NextRow(
+                        key: ValueKey('home-on-demand-${item.id}'),
+                        item: item,
+                        actionLabel:
+                            widget.controller
+                                    .executionFor(item.routine!)
+                                    ?.status ==
+                                RoutineExecutionStatus.paused
+                            ? '恢复'
+                            : '开始',
+                        onStart: () => _start(item),
+                      ),
+                  ],
                   if (waiting.isNotEmpty) ...[
                     const Divider(height: 40),
                     _Title('等待中 · ${waiting.length}'),
@@ -154,7 +172,7 @@ class _HomePageState extends State<HomePage> {
     return _RunningHero(
       name: routine.name,
       contextLabel:
-          '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
+          '${category?.name ?? '未分类'} · ${routine.isScheduled ? _recurrence(routine.recurrence) : '按需'}',
       elapsed: widget.controller.routineElapsed(routine),
       colorKey: category?.colorKey,
       onPause: () => _act(() => widget.controller.pauseRoutine(routine)),
@@ -209,6 +227,23 @@ class _HomePageState extends State<HomePage> {
     }
     return result;
   }
+
+  List<_NextItem> _quickActions(Routine? runningRoutine) => widget
+      .controller
+      .activeOnDemandRoutines
+      .where((routine) => routine.id != runningRoutine?.id)
+      .take(4)
+      .map((routine) {
+        final category = widget.controller.routineCategories
+            .where((item) => item.id == routine.routineCategoryId)
+            .firstOrNull;
+        return _NextItem.routine(
+          routine,
+          '${category?.name ?? '未分类'} · 按需',
+          category?.colorKey,
+        );
+      })
+      .toList(growable: false);
 
   Future<void> _start(_NextItem item) async {
     final runningEvent = widget.controller.runningEvent;
@@ -412,9 +447,15 @@ class _Title extends StatelessWidget {
 }
 
 class _NextRow extends StatelessWidget {
-  const _NextRow({required this.item, required this.onStart, super.key});
+  const _NextRow({
+    required this.item,
+    required this.onStart,
+    this.actionLabel = '开始',
+    super.key,
+  });
   final _NextItem item;
   final VoidCallback onStart;
+  final String actionLabel;
   @override
   Widget build(BuildContext context) {
     final color = item.colorKey == null
@@ -453,7 +494,7 @@ class _NextRow extends StatelessWidget {
             key: ValueKey('home-next-start-${item.id}'),
             onPressed: onStart,
             icon: const Icon(Icons.play_arrow, size: 20),
-            label: const Text('开始'),
+            label: Text(actionLabel),
           ),
         ],
       ),

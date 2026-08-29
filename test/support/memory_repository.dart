@@ -415,6 +415,15 @@ class MemoryRepository
           .where((e) => e.status == RoutineExecutionStatus.running)
           .firstOrNull;
   @override
+  Future<RoutineExecution?> getUnfinishedRoutineExecution(String id) async =>
+      routineExecutions
+          .where(
+            (e) =>
+                e.routineId == id &&
+                e.status != RoutineExecutionStatus.completed,
+          )
+          .firstOrNull;
+  @override
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String id) async =>
       routineSegments.where((s) => s.executionId == id).toList();
   @override

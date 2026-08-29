@@ -1,5 +1,7 @@
 enum RoutineRecurrence { daily, weekdays, weekends, selectedWeekdays }
 
+enum RoutineType { scheduled, onDemand }
+
 class Routine {
   const Routine({
     required this.id,
@@ -11,9 +13,11 @@ class Routine {
     required this.createdAt,
     required this.updatedAt,
     this.routineCategoryId,
+    this.type = RoutineType.scheduled,
   });
   final String id, name;
   final String? routineCategoryId;
+  final RoutineType type;
   final RoutineRecurrence recurrence;
   final int weekdayMask, sortOrder;
   final bool isActive;
@@ -25,6 +29,7 @@ class Routine {
     RoutineRecurrence.selectedWeekdays =>
       weekdayMask & (1 << (date.weekday - 1)) != 0,
   };
+  bool get isScheduled => type == RoutineType.scheduled;
   Routine copyWith({
     String? name,
     String? routineCategoryId,
@@ -34,6 +39,7 @@ class Routine {
     bool? isActive,
     int? sortOrder,
     DateTime? updatedAt,
+    RoutineType? type,
   }) => Routine(
     id: id,
     name: name ?? this.name,
@@ -41,6 +47,7 @@ class Routine {
         ? null
         : routineCategoryId ?? this.routineCategoryId,
     recurrence: recurrence ?? this.recurrence,
+    type: type ?? this.type,
     weekdayMask: weekdayMask ?? this.weekdayMask,
     isActive: isActive ?? this.isActive,
     sortOrder: sortOrder ?? this.sortOrder,

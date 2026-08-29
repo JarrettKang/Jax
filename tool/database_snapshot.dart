@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const expectedSchemaVersion = 11;
+const expectedSchemaVersion = 12;
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty || !{'snapshot', 'snapshot-any', 'verify', 'verify-any', 'inspect'}.contains(arguments[0])) {

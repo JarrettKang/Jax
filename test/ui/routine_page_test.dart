@@ -237,4 +237,79 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'on-demand Routine is absent from Today and starts from management',
+    (tester) async {
+      final now = DateTime(2026, 8, 29, 10);
+      var id = 0;
+      final repo = MemoryRepository()
+        ..routines.add(
+          Routine(
+            id: 'review',
+            name: '复盘整理',
+            type: RoutineType.onDemand,
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      await tester.pumpWidget(
+        JaxApp(repository: repo, now: () => now, newId: () => 'id-${id++}'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('今日'));
+      await tester.pumpAndSettle();
+      expect(find.text('复盘整理'), findsNothing);
+
+      await tester.tap(find.text('日常'));
+      await tester.pumpAndSettle();
+      expect(find.text('按需'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('routine-on-demand-start-review')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('routine-on-demand-start-review')),
+      );
+      await tester.pumpAndSettle();
+      expect(repo.routineExecutions, hasLength(1));
+      expect(
+        repo.routineExecutions.single.status,
+        RoutineExecutionStatus.running,
+      );
+      expect(find.text('按需 · 正在执行'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Routine editor selects on-demand type and hides recurrence', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 29, 10);
+    var id = 0;
+    final repo = MemoryRepository();
+    await tester.pumpWidget(
+      JaxApp(repository: repo, now: () => now, newId: () => 'id-${id++}'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日常'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('create-routine')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '整理思路');
+    expect(find.text('重复'), findsOneWidget);
+    await tester.tap(find.text('计划型'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('按需型').last);
+    await tester.pumpAndSettle();
+    expect(find.text('重复'), findsNothing);
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+    expect(repo.routines.single.type, RoutineType.onDemand);
+    expect(find.text('整理思路'), findsOneWidget);
+    expect(find.text('按需'), findsOneWidget);
+  });
 }

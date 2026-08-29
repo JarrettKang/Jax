@@ -17,6 +17,7 @@ abstract interface class RoutineRepository {
   );
   Future<List<RoutineExecution>> getRoutineExecutions();
   Future<RoutineExecution?> getRunningRoutineExecution();
+  Future<RoutineExecution?> getUnfinishedRoutineExecution(String routineId);
   Future<List<RoutineRunSegment>> getRoutineRunSegments(String executionId);
   Future<List<RoutineRunSegment>> getAllRoutineRunSegments();
   Future<void> insertHistoricalRoutineExecution(

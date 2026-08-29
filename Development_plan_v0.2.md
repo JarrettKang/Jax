@@ -186,4 +186,11 @@
 - F12.1 schema v10→v11 为 `categories` 与 `routine_categories` 增加范围为 0–7 的非空 `color_key`；迁移按 World Category 排序后接 Routine Category 排序确定性循环分配，不改变名称、顺序、关系、history 或 segment。
 - F12.2 Core 集中定义固定 8 个 palette key，UI theme resolver 集中映射渲染色并预留 dark variant。World/Routine 新建与编辑使用 8 色 swatch；自动预选共同统计两类 Category 的最少使用色，允许重复颜色。
 - F12.3 World 与日常使用轻量色点；Record 日/周统计及今日时间分布读取同一 `colorKey`。Event child 继承当前 root Category 颜色，Routine 使用当前 Routine Category 颜色，未分类统一使用 theme neutral；bucket identity 仍显式区分 Event/Routine。
+
+## 14. F13：On-demand Routine
+
+- F13.1 Core 为 Routine 增加独立 `RoutineType.scheduled/onDemand`；recurrence 继续只解释计划型。按需型每次无 unfinished execution 的主动开始创建新 RoutineExecution，pause/resume 复用同一 execution，complete 后再次开始才创建下一 identity。
+- F13.2 schema v11→v12 为 routines 增加默认 `scheduled` 的 `routine_type`，并在完整复制既有 execution/segment 后移除 `routine_id + occurrence_date` 唯一约束；`occurrence_date` 继续记录 execution 所属 JaxDay，既有用户数据和计划型行为不变。
+- F13.3 Today 只派生计划型 occurrence；日常页显示“按需”并提供开始/恢复，Home 最多显示前四个 active 按需快捷动作。类型切换在 unfinished execution 存在时拒绝，inactive 隐藏快捷入口并保留历史。
+- F13.4 Record 继续统一读取 RoutineExecution/run segments，不建立按需专用历史模型。测试覆盖同日多次 execution、暂停恢复多 segment、global single-running、v11 migration、Today 排除、Home/日常入口及双端 Debug。
 - F12.4 测试覆盖双类型存储、共同分配、重复色、rename/reorder/delete 保色语义、v10 migration、8 色选择器、Record 颜色传递以及全量与双平台 Debug 回归。

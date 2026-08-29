@@ -38,6 +38,7 @@ void main() {
       Routine(
         id: 'meal',
         name: '午饭',
+        type: RoutineType.onDemand,
         recurrence: RoutineRecurrence.daily,
         weekdayMask: 0,
         isActive: true,
@@ -46,30 +47,43 @@ void main() {
         updatedAt: now,
       ),
     );
-    repo.routineExecutions.add(
-      RoutineExecution(
-        id: 'meal-day',
-        routineId: 'meal',
-        occurrenceDate: '2026-08-28',
-        status: RoutineExecutionStatus.completed,
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-    repo.routineSegments.add(
+    repo.routineExecutions.addAll([
+      for (final id in ['meal-first', 'meal-second'])
+        RoutineExecution(
+          id: id,
+          routineId: 'meal',
+          occurrenceDate: '2026-08-28',
+          status: RoutineExecutionStatus.completed,
+          createdAt: now,
+          updatedAt: now,
+        ),
+    ]);
+    repo.routineSegments.addAll([
       RoutineRunSegment(
         id: 'lunch',
-        executionId: 'meal-day',
+        executionId: 'meal-first',
         startedAt: DateTime(2026, 8, 28, 12),
         endedAt: DateTime(2026, 8, 28, 13),
         createdAt: now,
       ),
-    );
+      RoutineRunSegment(
+        id: 'review-again',
+        executionId: 'meal-second',
+        startedAt: DateTime(2026, 8, 28, 15),
+        endedAt: DateTime(2026, 8, 28, 16),
+        createdAt: now,
+      ),
+    ]);
     final result = await ExecutionSegmentService(
       repository: repo,
       now: () => now,
     ).forJaxDay(now);
-    expect(result.map((item) => item.id), ['first', 'lunch', 'second']);
+    expect(result.map((item) => item.id), [
+      'first',
+      'lunch',
+      'second',
+      'review-again',
+    ]);
   });
 
   test('keeps Event and Routine category identities distinct', () async {
