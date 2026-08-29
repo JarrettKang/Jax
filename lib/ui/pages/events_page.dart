@@ -170,8 +170,14 @@ class _EventRow extends StatelessWidget {
       name: event.name,
       secondary: secondary.isEmpty ? '未分类' : secondary,
       status: _status(event),
+      statusKind: switch (event.status) {
+        EventStatus.pending => _TodayStatusKind.unstarted,
+        EventStatus.running => _TodayStatusKind.running,
+        EventStatus.paused => _TodayStatusKind.paused,
+        EventStatus.waiting => _TodayStatusKind.waiting,
+        EventStatus.completed => _TodayStatusKind.completed,
+      },
       colorKey: category?.colorKey,
-      running: event.status == EventStatus.running,
       actions: [
         if (index > 0)
           IconButton(
@@ -304,8 +310,13 @@ class _RoutineRow extends StatelessWidget {
       secondary:
           '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
       status: _status(execution),
+      statusKind: switch (execution?.status) {
+        null => _TodayStatusKind.unstarted,
+        RoutineExecutionStatus.running => _TodayStatusKind.running,
+        RoutineExecutionStatus.paused => _TodayStatusKind.paused,
+        RoutineExecutionStatus.completed => _TodayStatusKind.completed,
+      },
       colorKey: category?.colorKey,
-      running: execution?.status == RoutineExecutionStatus.running,
       actions: switch (execution?.status) {
         null => [
           _button(
@@ -366,12 +377,14 @@ class _RoutineRow extends StatelessWidget {
   };
 }
 
+enum _TodayStatusKind { unstarted, running, paused, waiting, completed }
+
 class _TodayExecutionRow extends StatefulWidget {
   const _TodayExecutionRow({
     required this.name,
     required this.secondary,
     required this.status,
-    required this.running,
+    required this.statusKind,
     required this.actions,
     this.colorKey,
     super.key,
@@ -380,7 +393,7 @@ class _TodayExecutionRow extends StatefulWidget {
   final String secondary;
   final String status;
   final int? colorKey;
-  final bool running;
+  final _TodayStatusKind statusKind;
   final List<Widget> actions;
   @override
   State<_TodayExecutionRow> createState() => _TodayExecutionRowState();
@@ -391,6 +404,8 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final running = widget.statusKind == _TodayStatusKind.running;
+    final completed = widget.statusKind == _TodayStatusKind.completed;
     final accent = widget.colorKey == null
         ? CategoryPaletteColors.neutral(context)
         : CategoryPaletteColors.resolve(context, widget.colorKey!);
@@ -400,14 +415,14 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
         decoration: BoxDecoration(
-          color: widget.running
+          color: running
               ? accent.withValues(alpha: .10)
               : hovering
               ? colors.surfaceContainerHighest.withValues(alpha: .55)
               : Colors.transparent,
           border: Border(
             left: BorderSide(
-              color: widget.running ? accent : Colors.transparent,
+              color: running ? accent : Colors.transparent,
               width: 3,
             ),
           ),
@@ -418,7 +433,15 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
             final info = _info(context, accent);
             final status = _StatusLabel(
               text: widget.status,
-              running: widget.running,
+              kind: widget.statusKind,
+            );
+            final actions = IconTheme.merge(
+              data: IconThemeData(
+                color: completed
+                    ? colors.onSurfaceVariant.withValues(alpha: .62)
+                    : null,
+              ),
+              child: Wrap(spacing: 8, runSpacing: 6, children: widget.actions),
             );
             if (constraints.maxWidth >= 700) {
               return Row(
@@ -427,7 +450,7 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
                   const SizedBox(width: 20),
                   SizedBox(width: 88, child: status),
                   const SizedBox(width: 12),
-                  Wrap(spacing: 8, runSpacing: 6, children: widget.actions),
+                  actions,
                 ],
               );
             }
@@ -442,11 +465,9 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
                     status,
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: widget.actions,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: actions,
                       ),
                     ),
                   ],
@@ -467,7 +488,15 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: widget.running ? FontWeight.w700 : FontWeight.w600,
+          fontWeight: widget.statusKind == _TodayStatusKind.running
+              ? FontWeight.w700
+              : widget.statusKind == _TodayStatusKind.completed
+              ? FontWeight.w500
+              : FontWeight.w600,
+          color: widget.statusKind == _TodayStatusKind.completed
+              ? Theme.of(context).colorScheme.onSurfaceVariant
+                    .withValues(alpha: .72)
+              : null,
         ),
       ),
       const SizedBox(height: 2),
@@ -476,7 +505,12 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
           Container(
             width: 7,
             height: 7,
-            decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: widget.statusKind == _TodayStatusKind.completed
+                  ? accent.withValues(alpha: .45)
+                  : accent,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -485,7 +519,12 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: Theme.of(context).colorScheme.onSurfaceVariant
+                    .withValues(
+                      alpha: widget.statusKind == _TodayStatusKind.completed
+                          ? .55
+                          : 1,
+                    ),
               ),
             ),
           ),
@@ -496,28 +535,39 @@ class _TodayExecutionRowState extends State<_TodayExecutionRow> {
 }
 
 class _StatusLabel extends StatelessWidget {
-  const _StatusLabel({required this.text, required this.running});
+  const _StatusLabel({required this.text, required this.kind});
   final String text;
-  final bool running;
+  final _TodayStatusKind kind;
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Icon(
-        running ? Icons.play_circle_fill : Icons.circle_outlined,
-        size: 13,
-        color: running
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.outline,
-      ),
-      const SizedBox(width: 5),
-      Text(
-        text,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          fontWeight: running ? FontWeight.w700 : FontWeight.w400,
-          color: running ? Theme.of(context).colorScheme.primary : null,
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final running = kind == _TodayStatusKind.running;
+    final completed = kind == _TodayStatusKind.completed;
+    final icon = switch (kind) {
+      _TodayStatusKind.unstarted => Icons.radio_button_unchecked,
+      _TodayStatusKind.running => Icons.play_circle_fill,
+      _TodayStatusKind.paused => Icons.pause_circle_outline,
+      _TodayStatusKind.waiting => Icons.hourglass_empty,
+      _TodayStatusKind.completed => Icons.check_circle_outline,
+    };
+    final color = running
+        ? colors.primary
+        : completed
+        ? colors.onSurfaceVariant.withValues(alpha: .68)
+        : colors.outline;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 5),
+        Text(
+          text,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontWeight: running ? FontWeight.w700 : FontWeight.w400,
+            color: color,
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }

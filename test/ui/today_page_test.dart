@@ -123,6 +123,100 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Today distinguishes unstarted and completed status for Events and Routines',
+    (tester) async {
+      final repo =
+          MemoryRepository([
+              event('event-pending', EventStatus.pending),
+              event('event-done', EventStatus.completed, order: 1),
+            ], false)
+            ..eventDayPlans.addAll([
+              EventDayPlan(
+                eventId: 'event-pending',
+                dayKey: '2026-08-27',
+                order: 0,
+                createdAt: now,
+              ),
+              EventDayPlan(
+                eventId: 'event-done',
+                dayKey: '2026-08-27',
+                order: 1,
+                createdAt: now,
+              ),
+            ])
+            ..routines.addAll([
+              Routine(
+                id: 'routine-unstarted',
+                name: 'routine-unstarted',
+                recurrence: RoutineRecurrence.daily,
+                weekdayMask: 0,
+                isActive: true,
+                sortOrder: 0,
+                createdAt: now,
+                updatedAt: now,
+              ),
+              Routine(
+                id: 'routine-done',
+                name: 'routine-done',
+                recurrence: RoutineRecurrence.daily,
+                weekdayMask: 0,
+                isActive: true,
+                sortOrder: 1,
+                createdAt: now,
+                updatedAt: now,
+              ),
+            ])
+            ..routineExecutions.add(
+              RoutineExecution(
+                id: 'execution-done',
+                routineId: 'routine-done',
+                occurrenceDate: '2026-08-27',
+                status: RoutineExecutionStatus.completed,
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+
+      await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('今日'));
+      await tester.pumpAndSettle();
+
+      for (final key in [
+        'today-event-event-pending',
+        'today-routine-routine-unstarted',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byIcon(Icons.radio_button_unchecked),
+          ),
+          findsOneWidget,
+        );
+      }
+      for (final key in [
+        'today-event-event-done',
+        'today-routine-routine-done',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byIcon(Icons.check_circle_outline),
+          ),
+          findsOneWidget,
+        );
+      }
+
+      final pendingName = tester.widget<Text>(find.text('event-pending'));
+      final completedName = tester.widget<Text>(find.text('event-done'));
+      expect(pendingName.style?.fontWeight, FontWeight.w600);
+      expect(completedName.style?.fontWeight, FontWeight.w500);
+      expect(completedName.style?.color, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('starting in World automatically plans the Event for Today', (
     tester,
   ) async {
