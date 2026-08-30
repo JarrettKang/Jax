@@ -21,6 +21,7 @@ import 'ui/pages/world_page.dart';
 import 'ui/pages/routine_page.dart';
 import 'core/repositories/routine_repository.dart';
 import 'core/sync/sync_compare_engine.dart';
+import 'core/sync/sync_contract.dart';
 import 'ui/pages/sync_preview_page.dart';
 
 ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
@@ -39,6 +40,10 @@ class JaxApp extends StatefulWidget {
     IdGenerator? newId,
     Clock? now,
     this.debugSyncPlan,
+    this.debugSyncWindowsSnapshot,
+    this.debugSyncAndroidSnapshot,
+    this.debugSyncBaseline,
+    this.onConfirmedSyncApply,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
@@ -56,6 +61,10 @@ class JaxApp extends StatefulWidget {
   final IdGenerator newId;
   final Clock now;
   final SyncPlan? debugSyncPlan;
+  final SyncSnapshot? debugSyncWindowsSnapshot;
+  final SyncSnapshot? debugSyncAndroidSnapshot;
+  final SyncSnapshot? debugSyncBaseline;
+  final ConfirmedSyncApply? onConfirmedSyncApply;
 
   @override
   State<JaxApp> createState() => _JaxAppState();
@@ -199,8 +208,13 @@ class _JaxAppState extends State<JaxApp> {
                     tooltip: '同步分析（仅预览）',
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) =>
-                            SyncPreviewPage(plan: widget.debugSyncPlan!),
+                        builder: (_) => SyncPreviewPage(
+                          plan: widget.debugSyncPlan!,
+                          windowsSnapshot: widget.debugSyncWindowsSnapshot,
+                          androidSnapshot: widget.debugSyncAndroidSnapshot,
+                          baseline: widget.debugSyncBaseline,
+                          onConfirmedApply: widget.onConfirmedSyncApply,
+                        ),
                       ),
                     ),
                     icon: const Icon(Icons.sync_alt),

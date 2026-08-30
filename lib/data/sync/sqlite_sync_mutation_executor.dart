@@ -20,65 +20,73 @@ class SqliteSyncMutationExecutor {
   }) async {
     final app = await AppDatabase.open(path);
     try {
-      await app.database.transaction((transaction) async {
-        await transaction.execute('PRAGMA defer_foreign_keys = ON');
-        var completed = 0;
-        final records = operations
-            .where((operation) => operation.record != null)
-            .map((operation) => operation.record!)
-            .toList();
-        final deleted = records.where((record) => record.isDeleted).toList()
-          ..sort((a, b) => _deleteRank(a.kind).compareTo(_deleteRank(b.kind)));
-        final live = records.where((record) => !record.isDeleted).toList()
-          ..sort((a, b) => _upsertRank(a.kind).compareTo(_upsertRank(b.kind)));
-        for (final record in [...deleted, ...live]) {
-          if (record.isDeleted) {
-            await _applyDeletion(transaction, record);
-          } else {
-            await _upsert(transaction, record);
-          }
-          completed++;
-          if (injection.failAfterOperation == completed) {
-            throw StateError(
-              'Injected mutation failure after operation $completed',
-            );
-          }
+      await applyDatabase(app, operations, injection: injection);
+    } finally {
+      await app.close();
+    }
+  }
+
+  Future<void> applyDatabase(
+    AppDatabase app,
+    List<SyncMutation> operations, {
+    SyncMutationFailureInjection injection =
+        const SyncMutationFailureInjection(),
+  }) async {
+    await app.database.transaction((transaction) async {
+      await transaction.execute('PRAGMA defer_foreign_keys = ON');
+      var completed = 0;
+      final records = operations
+          .where((operation) => operation.record != null)
+          .map((operation) => operation.record!)
+          .toList();
+      final deleted = records.where((record) => record.isDeleted).toList()
+        ..sort((a, b) => _deleteRank(a.kind).compareTo(_deleteRank(b.kind)));
+      final live = records.where((record) => !record.isDeleted).toList()
+        ..sort((a, b) => _upsertRank(a.kind).compareTo(_upsertRank(b.kind)));
+      for (final record in [...deleted, ...live]) {
+        if (record.isDeleted) {
+          await _applyDeletion(transaction, record);
+        } else {
+          await _upsert(transaction, record);
         }
-        for (final operation in operations.where(
-          (operation) => operation.list != null,
-        )) {
-          await _applyList(transaction, operation.list!);
-          completed++;
-          if (injection.failAfterOperation == completed) {
-            throw StateError(
-              'Injected mutation failure after operation $completed',
-            );
-          }
+        completed++;
+        if (injection.failAfterOperation == completed) {
+          throw StateError(
+            'Injected mutation failure after operation $completed',
+          );
         }
-        final foreignKeys = await transaction.rawQuery(
-          'PRAGMA foreign_key_check',
-        );
-        if (foreignKeys.isNotEmpty) {
-          throw StateError('Foreign key validation failed: $foreignKeys');
-        }
-      });
+      }
       for (final operation in operations.where(
         (operation) => operation.list != null,
       )) {
-        await _verifyList(app.database, operation.list!);
+        await _applyList(transaction, operation.list!);
+        completed++;
+        if (injection.failAfterOperation == completed) {
+          throw StateError(
+            'Injected mutation failure after operation $completed',
+          );
+        }
       }
-      // Phase 2B-1 validates with a fresh read-only connection and its backups
-      // are standalone database files. Materialize the committed WAL before
-      // either boundary is crossed.
-      final checkpoint = await app.database.rawQuery(
-        'PRAGMA wal_checkpoint(TRUNCATE)',
+      final foreignKeys = await transaction.rawQuery(
+        'PRAGMA foreign_key_check',
       );
-      if (checkpoint.isNotEmpty &&
-          (checkpoint.single['busy'] as num?)?.toInt() != 0) {
-        throw StateError('SQLite WAL checkpoint remained busy: $checkpoint');
+      if (foreignKeys.isNotEmpty) {
+        throw StateError('Foreign key validation failed: $foreignKeys');
       }
-    } finally {
-      await app.close();
+    });
+    for (final operation in operations.where(
+      (operation) => operation.list != null,
+    )) {
+      await _verifyList(app.database, operation.list!);
+    }
+    // Validation and backup use fresh connections/files. Materialize the
+    // committed WAL before crossing either boundary on Windows or Android.
+    final checkpoint = await app.database.rawQuery(
+      'PRAGMA wal_checkpoint(TRUNCATE)',
+    );
+    if (checkpoint.isNotEmpty &&
+        (checkpoint.single['busy'] as num?)?.toInt() != 0) {
+      throw StateError('SQLite WAL checkpoint remained busy: $checkpoint');
     }
   }
 
@@ -294,7 +302,7 @@ class SqliteSyncMutationExecutor {
     if (current.isEmpty) {
       throw StateError('List item missing from $table: $args');
     }
-    // A list mutation intentionally advances metadata through the existing trigger.
+    final updatedAt = (current.single['updated_at_utc'] as num).toInt();
     final changed = await db.update(
       table,
       {column: index},
@@ -306,6 +314,15 @@ class SqliteSyncMutationExecutor {
         'Expected one list row update in $table for $args, changed $changed.',
       );
     }
+    // SyncList owns order, but reordering is not a new entity edit. The normal
+    // update trigger fires for the storage write, so restore the exact history
+    // metadata captured before it.
+    await db.update(
+      table,
+      {'updated_at_utc': updatedAt},
+      where: where,
+      whereArgs: args,
+    );
   }
 
   Map<String, Object?> _row(SyncRecord record) {

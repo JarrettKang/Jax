@@ -30,6 +30,21 @@ class SyncMutation {
     if (record != null) 'record': record!.toJson(),
     if (list != null) 'list': list!.toJson(),
   };
+  factory SyncMutation.fromJson(Map<String, Object?> json) {
+    final type = SyncMutationType.values.byName(json['type']! as String);
+    final record = json['record'] == null
+        ? null
+        : SyncRecord.fromJson((json['record']! as Map).cast<String, Object?>());
+    final list = json['list'] == null
+        ? null
+        : SyncList.fromJson((json['list']! as Map).cast<String, Object?>());
+    return SyncMutation._(
+      type: type,
+      key: json['key'] as String?,
+      record: record,
+      list: list,
+    );
+  }
 }
 
 class SyncMutationPlan {
@@ -61,5 +76,23 @@ class SyncMutationPlan {
         .map((value) => value.toJson())
         .toList(),
     'expectedFinalFingerprint': expectedFinalSnapshot.businessFingerprintSha256,
+    'expectedFinalSnapshot': expectedFinalSnapshot.toJson(),
   };
+  factory SyncMutationPlan.fromJson(Map<String, Object?> json) =>
+      SyncMutationPlan(
+        windowsOperations: (json['windowsOperations']! as List).map(
+          (value) =>
+              SyncMutation.fromJson((value as Map).cast<String, Object?>()),
+        ),
+        androidOperations: (json['androidOperations']! as List).map(
+          (value) =>
+              SyncMutation.fromJson((value as Map).cast<String, Object?>()),
+        ),
+        expectedFinalSnapshot: SyncSnapshot.fromJson(
+          (json['expectedFinalSnapshot']! as Map).cast<String, Object?>(),
+        ),
+        windowsSourceFingerprint: json['windowsSourceFingerprint']! as String,
+        androidSourceFingerprint: json['androidSourceFingerprint']! as String,
+        baselineFingerprint: json['baselineFingerprint'] as String?,
+      );
 }

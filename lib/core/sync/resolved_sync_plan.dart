@@ -25,6 +25,56 @@ class ResolvedSyncPlan {
 
   bool _isSide(SyncSide? side) =>
       side == SyncSide.windows || side == SyncSide.android;
+
+  Map<String, Object?> toResolutionJson() => {
+    'syncProtocolVersion': preview.protocolVersion,
+    'windowsSourceFingerprint': preview.windowsSourceFingerprint,
+    'androidSourceFingerprint': preview.androidSourceFingerprint,
+    if (preview.baselineFingerprint != null)
+      'baselineFingerprint': preview.baselineFingerprint,
+    'recordChoices': {
+      for (final entry in recordChoices.entries) entry.key: entry.value.name,
+    },
+    'listChoices': {
+      for (final entry in listChoices.entries) entry.key: entry.value.name,
+    },
+    'invariantResolutions': {
+      for (final entry in invariantResolutions.entries)
+        entry.key: entry.value.toJson(),
+    },
+  };
+
+  factory ResolvedSyncPlan.fromResolutionJson(
+    SyncPlan preview,
+    Map<String, Object?> json,
+  ) {
+    if (json['syncProtocolVersion'] != preview.protocolVersion ||
+        json['windowsSourceFingerprint'] != preview.windowsSourceFingerprint ||
+        json['androidSourceFingerprint'] != preview.androidSourceFingerprint ||
+        json['baselineFingerprint'] != preview.baselineFingerprint) {
+      throw const SyncPlanException(
+        'STALE_SYNC_PLAN',
+        'Resolution belongs to a different analysis plan.',
+      );
+    }
+    SyncSide side(Object? value) => SyncSide.values.byName(value! as String);
+    Map<String, SyncSide> choices(String key) => {
+      for (final entry in ((json[key] as Map?) ?? const {}).entries)
+        entry.key as String: side(entry.value),
+    };
+    return ResolvedSyncPlan(
+      preview: preview,
+      recordChoices: choices('recordChoices'),
+      listChoices: choices('listChoices'),
+      invariantResolutions: {
+        for (final entry
+            in ((json['invariantResolutions'] as Map?) ?? const {}).entries)
+          entry.key as String: SyncInvariantResolution.fromJson(
+            (entry.value as Map).cast<String, Object?>(),
+          ),
+      },
+    );
+  }
 }
 
 extension SyncInvariantConflictIdentity on SyncInvariantConflict {
@@ -40,6 +90,22 @@ extension SyncInvariantConflictIdentity on SyncInvariantConflict {
 class SyncInvariantResolution {
   const SyncInvariantResolution({required this.recordOverrides});
   final Map<String, SyncRecord> recordOverrides;
+  Map<String, Object?> toJson() => {
+    'recordOverrides': {
+      for (final entry in recordOverrides.entries)
+        entry.key: entry.value.toJson(),
+    },
+  };
+  factory SyncInvariantResolution.fromJson(Map<String, Object?> json) =>
+      SyncInvariantResolution(
+        recordOverrides: {
+          for (final entry
+              in ((json['recordOverrides'] as Map?) ?? const {}).entries)
+            entry.key as String: SyncRecord.fromJson(
+              (entry.value as Map).cast<String, Object?>(),
+            ),
+        },
+      );
 }
 
 class SyncPlanException implements Exception {
