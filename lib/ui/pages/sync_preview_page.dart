@@ -15,6 +15,7 @@ class SyncPreviewPage extends StatefulWidget {
     this.androidSnapshot,
     this.baseline,
     this.onConfirmedApply,
+    this.embedded = false,
     super.key,
   });
 
@@ -23,6 +24,7 @@ class SyncPreviewPage extends StatefulWidget {
   final SyncSnapshot? androidSnapshot;
   final SyncSnapshot? baseline;
   final ConfirmedSyncApply? onConfirmedApply;
+  final bool embedded;
 
   @override
   State<SyncPreviewPage> createState() => _SyncPreviewPageState();
@@ -36,9 +38,8 @@ class _SyncPreviewPageState extends State<SyncPreviewPage> {
   var _submitting = false;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Jax Sync · Debug')),
-    body: ListView(
+  Widget build(BuildContext context) {
+    final content = ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text('Sync Analysis', style: Theme.of(context).textTheme.headlineSmall),
@@ -71,6 +72,13 @@ class _SyncPreviewPageState extends State<SyncPreviewPage> {
         _section('需要处理', widget.plan.manualConflicts.map(_conflictTile)),
         _section('排序冲突', widget.plan.listConflicts.map(_listTile)),
         _section('业务规则冲突', widget.plan.invariantConflicts.map(_invariantTile)),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            '冲突处理：${_resolvedCount()} / '
+            '${widget.plan.manualConflicts.length + widget.plan.listConflicts.length + widget.plan.invariantConflicts.length}',
+          ),
+        ),
         _section(
           '自动合并',
           widget.plan.autoMergeable.map(
@@ -83,8 +91,13 @@ class _SyncPreviewPageState extends State<SyncPreviewPage> {
         const SizedBox(height: 20),
         _planValidation(),
       ],
-    ),
-  );
+    );
+    if (widget.embedded) return content;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Jax Sync · Debug')),
+      body: content,
+    );
+  }
 
   Widget _metric(String label, int count) => SizedBox(
     width: 150,

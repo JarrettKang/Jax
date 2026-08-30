@@ -44,6 +44,7 @@ class JaxApp extends StatefulWidget {
     this.debugSyncAndroidSnapshot,
     this.debugSyncBaseline,
     this.onConfirmedSyncApply,
+    this.onOpenDebugSync,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
@@ -65,6 +66,7 @@ class JaxApp extends StatefulWidget {
   final SyncSnapshot? debugSyncAndroidSnapshot;
   final SyncSnapshot? debugSyncBaseline;
   final ConfirmedSyncApply? onConfirmedSyncApply;
+  final Future<void> Function()? onOpenDebugSync;
 
   @override
   State<JaxApp> createState() => _JaxAppState();
@@ -129,6 +131,20 @@ class _JaxAppState extends State<JaxApp> {
         const SnackBar(content: Text('关闭前保存失败，请重试')),
       );
       return AppExitResponse.cancel;
+    }
+  }
+
+  Future<void> _openDebugSync() async {
+    try {
+      if (widget.repository case final RoutineRepository routines) {
+        await routines.pauseRunningRoutine(widget.now().toUtc());
+      }
+      await _prepareForShutdown();
+      await widget.onOpenDebugSync!();
+    } catch (error) {
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('无法打开 Debug Sync：$error')),
+      );
     }
   }
 
@@ -202,6 +218,15 @@ class _JaxAppState extends State<JaxApp> {
             appBar: AppBar(
               title: const Text('Jax'),
               actions: [
+                if (kDebugMode &&
+                    Platform.isWindows &&
+                    widget.onOpenDebugSync != null)
+                  IconButton(
+                    key: const ValueKey('open-debug-sync'),
+                    tooltip: '开发工具 · 双端同步',
+                    onPressed: _openDebugSync,
+                    icon: const Icon(Icons.developer_mode),
+                  ),
                 if (kDebugMode && widget.debugSyncPlan != null)
                   IconButton(
                     key: const ValueKey('sync-preview'),

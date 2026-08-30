@@ -9,7 +9,11 @@ param(
     [string]$Package = 'com.example.jax',
     [string]$OutputRoot = (Join-Path $PSScriptRoot '..\.debug_snapshots'),
     [string]$BackupRoot = (Join-Path $env:APPDATA 'Jax\sync_backups'),
-    [string]$Baseline = (Join-Path $env:APPDATA 'Jax\sync\last_successful_sync.json')
+    [string]$Baseline = (Join-Path $env:APPDATA 'Jax\sync\last_successful_sync.json'),
+    [int]$KeepWindowsProcessId = 0,
+    [switch]$NoLaunchPreview,
+    [string]$StatusPath,
+    [string]$ResultPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,6 +43,16 @@ function Set-Stage([string]$Stage) {
     $script:report.status = $Stage
     $script:report.stages.Add($Stage)
     Write-Host "SYNC_STAGE $Stage"
+    Write-ExternalJson $StatusPath ([ordered]@{ status = $Stage; stages = $script:report.stages; timestamp = (Get-Date).ToString('o') })
+}
+
+function Write-ExternalJson([string]$Path, [object]$Value) {
+    if (-not $Path) { return }
+    $directory = Split-Path -Parent $Path
+    if ($directory) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $staged = "$Path.pending"
+    $Value | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $staged -Encoding utf8
+    Move-Item -LiteralPath $staged -Destination $Path -Force
 }
 
 function Invoke-Checked([string]$File, [string[]]$Arguments) {
@@ -103,15 +117,17 @@ function Stop-Apps {
     & $adb -s $script:serial shell am force-stop $Package | Out-Null
     $jax = @(Get-Process jax -ErrorAction SilentlyContinue)
     $script:windowsWasRunning = $jax.Count -gt 0
-    foreach ($process in $jax) { Stop-Process -Id $process.Id -Force }
+    foreach ($process in $jax) {
+        if ($KeepWindowsProcessId -le 0 -or $process.Id -ne $KeepWindowsProcessId) { Stop-Process -Id $process.Id -Force }
+    }
     $deadline = [DateTime]::UtcNow.AddSeconds(15)
-    while ((Get-Process jax -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
-    if (Get-Process jax -ErrorAction SilentlyContinue) { throw 'Windows Jax did not stop.' }
+    while (@(Get-Process jax -ErrorAction SilentlyContinue | Where-Object { $KeepWindowsProcessId -le 0 -or $_.Id -ne $KeepWindowsProcessId }).Count -gt 0 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
+    if (@(Get-Process jax -ErrorAction SilentlyContinue | Where-Object { $KeepWindowsProcessId -le 0 -or $_.Id -ne $KeepWindowsProcessId }).Count -gt 0) { throw 'Windows Jax did not stop.' }
 }
 
 function Start-Apps {
     Set-Stage 'RestartingApps'
-    if (Test-Path -LiteralPath $windowsExe) { Start-Process -FilePath $windowsExe | Out-Null }
+    if ($KeepWindowsProcessId -le 0 -and (Test-Path -LiteralPath $windowsExe)) { Start-Process -FilePath $windowsExe | Out-Null }
     & $adb -s $script:serial shell am start -n "$Package/.MainActivity" | Out-Null
 }
 
@@ -194,6 +210,7 @@ function Write-Report {
     if ($null -ne $script:sessionDirectory) {
         $script:report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $script:sessionDirectory 'sync_session_report.json') -Encoding utf8
     }
+    Write-ExternalJson $ResultPath $script:report
 }
 
 if (-not (Test-Path -LiteralPath $adb)) { throw "adb not found: $adb" }
@@ -250,15 +267,22 @@ try {
     $script:report.preBaselineFingerprint = if ($plan.PSObject.Properties.Name -contains 'baselineFingerprint') { $plan.baselineFingerprint } else { $null }
     $script:report.analysisSummary = $plan.summary
     $script:report.warnings = $plan.warnings
+    $script:report.planPath = $planPath
+    $script:report.windowsSnapshotPath = $windowsJson
+    $script:report.androidSnapshotPath = $androidJson
 
     if ($Action -eq 'Analyze') {
         $template = Join-Path $script:sessionDirectory 'resolution.json'
         Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'resolution-template', $planPath, $template) | Out-Null
         $script:report.resolutionTemplate = $template
-        $script:report.status = 'Resolving'
+        $script:report.status = 'AnalysisReady'
         Write-Report
         Write-Host "SYNC_ANALYZE_READY plan=$planPath resolution=$template"
-        Start-SyncPreview $planPath $windowsJson $androidJson $template
+        if ($NoLaunchPreview) {
+            & $adb -s $script:serial shell am start -n "$Package/.MainActivity" | Out-Null
+        } else {
+            Start-SyncPreview $planPath $windowsJson $androidJson $template
+        }
         return
     }
 
@@ -278,9 +302,11 @@ try {
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
     $windowsBackup = Join-Path $backupDirectory 'windows_before_sync.db'
     $androidBackup = Join-Path $backupDirectory 'android_before_sync.db'
+    Set-Stage 'BackingUpWindows'
     Copy-Item -LiteralPath $windowsDbCopy -Destination $windowsBackup
-    Copy-Item -LiteralPath $androidDbCopy -Destination $androidBackup
     Invoke-Checked $dart @('run', 'tool/database_snapshot.dart', 'verify', $windowsBackup) | Out-Null
+    Set-Stage 'BackingUpAndroid'
+    Copy-Item -LiteralPath $androidDbCopy -Destination $androidBackup
     Invoke-Checked $dart @('run', 'tool/database_snapshot.dart', 'verify', $androidBackup) | Out-Null
     $script:backupsReady = $true
     $script:report.windowsBackup = $windowsBackup
@@ -300,9 +326,18 @@ try {
     Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'verify', $androidFinal, $mutationPath) | Out-Null
 
     Set-Stage 'WritingBaseline'
-    Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-write', $Baseline, $mutationPath) | Out-Null
-    $baselineOutput = Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-read', $Baseline)
-    $script:report.baselineResult = ($baselineOutput -join "`n")
+    try {
+        Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-write', $Baseline, $mutationPath) | Out-Null
+        $baselineOutput = Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-read', $Baseline)
+        $script:report.baselineResult = ($baselineOutput -join "`n")
+    } catch {
+        $script:report.status = 'SYNC_APPLIED_BASELINE_WRITE_FAILED'
+        $script:report.error = "Business data is synchronized and verified, but the baseline could not be persisted: $_"
+        Write-Report
+        Start-Apps
+        Write-Warning $script:report.error
+        return
+    }
 
     Set-Stage 'PostSyncAnalyze'
     $postWindows = Join-Path $script:sessionDirectory 'windows_post.db'

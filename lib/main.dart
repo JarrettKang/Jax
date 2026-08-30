@@ -15,9 +15,40 @@ import 'core/sync/sync_compare_engine.dart';
 import 'core/sync/sync_contract.dart';
 import 'core/sync/resolved_sync_plan.dart';
 import 'data/sync/android_debug_sync_command.dart';
+import 'data/sync/windows_debug_sync_coordinator.dart';
+import 'ui/pages/debug_sync_page.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kDebugMode && Platform.isWindows && args.contains('--debug-sync')) {
+    final projectRoot = _findProjectRoot();
+    final coordinator = WindowsDebugSyncCoordinator(projectRoot: projectRoot);
+    final reportArgument = args
+        .where((value) => value.startsWith('--debug-sync-report='))
+        .firstOrNull;
+    DebugSyncAnalysis? initialAnalysis;
+    String? initialSerial;
+    if (reportArgument != null) {
+      final report = (jsonDecode(
+        await File(reportArgument.substring(reportArgument.indexOf('=') + 1))
+            .readAsString(),
+      ) as Map).cast<String, Object?>();
+      initialAnalysis = await coordinator.loadAnalysisReport(report);
+      initialSerial = report['device']?.toString();
+    }
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildJaxTheme(TargetPlatform.windows),
+        home: DebugSyncPage(
+          coordinator: coordinator,
+          initialAnalysis: initialAnalysis,
+          initialSerial: initialSerial,
+        ),
+      ),
+    );
+    return;
+  }
   if (kDebugMode && Platform.isAndroid) {
     const channel = MethodChannel('com.example.jax/debug_sync');
     final commandPath = await channel.invokeMethod<String>('takeCommandPath');
@@ -103,6 +134,33 @@ Future<void> main() async {
       debugSyncAndroidSnapshot: debugAndroidSnapshot,
       debugSyncBaseline: debugBaseline,
       onConfirmedSyncApply: onConfirmedSyncApply,
+      onOpenDebugSync: kDebugMode && Platform.isWindows
+          ? () async {
+              await Process.start(Platform.resolvedExecutable, const [
+                '--debug-sync',
+              ], workingDirectory: _findProjectRoot());
+              exit(0);
+            }
+          : null,
     ),
   );
+}
+
+String _findProjectRoot() {
+  var current = Directory.current.absolute;
+  final executable = File(Platform.resolvedExecutable).parent;
+  for (final start in [current, executable]) {
+    current = start;
+    for (var i = 0; i < 8; i++) {
+      if (File(
+        '${current.path}${Platform.pathSeparator}tool'
+        '${Platform.pathSeparator}sync_phase2b2.ps1',
+      ).existsSync()) {
+        return current.path;
+      }
+      if (current.parent.path == current.path) break;
+      current = current.parent;
+    }
+  }
+  throw StateError('Cannot locate the Jax project root for Debug Sync.');
 }
