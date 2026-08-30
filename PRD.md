@@ -224,9 +224,9 @@ v0.1 至少需要通过以下行为验证：
 - 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event ancestor breadcrumb 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
 - Running Hero 直接提供“暂停”主操作；More 对 Event 提供“完成 / 等待”，对 Routine 提供“完成”。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
 - Event 的当前 parent 上下文可在 Hero 底部以紧凑 direct children 列表和“已完成数 / 总数”呈现；它只辅助理解当前执行位置，不得取代 running 名称或扩展为预测、百分比进度条。
-- Hero 之后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
+- Running Hero 之后优先显示 Waiting，然后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始或恢复候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
 - 没有 running 时，首页显示“现在没有正在执行的事项”和“接下来可以做”，仍提供 Today 候选启动入口；无候选时可进入今日页。
-- Waiting 区域只列出 status 为 waiting 的 Event，位于“接下来”之后并采用低权重紧凑列表；Routine 不具有 waiting。
+- Waiting 区域只列出 status 为 waiting 的 Event，位于 Running Hero 之后、“接下来”和“快捷动作”之前，采用弱于 Hero 但高于普通候选的紧凑列表。默认显示前 4 项，超出后提供“查看全部”。每项直接提供“恢复”，复用 waiting → running 状态机并新建 run segment；若已有 Event 或 Routine running，先暂停它再恢复 waiting Event。Routine 不具有 waiting。
 - 首页只组合现有 running、Today plan、hierarchy、category、recurrence、run segment 与 waiting 事实，不持久化第二份首页数据，不修改 SQLite schema。
 
 F1 验收须覆盖弱化问候、Running Event、Running Routine、真实持续时间、Hero 直接操作、无 running 的候选启动、稳定候选顺序、全局单 running、Waiting 低权重列表、窄屏无 overflow、重启恢复后的首页状态，并确认既有行为无回归。

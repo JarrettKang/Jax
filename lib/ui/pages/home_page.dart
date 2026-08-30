@@ -27,7 +27,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const _greeting = GreetingResolver();
+  static const _waitingPreviewLimit = 4;
   Timer? _timer;
+  var _showAllWaiting = false;
   @override
   void initState() {
     super.initState();
@@ -67,6 +69,9 @@ class _HomePageState extends State<HomePage> {
       final event = widget.controller.runningEvent;
       final routine = widget.controller.runningRoutine;
       final waiting = widget.controller.homeWaitingItems;
+      final visibleWaiting = _showAllWaiting
+          ? waiting
+          : waiting.take(_waitingPreviewLimit).toList(growable: false);
       final next = _nextItems(event, routine);
       final quickActions = _quickActions(routine);
       return SafeArea(
@@ -93,7 +98,30 @@ class _HomePageState extends State<HomePage> {
                     _routineHero(routine)
                   else
                     const _IdleHero(),
-                  const SizedBox(height: 28),
+                  if (waiting.isNotEmpty) ...[
+                    const SizedBox(height: 28),
+                    _Title('等待中 · ${waiting.length}'),
+                    for (final item in visibleWaiting)
+                      _WaitingRow(
+                        key: ValueKey('home-waiting-${item.event.id}'),
+                        item: item,
+                        contextLabel: _waitingContext(item),
+                        onResume: () => _resumeWaiting(item),
+                      ),
+                    if (waiting.length > _waitingPreviewLimit)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          key: const ValueKey('home-waiting-show-all'),
+                          onPressed: () => setState(
+                            () => _showAllWaiting = !_showAllWaiting,
+                          ),
+                          child: Text(_showAllWaiting ? '收起' : '查看全部'),
+                        ),
+                      ),
+                    const Divider(height: 40),
+                  ] else
+                    const SizedBox(height: 28),
                   _Title(event == null && routine == null ? '接下来可以做' : '接下来'),
                   if (next.isEmpty)
                     _EmptyNext(onOpenEvents: widget.onOpenEvents)
@@ -119,15 +147,6 @@ class _HomePageState extends State<HomePage> {
                             ? '恢复'
                             : '开始',
                         onStart: () => _start(item),
-                      ),
-                  ],
-                  if (waiting.isNotEmpty) ...[
-                    const Divider(height: 40),
-                    _Title('等待中 · ${waiting.length}'),
-                    for (final item in waiting)
-                      _WaitingRow(
-                        key: ValueKey('home-waiting-${item.event.id}'),
-                        item: item,
                       ),
                   ],
                 ],
@@ -245,6 +264,23 @@ class _HomePageState extends State<HomePage> {
       })
       .toList(growable: false);
 
+  String _waitingContext(HomeWaitingItem item) {
+    final category = _eventCategory(widget.controller, item.event);
+    final hierarchy = item.ancestors.map((event) => event.name).join(' › ');
+    return [
+      category?.name ?? '未分类',
+      if (hierarchy.isNotEmpty) hierarchy,
+    ].join(' · ');
+  }
+
+  Future<void> _resumeWaiting(HomeWaitingItem item) => _start(
+    _NextItem.event(
+      item.event,
+      _waitingContext(item),
+      _eventCategory(widget.controller, item.event)?.colorKey,
+    ),
+  );
+
   Future<void> _start(_NextItem item) async {
     final runningEvent = widget.controller.runningEvent;
     final runningRoutine = widget.controller.runningRoutine;
@@ -262,7 +298,8 @@ class _HomePageState extends State<HomePage> {
       }
     }
     final error = item.event != null
-        ? item.event!.status == EventStatus.paused
+        ? item.event!.status == EventStatus.paused ||
+                  item.event!.status == EventStatus.waiting
               ? await widget.controller.resume(item.id)
               : await widget.controller.start(item.id)
         : await widget.controller.startRoutine(item.routine!);
@@ -526,8 +563,15 @@ class _EmptyNext extends StatelessWidget {
 }
 
 class _WaitingRow extends StatelessWidget {
-  const _WaitingRow({required this.item, super.key});
+  const _WaitingRow({
+    required this.item,
+    required this.contextLabel,
+    required this.onResume,
+    super.key,
+  });
   final HomeWaitingItem item;
+  final String contextLabel;
+  final VoidCallback onResume;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -549,17 +593,28 @@ class _WaitingRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (item.ancestors.isNotEmpty)
-                Text(
-                  item.ancestors.map((e) => e.name).join(' › '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              Text(
+                contextLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
+              ),
+              Text(
+                '等待中',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
+              ),
             ],
           ),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          key: ValueKey('home-waiting-resume-${item.event.id}'),
+          onPressed: onResume,
+          icon: const Icon(Icons.play_arrow, size: 20),
+          label: const Text('恢复'),
         ),
       ],
     ),

@@ -244,6 +244,142 @@ void main() {
     expect(find.text('下一任务'), findsOneWidget);
   });
 
+  testWidgets(
+    'waiting precedes next and quick actions and expands beyond four items',
+    (tester) async {
+      final now = DateTime(2026, 8, 30, 12);
+      final repository =
+          MemoryRepository([
+              for (var index = 0; index < 5; index++)
+                _event(
+                  'wait-$index',
+                  '等待 $index',
+                  EventStatus.waiting,
+                  now,
+                  sortOrder: index,
+                ),
+              _event('next', '接下来事项', EventStatus.pending, now, sortOrder: 5),
+            ])
+            ..routines.add(
+              Routine(
+                id: 'quick',
+                name: '快捷动作事项',
+                type: RoutineType.onDemand,
+                recurrence: RoutineRecurrence.daily,
+                weekdayMask: 0,
+                isActive: true,
+                sortOrder: 0,
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+      await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(find.text('等待中 · 5')).dy,
+        lessThan(tester.getTopLeft(find.text('接下来可以做')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('接下来可以做')).dy,
+        lessThan(tester.getTopLeft(find.text('快捷动作')).dy),
+      );
+      expect(find.byKey(const ValueKey('home-waiting-wait-3')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-waiting-wait-4')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('home-waiting-show-all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('home-waiting-wait-4')), findsOneWidget);
+      expect(find.text('收起'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('resuming waiting pauses current Event and opens a new segment', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 30, 12);
+    var id = 0;
+    final repository =
+        MemoryRepository([
+            _event('A', 'Event A', EventStatus.running, now, sortOrder: 0),
+            _event('B', 'Event B', EventStatus.waiting, now, sortOrder: 1),
+            _event('C', 'Event C', EventStatus.waiting, now, sortOrder: 2),
+          ])
+          ..segments.add(
+            RunSegment(
+              id: 'open-A',
+              eventId: 'A',
+              startedAt: now.subtract(const Duration(minutes: 10)),
+              createdAt: now.subtract(const Duration(minutes: 10)),
+            ),
+          );
+    await tester.pumpWidget(
+      JaxApp(
+        repository: repository,
+        now: () => now,
+        newId: () => 'new-${id++}',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('home-waiting-resume-B')));
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.events.firstWhere((event) => event.id == 'A').status,
+      EventStatus.paused,
+    );
+    expect(
+      repository.events.firstWhere((event) => event.id == 'B').status,
+      EventStatus.running,
+    );
+    expect(
+      repository.events.firstWhere((event) => event.id == 'C').status,
+      EventStatus.waiting,
+    );
+    expect(
+      repository.events.where((event) => event.status == EventStatus.running),
+      hasLength(1),
+    );
+    expect(
+      repository.segments
+          .firstWhere((segment) => segment.eventId == 'A')
+          .endedAt,
+      now.toUtc(),
+    );
+    final resumed = repository.segments.where(
+      (segment) => segment.eventId == 'B',
+    );
+    expect(resumed, hasLength(1));
+    expect(resumed.single.startedAt, now.toUtc());
+    expect(resumed.single.endedAt, isNull);
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('home-running-name'))).data,
+      'Event B',
+    );
+    expect(find.byKey(const ValueKey('home-waiting-B')), findsNothing);
+    expect(find.byKey(const ValueKey('home-waiting-C')), findsOneWidget);
+  });
+
+  testWidgets(
+    'resuming waiting without another running Event opens execution',
+    (tester) async {
+      final now = DateTime(2026, 8, 30, 12);
+      final repository = MemoryRepository([
+        _event('wait', '等待恢复', EventStatus.waiting, now),
+      ]);
+      await tester.pumpWidget(
+        JaxApp(repository: repository, now: () => now, newId: () => 'segment'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('home-waiting-resume-wait')));
+      await tester.pumpAndSettle();
+      expect(repository.events.single.status, EventStatus.running);
+      expect(repository.segments.single.eventId, 'wait');
+      expect(repository.segments.single.endedAt, isNull);
+    },
+  );
+
   testWidgets('waiting is secondary and narrow layout does not overflow', (
     tester,
   ) async {
