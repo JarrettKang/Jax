@@ -116,12 +116,57 @@ void main() {
     final db = await AppDatabase.open(windows.path);
     final rows = await db.database.query(
       'events',
-      columns: ['id', 'sort_order'],
+      columns: ['id', 'sort_order', 'updated_at_utc'],
       orderBy: 'sort_order, id',
     );
     await db.close();
     expect(rows.map((row) => row['id']), ['b', 'a', 'c']);
     expect(rows.map((row) => row['sort_order']), [0, 1, 2]);
+    expect(rows.map((row) => row['updated_at_utc']), [100, 100, 100]);
+  });
+
+  test('sync-safe running apply preserves the original open segment', () async {
+    final open = eventSegment('open', 'r', startedAtUtc: 10);
+    await _seed(windows.path, [
+      event('r', 'PC running', status: 'running', firstStartedAtUtc: 10),
+      open,
+    ], siblings(['r']));
+    await _seed(android.path, [
+      event('r', 'Phone running', status: 'running', firstStartedAtUtc: 10),
+      open,
+    ], siblings(['r']));
+    final w = await _snapshot(windows.path), a = await _snapshot(android.path);
+    final preview = compare.compare(windows: w, android: a);
+
+    await orchestrator.applyFixtureOnly(
+      resolved: ResolvedSyncPlan(
+        preview: preview,
+        recordChoices: {'event:r': SyncSide.windows},
+      ),
+      windows: windows,
+      android: android,
+      backupDirectory: Directory(
+        '${root.path}${Platform.pathSeparator}running-backups',
+      ),
+    );
+
+    final db = await AppDatabase.open(android.path);
+    final events = await db.database.query(
+      'events',
+      where: 'id = ?',
+      whereArgs: ['r'],
+    );
+    final segments = await db.database.query(
+      'run_segments',
+      where: 'event_id = ?',
+      whereArgs: ['r'],
+    );
+    await db.close();
+    expect(events.single['status'], 'running');
+    expect(events.single['first_started_at_utc'], 10);
+    expect(segments, hasLength(1));
+    expect(segments.single['started_at_utc'], 10);
+    expect(segments.single['ended_at_utc'], isNull);
   });
 
   test(
@@ -366,17 +411,36 @@ void main() {
 }
 
 final instant = DateTime.fromMillisecondsSinceEpoch(100, isUtc: true);
-SyncRecord event(String id, String name) => SyncRecord(
+SyncRecord event(
+  String id,
+  String name, {
+  String status = 'paused',
+  int? firstStartedAtUtc,
+}) => SyncRecord(
   kind: SyncEntityKind.event,
   metadata: SyncMetadata(id: id, createdAtUtc: instant, updatedAtUtc: instant),
   payload: {
     'name': name,
-    'status': 'paused',
+    'status': status,
     'parentSyncId': null,
     'order': 0,
     'categorySyncId': null,
-    'firstStartedAtUtc': null,
+    'firstStartedAtUtc': firstStartedAtUtc,
     'completedAtUtc': null,
+  },
+);
+SyncRecord eventSegment(
+  String id,
+  String eventId, {
+  required int startedAtUtc,
+  int? endedAtUtc,
+}) => SyncRecord(
+  kind: SyncEntityKind.eventRunSegment,
+  metadata: SyncMetadata(id: id, createdAtUtc: instant, updatedAtUtc: instant),
+  payload: {
+    'eventSyncId': eventId,
+    'startedAtUtc': startedAtUtc,
+    'endedAtUtc': endedAtUtc,
   },
 );
 SyncRecord tombstone(String id) => SyncRecord(

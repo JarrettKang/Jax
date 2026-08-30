@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/sync/resolved_sync_plan.dart';
 import 'package:jax/core/sync/sync_compare_engine.dart';
 import 'package:jax/core/sync/sync_contract.dart';
+import 'package:jax/core/sync/sync_mutation_plan.dart';
 import 'package:jax/core/sync/sync_plan_compiler.dart';
 
 void main() {
@@ -105,6 +106,20 @@ void main() {
       ['a', 'b', 'c'],
     );
     expect(first.expectedFinalSnapshot.lists.single.itemIds, ['b', 'a', 'c']);
+    final decodedResolution = ResolvedSyncPlan.fromResolutionJson(
+      preview,
+      resolved.toResolutionJson(),
+    );
+    final roundTrip = compiler.compile(
+      resolved: decodedResolution,
+      windows: windows,
+      android: android,
+    );
+    expect(jsonEncode(roundTrip.toJson()), jsonEncode(first.toJson()));
+    expect(
+      jsonEncode(SyncMutationPlan.fromJson(first.toJson()).toJson()),
+      jsonEncode(first.toJson()),
+    );
   });
 
   test('invalid explicit invariant override is rejected before mutation', () {
