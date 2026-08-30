@@ -262,12 +262,20 @@ class SyncPlan {
     required this.listConflicts,
     required this.invariantConflicts,
     required this.warnings,
+    required this.windowsSourceFingerprint,
+    required this.androidSourceFingerprint,
+    this.baselineFingerprint,
+    this.protocolVersion = syncProtocolVersion,
   });
   final bool hasBaseline;
   final List<SyncPlanItem> items;
   final List<SyncListConflict> listConflicts;
   final List<SyncInvariantConflict> invariantConflicts;
   final List<String> warnings;
+  final String windowsSourceFingerprint;
+  final String androidSourceFingerprint;
+  final String? baselineFingerprint;
+  final int protocolVersion;
   Iterable<SyncPlanItem> get same => items.where(
     (item) => item.classification == SyncMergeClassification.same,
   );
@@ -282,6 +290,10 @@ class SyncPlan {
   Map<String, Object?> toJson() => {
     'phase': 'preview-only',
     'hasBaseline': hasBaseline,
+    'syncProtocolVersion': protocolVersion,
+    'windowsSourceFingerprint': windowsSourceFingerprint,
+    'androidSourceFingerprint': androidSourceFingerprint,
+    if (baselineFingerprint != null) 'baselineFingerprint': baselineFingerprint,
     'summary': {
       'same': same.length,
       'onlyWindows': count(SyncComparisonKind.onlyWindows),
@@ -308,6 +320,10 @@ class SyncPlan {
           .convert(toJson());
   factory SyncPlan.fromJson(Map<String, Object?> json) => SyncPlan(
     hasBaseline: json['hasBaseline']! as bool,
+    windowsSourceFingerprint: json['windowsSourceFingerprint']! as String,
+    androidSourceFingerprint: json['androidSourceFingerprint']! as String,
+    baselineFingerprint: json['baselineFingerprint'] as String?,
+    protocolVersion: json['syncProtocolVersion'] as int? ?? syncProtocolVersion,
     items: (json['items']! as List)
         .map(
           (value) =>
@@ -363,6 +379,9 @@ class SyncCompareEngine {
     ];
     return SyncPlan(
       hasBaseline: baseline != null,
+      windowsSourceFingerprint: windows.businessFingerprintSha256,
+      androidSourceFingerprint: android.businessFingerprintSha256,
+      baselineFingerprint: baseline?.businessFingerprintSha256,
       items: items,
       listConflicts: _compareLists(windows, android, baseline),
       invariantConflicts: _invariants(windows, android),

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 const syncProtocolVersion = 1;
 
 enum SyncEntityKind {
@@ -168,9 +170,13 @@ class SyncSnapshot {
   );
   String get businessFingerprint => jsonEncode({
     'syncProtocolVersion': protocolVersion,
-    'records': records.map((record) => record.businessFingerprint).toList(),
+    // Raw integer order is storage, while [lists] is the canonical business
+    // order. Created/updated metadata is comparison evidence, not user state.
+    'records': records.map((record) => record.entityFingerprint).toList(),
     'lists': lists.map((list) => list.toJson()).toList(),
   });
+  String get businessFingerprintSha256 =>
+      sha256.convert(utf8.encode(businessFingerprint)).toString();
 }
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {

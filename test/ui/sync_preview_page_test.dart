@@ -26,6 +26,8 @@ void main() {
       final android = event('手机名称');
       final plan = SyncPlan(
         hasBaseline: false,
+        windowsSourceFingerprint: 'windows',
+        androidSourceFingerprint: 'android',
         items: [
           SyncPlanItem(
             key: windows.key,
