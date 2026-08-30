@@ -4,6 +4,7 @@ import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
 import '../services/descendant_switch_service.dart';
+import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
 class StartResult {
@@ -45,6 +46,13 @@ class StartEvent {
       updatedAt: timestamp,
     );
     await repository.startEvent(running, segment);
+    SegmentLifecycleLog.open(
+      reason: 'event_start',
+      ownerType: 'event',
+      ownerId: id,
+      segmentId: segment.id,
+      startedAt: timestamp,
+    );
     return StartResult(running, segment);
   }
 }

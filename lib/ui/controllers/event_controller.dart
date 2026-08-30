@@ -140,6 +140,7 @@ class EventController extends ChangeNotifier {
   Timer? _dayBoundaryTimer;
   Future<void> _reorderTail = Future.value();
   Future<void> _routineReorderTail = Future.value();
+  Future<void> _executionTail = Future.value();
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
@@ -399,19 +400,26 @@ class EventController extends ChangeNotifier {
       _change(() => _categories.assign(eventId, categoryId));
   Future<String?> delete(String id) => _change(() => _delete(id));
   Future<String?> deleteHistory(String id) => _change(() => _deleteHistory(id));
-  Future<String?> start(String id) => _change(() async {
-    await _start(id);
-    await _ensureToday(id);
-    return null;
-  });
-  Future<String?> pause(String id) => _change(() => _pause(id));
-  Future<String?> resume(String id) => _change(() async {
-    await _resume(id);
-    await _ensureToday(id);
-    return null;
-  });
-  Future<String?> wait(String id) => _change(() => _wait(id));
-  Future<String?> complete(String id) => _change(() => _complete(id));
+  Future<String?> start(String id) => _enqueueExecution(
+    () => _change(() async {
+      await _start(id);
+      await _ensureToday(id);
+      return null;
+    }),
+  );
+  Future<String?> pause(String id) =>
+      _enqueueExecution(() => _change(() => _pause(id)));
+  Future<String?> resume(String id) => _enqueueExecution(
+    () => _change(() async {
+      await _resume(id);
+      await _ensureToday(id);
+      return null;
+    }),
+  );
+  Future<String?> wait(String id) =>
+      _enqueueExecution(() => _change(() => _wait(id)));
+  Future<String?> complete(String id) =>
+      _enqueueExecution(() => _change(() => _complete(id)));
   Future<String?> restore(String id) => _change(() => _restore(id));
   Future<String?> addToToday(String id) => _change(() => _ensureToday(id));
   Future<String?> addManyToToday(Iterable<String> ids) => _change(() async {
@@ -577,12 +585,21 @@ class EventController extends ChangeNotifier {
     return queued;
   }
 
-  Future<String?> startRoutine(Routine r) =>
-      _change(() => _routineService!.start(r, execution: executionFor(r)));
-  Future<String?> pauseRoutine(Routine r) =>
-      _change(() => _routineService!.pause(executionFor(r)!));
-  Future<String?> completeRoutine(Routine r) =>
-      _change(() => _routineService!.complete(executionFor(r)!));
+  Future<String?> _enqueueExecution(Future<String?> Function() action) {
+    final queued = _executionTail.then((_) => action());
+    _executionTail = queued.then<void>((_) {}, onError: (_, _) {});
+    return queued;
+  }
+
+  Future<String?> startRoutine(Routine r) => _enqueueExecution(
+    () => _change(() => _routineService!.start(r, execution: executionFor(r))),
+  );
+  Future<String?> pauseRoutine(Routine r) => _enqueueExecution(
+    () => _change(() => _routineService!.pause(executionFor(r)!)),
+  );
+  Future<String?> completeRoutine(Routine r) => _enqueueExecution(
+    () => _change(() => _routineService!.complete(executionFor(r)!)),
+  );
   Duration routineElapsed(Routine r) =>
       (_routineSegments[executionFor(r)?.id] ?? const []).fold(
         Duration.zero,

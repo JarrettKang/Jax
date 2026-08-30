@@ -87,6 +87,26 @@ class SqliteEventRepository
   @override
   Future<void> startEvent(JaxEvent event, RunSegment segment) async {
     await _appDatabase.database.transaction((transaction) async {
+      final current = await transaction.query(
+        'events',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [event.id],
+        limit: 1,
+      );
+      if (current.isEmpty) throw StateError('Event not found: ${event.id}');
+      final open = await transaction.query(
+        'run_segments',
+        columns: ['id'],
+        where: 'event_id = ? AND ended_at_utc IS NULL',
+        whereArgs: [event.id],
+      );
+      if (current.single['status'] == EventStatus.running.name) {
+        throw StateError('Event is already running');
+      }
+      if (open.isNotEmpty) {
+        throw StateError('Non-running Event already has an open segment');
+      }
       await _pauseRunningRoutineIn(transaction, event.updatedAt);
       final running = await transaction.query(
         'events',
@@ -979,6 +999,27 @@ class SqliteEventRepository
           );
         }
       }
+      final exists = await tx.query(
+        'routine_executions',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [e.id],
+        limit: 1,
+      );
+      final open = await tx.query(
+        'routine_run_segments',
+        columns: ['id'],
+        where: 'routine_execution_id = ? AND ended_at_utc IS NULL',
+        whereArgs: [e.id],
+      );
+      if (exists.isNotEmpty && exists.single['status'] == 'running') {
+        throw StateError('Routine execution is already running');
+      }
+      if (open.isNotEmpty) {
+        throw StateError(
+          'Non-running Routine execution already has an open segment',
+        );
+      }
       await _pauseRunningEventIn(tx, now);
       final other = await tx.query(
         'routine_executions',
@@ -987,12 +1028,6 @@ class SqliteEventRepository
         limit: 1,
       );
       if (other.isNotEmpty) await _pauseRunningRoutineIn(tx, now);
-      final exists = await tx.query(
-        'routine_executions',
-        where: 'id = ?',
-        whereArgs: [e.id],
-        limit: 1,
-      );
       if (exists.isEmpty) {
         await tx.insert('routine_executions', _executionToRow(e));
       } else {

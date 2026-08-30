@@ -2,6 +2,7 @@ import '../entities/routine.dart';
 import '../entities/jax_day.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/routine_repository.dart';
+import 'segment_lifecycle_log.dart';
 import '../use_cases/create_event.dart';
 
 class RoutineService {
@@ -124,15 +125,24 @@ class RoutineService {
           createdAt: t,
           updatedAt: t,
         );
+    final segment = RoutineRunSegment(
+      id: newId(),
+      executionId: e.id,
+      startedAt: t,
+      createdAt: t,
+    );
     await repository.startRoutineExecution(
       e.copyWith(status: RoutineExecutionStatus.running, updatedAt: t),
-      RoutineRunSegment(
-        id: newId(),
-        executionId: e.id,
-        startedAt: t,
-        createdAt: t,
-      ),
+      segment,
       t,
+    );
+    SegmentLifecycleLog.open(
+      reason: execution == null ? 'routine_start' : 'routine_resume',
+      ownerType: 'routine',
+      ownerId: r.id,
+      executionId: e.id,
+      segmentId: segment.id,
+      startedAt: t,
     );
   }
 
@@ -144,6 +154,15 @@ class RoutineService {
     await repository.pauseRoutineExecution(
       e.copyWith(status: RoutineExecutionStatus.paused, updatedAt: t),
       open.copyWith(endedAt: t),
+    );
+    SegmentLifecycleLog.close(
+      reason: 'routine_pause',
+      ownerType: 'routine',
+      ownerId: e.routineId,
+      executionId: e.id,
+      segmentId: open.id,
+      startedAt: open.startedAt,
+      endedAt: t,
     );
   }
 
@@ -163,6 +182,15 @@ class RoutineService {
       await repository.completeRoutineExecution(
         done,
         open.copyWith(endedAt: t),
+      );
+      SegmentLifecycleLog.close(
+        reason: 'routine_complete',
+        ownerType: 'routine',
+        ownerId: e.routineId,
+        executionId: e.id,
+        segmentId: open.id,
+        startedAt: open.startedAt,
+        endedAt: t,
       );
     }
   }

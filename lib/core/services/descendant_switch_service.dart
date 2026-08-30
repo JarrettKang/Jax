@@ -3,6 +3,7 @@ import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
+import 'segment_lifecycle_log.dart';
 import '../use_cases/create_event.dart';
 
 class DescendantSwitchResult {
@@ -69,6 +70,21 @@ class DescendantSwitchService {
       runningTarget: runningTarget,
       newSegment: newSegment,
       pausedAncestors: pausedAncestors,
+    );
+    SegmentLifecycleLog.close(
+      reason: 'event_descendant_switch',
+      ownerType: 'event',
+      ownerId: running.id,
+      segmentId: open.id,
+      startedAt: open.startedAt,
+      endedAt: timestamp,
+    );
+    SegmentLifecycleLog.open(
+      reason: 'event_descendant_switch',
+      ownerType: 'event',
+      ownerId: target.id,
+      segmentId: newSegment.id,
+      startedAt: timestamp,
     );
     return DescendantSwitchResult(runningTarget, newSegment);
   }

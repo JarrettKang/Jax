@@ -1,6 +1,7 @@
 import '../entities/event_status.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
+import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
 class WaitEvent {
@@ -28,6 +29,14 @@ class WaitEvent {
     await repository.pauseEvent(
       current.copyWith(status: EventStatus.waiting, updatedAt: timestamp),
       open.copyWith(endedAt: timestamp),
+    );
+    SegmentLifecycleLog.close(
+      reason: 'event_wait',
+      ownerType: 'event',
+      ownerId: id,
+      segmentId: open.id,
+      startedAt: open.startedAt,
+      endedAt: timestamp,
     );
   }
 }

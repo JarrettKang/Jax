@@ -1,6 +1,7 @@
 import '../entities/event_status.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
+import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
 class PauseEvent {
@@ -30,5 +31,13 @@ class PauseEvent {
       updatedAt: timestamp,
     );
     await repository.pauseEvent(paused, open.copyWith(endedAt: timestamp));
+    SegmentLifecycleLog.close(
+      reason: 'event_pause',
+      ownerType: 'event',
+      ownerId: id,
+      segmentId: open.id,
+      startedAt: open.startedAt,
+      endedAt: timestamp,
+    );
   }
 }

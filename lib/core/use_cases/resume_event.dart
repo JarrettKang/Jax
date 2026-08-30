@@ -3,6 +3,7 @@ import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
 import '../services/descendant_switch_service.dart';
+import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
 class ResumeEvent {
@@ -38,5 +39,14 @@ class ResumeEvent {
       updatedAt: timestamp,
     );
     await repository.startEvent(running, segment);
+    SegmentLifecycleLog.open(
+      reason: current.status == EventStatus.waiting
+          ? 'event_waiting_resume'
+          : 'event_resume',
+      ownerType: 'event',
+      ownerId: id,
+      segmentId: segment.id,
+      startedAt: timestamp,
+    );
   }
 }

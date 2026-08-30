@@ -4,6 +4,8 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
+import 'package:jax/core/use_cases/start_event.dart';
+import 'package:jax/core/use_cases/resume_event.dart';
 
 void main() {
   test('atomically stores running state and open segment', () async {
@@ -32,6 +34,71 @@ void main() {
     await repository.startEvent(running, segment);
     expect((await repository.getEvent('event'))!.status, EventStatus.running);
     expect(await repository.getRunSegments('event'), [segment]);
+  });
+
+  test('concurrent repeated start creates only one open segment', () async {
+    final db = await AppDatabase.inMemory();
+    addTearDown(db.close);
+    final repository = SqliteEventRepository(db);
+    final time = DateTime.utc(2026, 8, 30, 10);
+    await repository.insertEvent(
+      JaxEvent(
+        id: 'event',
+        name: '任务',
+        status: EventStatus.pending,
+        createdAt: time,
+        updatedAt: time,
+      ),
+    );
+    var id = 0;
+    final start = StartEvent(
+      repository: repository,
+      newId: () => 'segment-${id++}',
+      now: () => time,
+    );
+
+    final results = await Future.wait([
+      start('event').then<Object?>((value) => value, onError: (error) => error),
+      start('event').then<Object?>((value) => value, onError: (error) => error),
+    ]);
+
+    expect(results.whereType<StartResult>(), hasLength(1));
+    final segments = await repository.getRunSegments('event');
+    expect(segments, hasLength(1));
+    expect(segments.single.endedAt, isNull);
+  });
+
+  test('concurrent repeated resume creates only one open segment', () async {
+    final db = await AppDatabase.inMemory();
+    addTearDown(db.close);
+    final repository = SqliteEventRepository(db);
+    final time = DateTime.utc(2026, 8, 30, 10);
+    await repository.insertEvent(
+      JaxEvent(
+        id: 'event',
+        name: '任务',
+        status: EventStatus.paused,
+        firstStartedAt: time.subtract(const Duration(minutes: 1)),
+        createdAt: time,
+        updatedAt: time,
+      ),
+    );
+    var id = 0;
+    final resume = ResumeEvent(
+      repository: repository,
+      newId: () => 'segment-${id++}',
+      now: () => time,
+    );
+
+    final results = await Future.wait([
+      resume('event').then<Object?>((_) => true, onError: (error) => error),
+      resume('event').then<Object?>((_) => true, onError: (error) => error),
+    ]);
+
+    expect(results.where((result) => result == true), hasLength(1));
+    final segments = await repository.getRunSegments('event');
+    expect(segments, hasLength(1));
+    expect(segments.single.endedAt, isNull);
   });
 
   test('atomically switches running event to a descendant', () async {

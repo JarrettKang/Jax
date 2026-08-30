@@ -86,6 +86,31 @@ void main() {
     ]);
   });
 
+  test('keeps a legitimate sub-second segment as one real record', () async {
+    final start = DateTime(2026, 8, 28, 12, 34, 56, 100);
+    final end = DateTime(2026, 8, 28, 12, 34, 56, 800);
+    final repo = MemoryRepository([event('work')])
+      ..segments.add(
+        RunSegment(
+          id: 'short',
+          eventId: 'work',
+          startedAt: start,
+          endedAt: end,
+          createdAt: start,
+        ),
+      );
+
+    final result = await ExecutionSegmentService(
+      repository: repo,
+      now: () => now,
+    ).forJaxDay(now);
+
+    expect(result, hasLength(1));
+    expect(result.single.id, 'short');
+    expect(result.single.startedAt, start);
+    expect(result.single.endedAt, end);
+  });
+
   test('keeps Event and Routine category identities distinct', () async {
     final repo = MemoryRepository([event('work', categoryId: 'same')])
       ..categories.add(
