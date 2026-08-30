@@ -202,3 +202,12 @@
 - Sync Model 契约只使用全球 identity 表达 parent/category/owner/execution 关系；Today plan identity 为 `event UUID + JaxDay`。整数 order 在 Phase 2 以 sibling list 为 conflict 单位，不引入 CRDT。
 - 新增只读 `SqliteSyncReadiness`，在未来 snapshot export / apply 前后检查 FK、identity、hierarchy、root/category、order、one-running、open segment、segment range 和 On-demand execution 不变量。
 - Phase 1 不实现 ADB/LAN/Cloud、compare/apply、冲突策略、device ID、change log 或同步 UI。详细契约与延期项见 `docs/sync_readiness.md`。
+
+## 16. 双端同步 Phase 2A：Read / Compare / Conflict Preview
+
+- Phase 2A 以独立 `syncProtocolVersion = 1` 建立确定性 `SyncSnapshot`：v13 SQLite Adapter 只读导出全部同步业务实体、tombstone、稳定逻辑列表及 readiness warning，不包含本地 UI preference。
+- Compare Engine 支持 global UUID matching、字段 diff、missing/deleted 区分、无 baseline 的 UnknownHistory，以及 Last Successful Sync Snapshot 存在时的 Base/Windows/Android 三方比较；`updatedAt` 只作证据，不默认 LWW。
+- order 以 Category、Event sibling、Routine Category、分类内 Routine 和单日 Today 的完整 global-ID list 比较；不同 UUID 的独立新增不误报 reorder，shared item 相对顺序不同才产生 ListConflict。
+- Sync Plan 区分 auto-mergeable、entity/field/hierarchy/delete-modify、list 和 global-running/open-segment/segment-overlap invariant conflict；Debug Preview 的电脑/手机选择仅存在内存，不调用 Apply。
+- ADB Debug acquisition 与 Compare Engine 解耦，显式处理多设备并使用安全 SQLite snapshot；Analyze 前后再次导出业务 fingerprint，证明 Windows/Android 业务事实未改变。
+- Phase 2B 仍为 future：安全事务 Apply、双端 backup/rollback、持久化 conflict choice、成功后 baseline 更新、tombstone acknowledgement/GC。Phase 3 LAN transport 复用相同 snapshot/compare contract。详见 `docs/sync_phase2a.md`。
