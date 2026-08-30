@@ -20,6 +20,8 @@ import 'ui/pages/home_page.dart';
 import 'ui/pages/world_page.dart';
 import 'ui/pages/routine_page.dart';
 import 'core/repositories/routine_repository.dart';
+import 'core/sync/sync_compare_engine.dart';
+import 'ui/pages/sync_preview_page.dart';
 
 ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
@@ -36,6 +38,7 @@ class JaxApp extends StatefulWidget {
     RoutineCategoryCollapseStore? routineCategoryCollapseStore,
     IdGenerator? newId,
     Clock? now,
+    this.debugSyncPlan,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
@@ -52,6 +55,7 @@ class JaxApp extends StatefulWidget {
   final RoutineCategoryCollapseStore routineCategoryCollapseStore;
   final IdGenerator newId;
   final Clock now;
+  final SyncPlan? debugSyncPlan;
 
   @override
   State<JaxApp> createState() => _JaxAppState();
@@ -189,6 +193,18 @@ class _JaxAppState extends State<JaxApp> {
             appBar: AppBar(
               title: const Text('Jax'),
               actions: [
+                if (kDebugMode && widget.debugSyncPlan != null)
+                  IconButton(
+                    key: const ValueKey('sync-preview'),
+                    tooltip: '同步分析（仅预览）',
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            SyncPreviewPage(plan: widget.debugSyncPlan!),
+                      ),
+                    ),
+                    icon: const Icon(Icons.sync_alt),
+                  ),
                 if (!compact)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
