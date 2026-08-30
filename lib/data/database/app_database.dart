@@ -2,6 +2,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class AppDatabase {
   AppDatabase._(this.database);
+  factory AppDatabase.fromOpenDatabase(Database database) =>
+      AppDatabase._(database);
   final Database database;
   static const schemaVersion = 13;
 

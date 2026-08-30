@@ -1,3 +1,5 @@
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' show Database;
+
 import '../database/app_database.dart';
 
 class SyncReadinessIssue {
@@ -15,6 +17,9 @@ class SyncReadinessIssue {
 class SqliteSyncReadiness {
   const SqliteSyncReadiness(this.database);
   final AppDatabase database;
+
+  SqliteSyncReadiness.fromDatabase(Database database)
+    : database = AppDatabase.fromOpenDatabase(database);
 
   Future<List<SyncReadinessIssue>> validate() async {
     final issues = <SyncReadinessIssue>[];

@@ -112,11 +112,13 @@ Future<void> _snapshot(
   String destination, {
   required bool requireCurrentSchema,
 }) async {
-  if (!File(source).existsSync())
+  if (!File(source).existsSync()) {
     throw StateError('Source database does not exist: $source');
+  }
   final output = File(destination);
-  if (output.existsSync())
+  if (output.existsSync()) {
     throw StateError('Snapshot destination already exists: $destination');
+  }
   await output.parent.create(recursive: true);
   final database = await databaseFactoryFfi.openDatabase(
     source,
@@ -138,8 +140,9 @@ Future<void> _snapshot(
 }
 
 Future<void> _verify(String path, {required bool requireCurrentSchema}) async {
-  if (!File(path).existsSync())
+  if (!File(path).existsSync()) {
     throw StateError('Database does not exist: $path');
+  }
   final database = await databaseFactoryFfi.openDatabase(
     path,
     options: OpenDatabaseOptions(readOnly: true),
@@ -174,8 +177,9 @@ Future<void> _verifyOpen(
   }
   await database.execute('PRAGMA foreign_keys = ON');
   final foreignKeys = await database.rawQuery('PRAGMA foreign_key_check');
-  if (foreignKeys.isNotEmpty)
+  if (foreignKeys.isNotEmpty) {
     throw StateError('Foreign key violations in $path: $foreignKeys');
+  }
   final journal = (await database.rawQuery('PRAGMA journal_mode'))
       .single
       .values
