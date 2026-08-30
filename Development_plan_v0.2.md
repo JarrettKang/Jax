@@ -210,4 +210,13 @@
 - order 以 Category、Event sibling、Routine Category、分类内 Routine 和单日 Today 的完整 global-ID list 比较；不同 UUID 的独立新增不误报 reorder，shared item 相对顺序不同才产生 ListConflict。
 - Sync Plan 区分 auto-mergeable、entity/field/hierarchy/delete-modify、list 和 global-running/open-segment/segment-overlap invariant conflict；Debug Preview 的电脑/手机选择仅存在内存，不调用 Apply。
 - ADB Debug acquisition 与 Compare Engine 解耦，显式处理多设备并使用安全 SQLite snapshot；Analyze 前后再次导出业务 fingerprint，证明 Windows/Android 业务事实未改变。
-- Phase 2B 仍为 future：安全事务 Apply、双端 backup/rollback、持久化 conflict choice、成功后 baseline 更新、tombstone acknowledgement/GC。Phase 3 LAN transport 复用相同 snapshot/compare contract。详见 `docs/sync_phase2a.md`。
+- Phase 2B-1 已建立 fixture-only 的安全 Apply 基础设施；真实双端 Apply、持久化 conflict choice、生产 baseline 与 tombstone acknowledgement/GC 仍属 future。Phase 3 LAN transport 复用相同 snapshot/compare contract。详见 `docs/sync_phase2a.md` 与 `docs/sync_phase2b1.md`。
+
+## 17. 双端同步 Phase 2B-1：Safe Apply Infrastructure
+
+- `ResolvedSyncPlan` 要求 manual/list/invariant conflict 均有显式解决；缺失选择返回 `PLAN_NOT_RESOLVED`，选择组合先在内存模拟并通过完整 invariant/list validation，不能默认 LWW 或自动发明 running loser 语义。
+- Phase 2A plan 记录 Windows、Android 与可选 baseline 的 canonical SHA-256 business fingerprint。执行前重新导出并严格比对；任一事实变化返回 `STALE_SYNC_PLAN`。
+- 确定性 `SyncMutationPlan` 分别列出两端 operation 与 expected final snapshot。Data 层 executor 按 FK 依赖排序，在单 DB transaction 中处理实体、tombstone、Today 与完整 list scope；字段 upsert 不覆盖独立 list order。
+- Orchestrator 在两端 backup 均成功后依次执行 Windows/Android copy transaction、readiness/invariant validation 与最终 canonical snapshot verification；任一步失败恢复两端并核对执行前 fingerprint，恢复失败显式报告 critical rollback。
+- baseline 接口只在双端验证完全成功后调用；辅助 baseline 写失败保留已验证的业务结果并单独报告。当前只有内存测试 store，不写真实 baseline。
+- 本阶段 Apply API 由 `FixtureSyncDatabase` 强制限制在系统临时目录；已在 fixture 及 Phase 2A 真实形状数据库的独立临时副本上演练，不向真实 Windows/Android DB 写入，不开放 UI Apply。Phase 2B-2 才处理真实授权、传输、恢复 UX 和生产 baseline。
