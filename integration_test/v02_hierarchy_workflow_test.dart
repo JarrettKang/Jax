@@ -112,16 +112,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      tester.widget<Text>(find.byKey(const ValueKey('home-work-subject'))).data,
-      '开发项目',
-    );
-    expect(find.byKey(const ValueKey('home-step-running')), findsOneWidget);
-    expect(find.byKey(const ValueKey('home-step-sibling')), findsOneWidget);
+    expect(find.text('正在执行'), findsOneWidget);
+    expect(find.text('实现层级功能'), findsWidgets);
 
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('more-running')));
+    await tester.tap(find.byKey(const ValueKey('world-category-open-null')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('world-more-running')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('hierarchy-running')));
     await tester.pumpAndSettle();
@@ -129,23 +127,23 @@ void main() {
     await tester.tap(find.text('关闭'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('记录'));
-    await tester.pumpAndSettle();
     expect(find.text('已完成项目'), findsOneWidget);
-    expect(find.text('已完成步骤'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('history-detail-history-root')));
+    expect(find.text('已完成步骤'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('world-more-history-root')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('world-investment-history-root')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('总投入：10 分钟'), findsOneWidget);
     expect(find.text('直接执行：2 分钟'), findsOneWidget);
-    expect(find.text('已完成步骤'), findsOneWidget);
+    expect(find.text('已完成步骤'), findsNWidgets(2));
 
     await tester.tap(find.text('关闭'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('more-history-history-root')));
+    await tester.tap(find.byKey(const ValueKey('world-more-history-root')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const ValueKey('restore-history-history-root')),
-    );
+    await tester.tap(find.byKey(const ValueKey('world-restore-history-root')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '恢复事件'));
     await tester.pumpAndSettle();

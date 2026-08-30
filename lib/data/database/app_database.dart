@@ -3,7 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class AppDatabase {
   AppDatabase._(this.database);
   final Database database;
-  static const schemaVersion = 12;
+  static const schemaVersion = 13;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -54,6 +54,7 @@ class AppDatabase {
     await _createRoutineTables(database);
     await _createEventDayPlans(database);
     await _createWorldCategoryCollapsePreferences(database);
+    await _createSyncMetadata(database);
   }
 
   static Future<void> _upgradeSchema(
@@ -61,7 +62,7 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    if (oldVersion < 2) await _createRunSegments(database);
+    if (oldVersion < 2) await _createLegacyRunSegments(database);
     if (oldVersion < 3) {
       await database.execute(
         'ALTER TABLE events ADD COLUMN parent_event_id TEXT REFERENCES events(id) ON DELETE RESTRICT',
@@ -99,6 +100,7 @@ class AppDatabase {
     if (oldVersion < 10) await _migrateToRoutineCategories(database);
     if (oldVersion < 11) await _migrateToCategoryColors(database);
     if (oldVersion < 12) await _migrateToOnDemandRoutines(database);
+    if (oldVersion < 13) await _migrateToSyncMetadata(database);
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -145,6 +147,16 @@ class AppDatabase {
     event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     started_at_utc INTEGER NOT NULL,
     ended_at_utc INTEGER,
+    created_at_utc INTEGER NOT NULL,
+    updated_at_utc INTEGER NOT NULL DEFAULT 0
+  )''');
+
+  static Future<void> _createLegacyRunSegments(Database database) =>
+      database.execute('''CREATE TABLE run_segments (
+    id TEXT PRIMARY KEY,
+    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    started_at_utc INTEGER NOT NULL,
+    ended_at_utc INTEGER,
     created_at_utc INTEGER NOT NULL
   )''');
 
@@ -159,7 +171,7 @@ class AppDatabase {
       is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
       sort_order INTEGER NOT NULL,
       created_at_utc INTEGER NOT NULL,
-      updated_at_utc INTEGER NOT NULL
+      updated_at_utc INTEGER NOT NULL DEFAULT 0
     )''');
     await database.execute('''CREATE TABLE routine_executions (
       id TEXT PRIMARY KEY,
@@ -175,7 +187,8 @@ class AppDatabase {
       routine_execution_id TEXT NOT NULL REFERENCES routine_executions(id) ON DELETE CASCADE,
       started_at_utc INTEGER NOT NULL,
       ended_at_utc INTEGER,
-      created_at_utc INTEGER NOT NULL
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL DEFAULT 0
     )''');
   }
 
@@ -226,8 +239,137 @@ class AppDatabase {
         day_date TEXT NOT NULL,
         order_index INTEGER NOT NULL,
         created_at_utc INTEGER NOT NULL,
+        updated_at_utc INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(event_id, day_date)
       )''');
+
+  static Future<void> _createSyncMetadata(Database database) async {
+    await database.execute('''CREATE TABLE sync_tombstones (
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      deleted_at_utc INTEGER NOT NULL,
+      PRIMARY KEY(entity_type, entity_id)
+    )''');
+    await _createSyncTriggers(database);
+  }
+
+  static Future<void> _migrateToSyncMetadata(Database database) async {
+    for (final table in [
+      'run_segments',
+      'routine_run_segments',
+      'event_day_plans',
+    ]) {
+      if (await _addColumnIfMissing(
+        database,
+        table,
+        'updated_at_utc',
+        'INTEGER',
+      )) {
+        await database.execute(
+          'UPDATE $table SET updated_at_utc = created_at_utc',
+        );
+      }
+    }
+    await database.execute('''CREATE TABLE sync_tombstones (
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      deleted_at_utc INTEGER NOT NULL,
+      PRIMARY KEY(entity_type, entity_id)
+    )''');
+    await _createSyncTriggers(database);
+  }
+
+  static Future<bool> _addColumnIfMissing(
+    Database database,
+    String table,
+    String column,
+    String type,
+  ) async {
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.isEmpty) return false;
+    if (!columns.any((row) => row['name'] == column)) {
+      await database.execute('ALTER TABLE $table ADD COLUMN $column $type');
+    }
+    return true;
+  }
+
+  static Future<void> _createSyncTriggers(Database database) async {
+    const entities = <String, String>{
+      'categories': 'category',
+      'events': 'event',
+      'run_segments': 'eventRunSegment',
+      'routine_categories': 'routineCategory',
+      'routines': 'routine',
+      'routine_executions': 'routineExecution',
+      'routine_run_segments': 'routineRunSegment',
+    };
+    for (final entry in entities.entries) {
+      if (!await _tableExists(database, entry.key)) continue;
+      await database.execute('''CREATE TRIGGER ${entry.key}_sync_delete
+        AFTER DELETE ON ${entry.key}
+        BEGIN
+          INSERT OR REPLACE INTO sync_tombstones(entity_type, entity_id, deleted_at_utc)
+          VALUES('${entry.value}', OLD.id,
+            CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
+        END''');
+      await database.execute('''CREATE TRIGGER ${entry.key}_sync_insert
+        AFTER INSERT ON ${entry.key}
+        BEGIN
+          UPDATE ${entry.key} SET updated_at_utc = created_at_utc
+          WHERE rowid = NEW.rowid AND updated_at_utc = 0;
+          DELETE FROM sync_tombstones
+          WHERE entity_type = '${entry.value}' AND entity_id = NEW.id;
+        END''');
+    }
+    if (await _tableExists(database, 'event_day_plans')) {
+      await database.execute('''CREATE TRIGGER event_day_plans_sync_delete
+      AFTER DELETE ON event_day_plans
+      BEGIN
+        INSERT OR REPLACE INTO sync_tombstones(entity_type, entity_id, deleted_at_utc)
+        VALUES('eventDayPlan', OLD.event_id || '@' || OLD.day_date,
+          CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
+      END''');
+      await database.execute('''CREATE TRIGGER event_day_plans_sync_insert
+      AFTER INSERT ON event_day_plans
+      BEGIN
+        UPDATE event_day_plans SET updated_at_utc = created_at_utc
+        WHERE rowid = NEW.rowid AND updated_at_utc = 0;
+        DELETE FROM sync_tombstones
+        WHERE entity_type = 'eventDayPlan'
+          AND entity_id = NEW.event_id || '@' || NEW.day_date;
+      END''');
+    }
+
+    const timestampTables = <String>[
+      'categories',
+      'events',
+      'run_segments',
+      'routine_categories',
+      'routines',
+      'routine_executions',
+      'routine_run_segments',
+      'event_day_plans',
+    ];
+    for (final table in timestampTables) {
+      final columns = await database.rawQuery('PRAGMA table_info($table)');
+      if (!columns.any((row) => row['name'] == 'updated_at_utc')) continue;
+      await database.execute('''CREATE TRIGGER ${table}_sync_update
+        AFTER UPDATE ON $table
+        WHEN NEW.updated_at_utc = OLD.updated_at_utc
+        BEGIN
+          UPDATE $table SET updated_at_utc =
+            MAX(OLD.updated_at_utc + 1,
+              CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+          WHERE rowid = NEW.rowid;
+        END''');
+    }
+  }
+
+  static Future<bool> _tableExists(Database database, String table) async =>
+      (await database.rawQuery(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        [table],
+      )).isNotEmpty;
 
   static Future<void> _createWorldCategoryCollapsePreferences(
     Database database,

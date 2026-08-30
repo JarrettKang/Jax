@@ -462,6 +462,9 @@ class SqliteEventRepository
     'started_at_utc': segment.startedAt.millisecondsSinceEpoch,
     'ended_at_utc': segment.endedAt?.millisecondsSinceEpoch,
     'created_at_utc': segment.createdAt.millisecondsSinceEpoch,
+    'updated_at_utc': (segment.endedAt ?? segment.createdAt)
+        .toUtc()
+        .millisecondsSinceEpoch,
   };
 
   RunSegment _segmentFromRow(Map<String, Object?> row) => RunSegment(
@@ -715,6 +718,7 @@ class SqliteEventRepository
     'day_date': plan.dayKey,
     'order_index': plan.order,
     'created_at_utc': plan.createdAt.toUtc().millisecondsSinceEpoch,
+    'updated_at_utc': plan.createdAt.toUtc().millisecondsSinceEpoch,
   };
 
   EventDayPlan _eventDayPlanFromRow(Map<String, Object?> row) => EventDayPlan(
@@ -1222,6 +1226,7 @@ class SqliteEventRepository
     'started_at_utc': s.startedAt.toUtc().millisecondsSinceEpoch,
     'ended_at_utc': s.endedAt?.toUtc().millisecondsSinceEpoch,
     'created_at_utc': s.createdAt.toUtc().millisecondsSinceEpoch,
+    'updated_at_utc': (s.endedAt ?? s.createdAt).toUtc().millisecondsSinceEpoch,
   };
   RoutineRunSegment _routineSegmentFromRow(Map<String, Object?> r) =>
       RoutineRunSegment(

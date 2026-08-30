@@ -2,19 +2,31 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const expectedSchemaVersion = 12;
+const expectedSchemaVersion = 13;
 
 Future<void> main(List<String> arguments) async {
-  if (arguments.isEmpty || !{'snapshot', 'snapshot-any', 'verify', 'verify-any', 'inspect'}.contains(arguments[0])) {
-    stderr.writeln('Usage: dart run tool/database_snapshot.dart <snapshot|snapshot-any|verify|verify-any|inspect> <database> [destination]');
+  if (arguments.isEmpty ||
+      !{
+        'snapshot',
+        'snapshot-any',
+        'verify',
+        'verify-any',
+        'inspect',
+        'inspect-any',
+      }.contains(arguments[0])) {
+    stderr.writeln(
+      'Usage: dart run tool/database_snapshot.dart <snapshot|snapshot-any|verify|verify-any|inspect|inspect-any> <database> [destination]',
+    );
     exitCode = 64;
     return;
   }
   sqfliteFfiInit();
   final requireCurrentSchema = !arguments[0].endsWith('-any');
-  if (arguments[0] == 'inspect') {
-    if (arguments.length != 2) { throw ArgumentError('inspect requires a database path'); }
-    await _inspect(arguments[1]);
+  if (arguments[0].startsWith('inspect')) {
+    if (arguments.length != 2) {
+      throw ArgumentError('inspect requires a database path');
+    }
+    await _inspect(arguments[1], requireCurrentSchema: requireCurrentSchema);
     return;
   }
   if (arguments[0].startsWith('verify')) {
@@ -31,40 +43,91 @@ Future<void> main(List<String> arguments) async {
     exitCode = 64;
     return;
   }
-  await _snapshot(arguments[1], arguments[2], requireCurrentSchema: requireCurrentSchema);
+  await _snapshot(
+    arguments[1],
+    arguments[2],
+    requireCurrentSchema: requireCurrentSchema,
+  );
 }
 
-Future<void> _inspect(String path) async {
-  final database = await databaseFactoryFfi.openDatabase(path, options: OpenDatabaseOptions(readOnly: true));
+Future<void> _inspect(String path, {required bool requireCurrentSchema}) async {
+  final database = await databaseFactoryFfi.openDatabase(
+    path,
+    options: OpenDatabaseOptions(readOnly: true),
+  );
   try {
-    await _verifyOpen(database, path, requireCurrentSchema: true);
-    const tables = ['categories', 'events', 'run_segments', 'routine_categories', 'routines', 'routine_executions', 'routine_run_segments', 'event_day_plans', 'world_category_collapse_preferences', 'routine_category_collapse_preferences'];
+    await _verifyOpen(
+      database,
+      path,
+      requireCurrentSchema: requireCurrentSchema,
+    );
+    const tables = [
+      'categories',
+      'events',
+      'run_segments',
+      'routine_categories',
+      'routines',
+      'routine_executions',
+      'routine_run_segments',
+      'event_day_plans',
+      'sync_tombstones',
+      'world_category_collapse_preferences',
+      'routine_category_collapse_preferences',
+    ];
     for (final table in tables) {
-      final exists = (await database.rawQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [table])).isNotEmpty;
+      final exists = (await database.rawQuery(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        [table],
+      )).isNotEmpty;
       if (exists) {
-        final count = (await database.rawQuery('SELECT COUNT(*) AS count FROM $table')).single['count'];
+        final count = (await database.rawQuery(
+          'SELECT COUNT(*) AS count FROM $table',
+        )).single['count'];
         stdout.writeln('$table=$count');
       }
     }
-    final runningEvents = (await database.rawQuery("SELECT COUNT(*) AS count FROM events WHERE status = 'running'")).single['count'];
-    final runningRoutines = (await database.rawQuery("SELECT COUNT(*) AS count FROM routine_executions WHERE status = 'running'")).single['count'];
-    final openEventSegments = (await database.rawQuery('SELECT COUNT(*) AS count FROM run_segments WHERE ended_at_utc IS NULL')).single['count'];
-    final openRoutineSegments = (await database.rawQuery('SELECT COUNT(*) AS count FROM routine_run_segments WHERE ended_at_utc IS NULL')).single['count'];
+    final runningEvents = (await database.rawQuery(
+      "SELECT COUNT(*) AS count FROM events WHERE status = 'running'",
+    )).single['count'];
+    final runningRoutines = (await database.rawQuery(
+      "SELECT COUNT(*) AS count FROM routine_executions WHERE status = 'running'",
+    )).single['count'];
+    final openEventSegments = (await database.rawQuery(
+      'SELECT COUNT(*) AS count FROM run_segments WHERE ended_at_utc IS NULL',
+    )).single['count'];
+    final openRoutineSegments = (await database.rawQuery(
+      'SELECT COUNT(*) AS count FROM routine_run_segments WHERE ended_at_utc IS NULL',
+    )).single['count'];
     stdout.writeln('running_events=$runningEvents');
     stdout.writeln('running_routines=$runningRoutines');
     stdout.writeln('open_event_segments=$openEventSegments');
     stdout.writeln('open_routine_segments=$openRoutineSegments');
-  } finally { await database.close(); }
+  } finally {
+    await database.close();
+  }
 }
 
-Future<void> _snapshot(String source, String destination, {required bool requireCurrentSchema}) async {
-  if (!File(source).existsSync()) throw StateError('Source database does not exist: $source');
+Future<void> _snapshot(
+  String source,
+  String destination, {
+  required bool requireCurrentSchema,
+}) async {
+  if (!File(source).existsSync())
+    throw StateError('Source database does not exist: $source');
   final output = File(destination);
-  if (output.existsSync()) throw StateError('Snapshot destination already exists: $destination');
+  if (output.existsSync())
+    throw StateError('Snapshot destination already exists: $destination');
   await output.parent.create(recursive: true);
-  final database = await databaseFactoryFfi.openDatabase(source, options: OpenDatabaseOptions(readOnly: true));
+  final database = await databaseFactoryFfi.openDatabase(
+    source,
+    options: OpenDatabaseOptions(readOnly: true),
+  );
   try {
-    await _verifyOpen(database, source, requireCurrentSchema: requireCurrentSchema);
+    await _verifyOpen(
+      database,
+      source,
+      requireCurrentSchema: requireCurrentSchema,
+    );
     final escaped = destination.replaceAll("'", "''");
     await database.execute("VACUUM INTO '$escaped'");
   } finally {
@@ -75,22 +138,35 @@ Future<void> _snapshot(String source, String destination, {required bool require
 }
 
 Future<void> _verify(String path, {required bool requireCurrentSchema}) async {
-  if (!File(path).existsSync()) throw StateError('Database does not exist: $path');
-  final database = await databaseFactoryFfi.openDatabase(path, options: OpenDatabaseOptions(readOnly: true));
+  if (!File(path).existsSync())
+    throw StateError('Database does not exist: $path');
+  final database = await databaseFactoryFfi.openDatabase(
+    path,
+    options: OpenDatabaseOptions(readOnly: true),
+  );
   try {
-    await _verifyOpen(database, path, requireCurrentSchema: requireCurrentSchema);
+    await _verifyOpen(
+      database,
+      path,
+      requireCurrentSchema: requireCurrentSchema,
+    );
   } finally {
     await database.close();
   }
 }
 
-Future<void> _verifyOpen(Database database, String path, {required bool requireCurrentSchema}) async {
-  final version = (await database.rawQuery('PRAGMA user_version'))
-      .single
-      .values
-      .single as int;
+Future<void> _verifyOpen(
+  Database database,
+  String path, {
+  required bool requireCurrentSchema,
+}) async {
+  final version =
+      (await database.rawQuery('PRAGMA user_version')).single.values.single
+          as int;
   if (requireCurrentSchema && version != expectedSchemaVersion) {
-    throw StateError('Schema mismatch for $path: expected $expectedSchemaVersion, found $version');
+    throw StateError(
+      'Schema mismatch for $path: expected $expectedSchemaVersion, found $version',
+    );
   }
   final integrity = await database.rawQuery('PRAGMA integrity_check');
   if (integrity.length != 1 || integrity.single.values.single != 'ok') {
@@ -98,7 +174,13 @@ Future<void> _verifyOpen(Database database, String path, {required bool requireC
   }
   await database.execute('PRAGMA foreign_keys = ON');
   final foreignKeys = await database.rawQuery('PRAGMA foreign_key_check');
-  if (foreignKeys.isNotEmpty) throw StateError('Foreign key violations in $path: $foreignKeys');
-  final journal = (await database.rawQuery('PRAGMA journal_mode')).single.values.single;
-  stdout.writeln('Verified schema=$version integrity=ok journal_mode=$journal: $path');
+  if (foreignKeys.isNotEmpty)
+    throw StateError('Foreign key violations in $path: $foreignKeys');
+  final journal = (await database.rawQuery('PRAGMA journal_mode'))
+      .single
+      .values
+      .single;
+  stdout.writeln(
+    'Verified schema=$version integrity=ok journal_mode=$journal: $path',
+  );
 }

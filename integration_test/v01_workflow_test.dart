@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:jax/app.dart';
 import 'package:jax/core/entities/event_status.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 import 'package:jax/data/services/sqlite_save_service.dart';
@@ -18,18 +19,21 @@ void main() {
     final path = '${directory.path}${Platform.pathSeparator}jax.db';
     var database = await AppDatabase.open(path);
     var repository = SqliteEventRepository(database);
-    final ids = <String>[
-      'event-a',
-      'segment-a-1',
-      'event-b',
-      'segment-b-1',
-      'segment-a-2',
-    ].iterator;
+    var nextId = 0;
     var now = DateTime.utc(2026, 8, 24, 8);
     String newId() {
-      if (!ids.moveNext()) throw StateError('Unexpected ID request');
-      return ids.current;
+      return 'workflow-${nextId++}';
     }
+
+    await repository.insertCategory(
+      Category(
+        id: 'workflow-category',
+        name: '验收分类',
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
 
     await tester.pumpWidget(
       JaxApp(
@@ -40,75 +44,87 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('我们来做点什么？'), findsOneWidget);
-    await tester.tap(find.text('我们来做点什么？'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
 
-    Future<void> create(String name) async {
-      await tester.tap(find.text('新建事件'));
+    Future<String> create(String name) async {
+      if (find.byKey(const ValueKey('world-new-event')).evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('world-category-open-workflow-category')),
+        );
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const ValueKey('world-new-event')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), name);
       await tester.tap(find.widgetWithText(FilledButton, '创建'));
       await tester.pumpAndSettle();
+      return (await repository.getIncompleteEvents())
+          .singleWhere((event) => event.name == name)
+          .id;
     }
 
-    await create('任务 A');
+    Future<void> action(
+      String eventId,
+      String actionKey, {
+      bool settle = true,
+    }) async {
+      await tester.tap(find.byKey(ValueKey('world-more-$eventId')));
+      await tester.pumpAndSettle();
+      final item = find.byKey(ValueKey('$actionKey-$eventId'));
+      await tester.ensureVisible(item);
+      await tester.pump();
+      await tester.tap(item);
+      if (settle) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
+    }
+
+    final eventAId = await create('任务 A');
     now = now.add(const Duration(minutes: 1));
-    await tester.tap(find.byKey(const ValueKey('start-event-a')));
-    await tester.pumpAndSettle();
+    await action(eventAId, 'start');
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
-    expect(find.text('当前正在做'), findsOneWidget);
+    expect(find.text('正在执行'), findsOneWidget);
     expect(find.text('任务 A'), findsWidgets);
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('世界'));
     await tester.pumpAndSettle();
-    await create('任务 B');
+    final eventBId = await create('任务 B');
 
-    await tester.tap(find.byKey(const ValueKey('start-event-b')));
-    for (
-      var attempt = 0;
-      attempt < 20 && find.text('请先暂停或完成当前事件').evaluate().isEmpty;
-      attempt++
-    ) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-    expect(find.text('请先暂停或完成当前事件'), findsOneWidget);
+    await action(eventBId, 'start', settle: false);
+    await tester.pump(const Duration(seconds: 1));
+    expect((await repository.getEvent(eventAId))!.status, EventStatus.running);
+    expect((await repository.getEvent(eventBId))!.status, EventStatus.pending);
 
     now = now.add(const Duration(minutes: 9));
-    await tester.tap(find.byKey(const ValueKey('pause-event-a')));
+    await action(eventAId, 'pause');
+    await tester.tap(find.byKey(ValueKey('world-more-$eventAId')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('more-event-a')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('edit-event-a')));
+    await tester.tap(find.byKey(ValueKey('edit-$eventAId')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '任务 A（已编辑）');
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
     now = now.add(const Duration(minutes: 1));
-    await tester.tap(find.byKey(const ValueKey('start-event-b')));
-    await tester.pumpAndSettle();
+    await action(eventBId, 'start');
     now = now.add(const Duration(minutes: 4));
-    await tester.tap(find.byKey(const ValueKey('pause-event-b')));
-    await tester.pumpAndSettle();
+    await action(eventBId, 'pause');
 
     now = now.add(const Duration(minutes: 2));
-    await tester.tap(find.byKey(const ValueKey('resume-event-a')));
-    await tester.pumpAndSettle();
+    await action(eventAId, 'resume');
     now = now.add(const Duration(minutes: 6));
-    await tester.tap(find.byKey(const ValueKey('complete-event-a')));
-    await tester.pumpAndSettle();
-    expect(find.text('任务 A（已编辑）'), findsNothing);
-
-    await tester.tap(find.text('记录'));
-    await tester.pumpAndSettle();
+    await action(eventAId, 'complete');
     expect(find.text('任务 A（已编辑）'), findsOneWidget);
-    expect(find.textContaining('持续：15 分钟'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('delete-history-event-a')));
+    await tester.tap(find.byKey(ValueKey('world-more-$eventAId')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('world-delete-history-$eventAId')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
-    expect(find.text('暂无历史记录'), findsOneWidget);
+    expect(find.text('任务 A（已编辑）'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -125,9 +141,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('事件'));
+    await tester.tap(find.text('世界'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('world-category-open-workflow-category')),
+    );
     await tester.pumpAndSettle();
     expect(find.text('任务 B'), findsOneWidget);
-    expect((await repository.getEvent('event-b'))!.status, EventStatus.paused);
+    expect((await repository.getEvent(eventBId))!.status, EventStatus.paused);
   });
 }

@@ -194,3 +194,11 @@
 - F13.3 Today 只派生计划型 occurrence；日常页显示“按需”并提供开始/恢复，Home 最多显示前四个 active 按需快捷动作。类型切换在 unfinished execution 存在时拒绝，inactive 隐藏快捷入口并保留历史。
 - F13.4 Record 继续统一读取 RoutineExecution/run segments，不建立按需专用历史模型。测试覆盖同日多次 execution、暂停恢复多 segment、global single-running、v11 migration、Today 排除、Home/日常入口及双端 Debug。
 - F12.4 测试覆盖双类型存储、共同分配、重复色、rename/reorder/delete 保色语义、v10 migration、8 色选择器、Record 颜色传递以及全量与双平台 Debug 回归。
+
+## 15. 双端同步 Phase 1：Sync Readiness
+
+- schema v12→v13：沿用现有持久化 UUID `TEXT PRIMARY KEY` 作为 global sync identity；为 Event/Routine segment 与 EventDayPlan 增加 `updated_at_utc`，并以 `created_at_utc` 确定性回填历史数据。
+- 新增 `sync_tombstones(entity_type, entity_id, deleted_at_utc)`；数据库 trigger 捕获显式与级联物理删除，并为所有同步实体兜底刷新 updated time。现有 UI、Core 删除语义和 FK 不改。
+- Sync Model 契约只使用全球 identity 表达 parent/category/owner/execution 关系；Today plan identity 为 `event UUID + JaxDay`。整数 order 在 Phase 2 以 sibling list 为 conflict 单位，不引入 CRDT。
+- 新增只读 `SqliteSyncReadiness`，在未来 snapshot export / apply 前后检查 FK、identity、hierarchy、root/category、order、one-running、open segment、segment range 和 On-demand execution 不变量。
+- Phase 1 不实现 ADB/LAN/Cloud、compare/apply、冲突策略、device ID、change log 或同步 UI。详细契约与延期项见 `docs/sync_readiness.md`。
