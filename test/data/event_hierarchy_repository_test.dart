@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/data/database/app_database.dart';
@@ -9,11 +10,12 @@ void main() {
   late SqliteEventRepository repository;
   final time = DateTime.utc(2026, 8, 25, 10);
 
-  JaxEvent event(String id, {String? parentId}) => JaxEvent(
+  JaxEvent event(String id, {String? parentId, String? categoryId}) => JaxEvent(
     id: id,
     name: id,
     status: EventStatus.pending,
     parentEventId: parentId,
+    categoryId: categoryId,
     createdAt: time,
     updatedAt: time,
   );
@@ -57,6 +59,43 @@ void main() {
       repository.insertEvent(event('child', parentId: 'missing')),
       throwsA(anything),
     );
+  });
+
+  test('repository rejects hierarchy across effective Categories', () async {
+    for (final category in [
+      Category(
+        id: 'dev',
+        name: '开发',
+        sortOrder: 0,
+        createdAt: time,
+        updatedAt: time,
+      ),
+      Category(
+        id: 'research',
+        name: '科研',
+        sortOrder: 1,
+        createdAt: time,
+        updatedAt: time,
+      ),
+    ]) {
+      await repository.insertCategory(category);
+    }
+    final devRoot = event('dev-root', categoryId: 'dev');
+    final devChild = event('dev-child', parentId: devRoot.id);
+    final researchRoot = event('research-root', categoryId: 'research');
+    await repository.insertEvent(devRoot);
+    await repository.insertEvent(devChild);
+    await repository.insertEvent(researchRoot);
+
+    await expectLater(
+      repository.updateParent(devChild.id, researchRoot.id, time),
+      throwsA(isA<StateError>()),
+    );
+    expect((await repository.getEvent(devChild.id))?.parentEventId, devRoot.id);
+    await repository.updateParent(devChild.id, null, time);
+    final detached = await repository.getEvent(devChild.id);
+    expect(detached?.parentEventId, isNull);
+    expect(detached?.categoryId, 'dev');
   });
 
   test(

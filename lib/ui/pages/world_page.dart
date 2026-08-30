@@ -483,11 +483,12 @@ class _WorldPageState extends State<WorldPage> {
         child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
       ),
       if (e.parentEventId == null)
-        const PopupMenuItem(
+        PopupMenuItem(
+          key: ValueKey('world-move-category-${e.id}'),
           value: _WorldAction.category,
-          child: ListTile(
+          child: const ListTile(
             leading: Icon(Icons.folder_outlined),
-            title: Text('设置分类'),
+            title: Text('移动到分类…'),
           ),
         ),
       if (e.status == EventStatus.completed && !child)
@@ -853,7 +854,7 @@ class _WorldPageState extends State<WorldPage> {
     final id = await showDialog<String?>(
       context: c,
       builder: (dialogContext) => SimpleDialog(
-        title: const Text('设置分类'),
+        title: const Text('移动到分类'),
         children: [
           for (final x in widget.controller.categories)
             SimpleDialogOption(

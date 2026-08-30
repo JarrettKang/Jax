@@ -1,4 +1,5 @@
 import '../entities/event_status.dart';
+import '../entities/jax_event.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
 import 'create_event.dart';
@@ -20,6 +21,11 @@ class UpdateEventParent {
     }
     final parent = await repository.getEvent(parentEventId);
     if (parent == null) throw const DomainFailure('上层事件不存在');
+    final eventCategoryId = await _effectiveCategoryId(event);
+    final parentCategoryId = await _effectiveCategoryId(parent);
+    if (eventCategoryId != parentCategoryId) {
+      throw const DomainFailure('只能在同一分类内调整事件层级');
+    }
     if (event.status != EventStatus.completed &&
         parent.status == EventStatus.completed) {
       throw const DomainFailure('未完成事件不能归属到已完成的上层事件');
@@ -35,5 +41,16 @@ class UpdateEventParent {
       ancestor = next;
     }
     await repository.updateParent(eventId, parentEventId, now().toUtc());
+  }
+
+  Future<String?> _effectiveCategoryId(JaxEvent event) async {
+    var current = event;
+    final visited = <String>{};
+    while (current.parentEventId != null && visited.add(current.id)) {
+      final parent = await repository.getParent(current.id);
+      if (parent == null) break;
+      current = parent;
+    }
+    return current.categoryId;
   }
 }

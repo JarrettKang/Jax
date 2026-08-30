@@ -11,11 +11,17 @@ import '../support/memory_repository.dart';
 
 void main() {
   final time = DateTime.utc(2026, 8, 25, 12);
-  JaxEvent event(String id, EventStatus status, {String? parent}) => JaxEvent(
+  JaxEvent event(
+    String id,
+    EventStatus status, {
+    String? parent,
+    String? categoryId,
+  }) => JaxEvent(
     id: id,
     name: id,
     status: status,
     parentEventId: parent,
+    categoryId: categoryId,
     createdAt: time,
     updatedAt: time,
   );
@@ -48,6 +54,47 @@ void main() {
     await expectLater(update('a', 'c'), throwsA(isA<DomainFailure>()));
     expect((await repository.getEvent('a'))?.parentEventId, isNull);
   });
+
+  test(
+    'candidate and mutation scope use the effective root Category',
+    () async {
+      final repository = MemoryRepository([
+        event('dev-root', EventStatus.pending, categoryId: 'dev'),
+        event('dev-child', EventStatus.pending, parent: 'dev-root'),
+        event('dev-peer', EventStatus.pending, categoryId: 'dev'),
+        event('research-root', EventStatus.pending, categoryId: 'research'),
+        event('research-child', EventStatus.pending, parent: 'research-root'),
+        event('loose-root', EventStatus.pending),
+        event('loose-child', EventStatus.pending, parent: 'loose-root'),
+      ]);
+      final service = EventHierarchyService(repository);
+      final update = UpdateEventParent(repository: repository, now: () => time);
+
+      expect(
+        (await service.parentCandidates('dev-child')).map((event) => event.id),
+        containsAll(['dev-root', 'dev-peer']),
+      );
+      expect(
+        (await service.parentCandidates('dev-child')).map((event) => event.id),
+        isNot(contains(anyOf('research-root', 'research-child'))),
+      );
+      expect(
+        (await service.parentCandidates('research-child'))
+            .map((event) => event.id),
+        isNot(contains(anyOf('loose-root', 'loose-child'))),
+      );
+      await expectLater(
+        update('dev-child', 'research-root'),
+        throwsA(
+          isA<DomainFailure>().having(
+            (failure) => failure.message,
+            'message',
+            '只能在同一分类内调整事件层级',
+          ),
+        ),
+      );
+    },
+  );
 
   test('candidate ranges respect status and remove cycle candidates', () async {
     final repository = MemoryRepository([

@@ -121,23 +121,41 @@ class _EventHierarchyDialogState extends State<_EventHierarchyDialog> {
   );
 
   Future<void> _chooseParent(JaxEvent? existingParent) async {
-    final candidates = await widget.controller.parentCandidates(_event.id);
+    final legalIds = (await widget.controller.parentCandidates(_event.id))
+        .map((event) => event.id)
+        .toSet();
     if (!mounted) return;
-    final selected = await _choose('选择上层事件', candidates);
-    if (selected == null || selected.id == existingParent?.id || !mounted) {
+    final selected = await _choose(
+      title: '选择上层事件',
+      mode: _PickerMode.parent,
+      legalIds: legalIds,
+      existingParent: existingParent,
+    );
+    if (selected == null || !mounted) return;
+    if (selected.removeParent) {
+      if (existingParent != null) await _setParent(null);
       return;
     }
+    final event = selected.event!;
+    if (event.id == existingParent?.id) return;
     if (existingParent != null &&
-        !await _confirmMove('将“${_event.name}”移动到“${selected.name}”下吗？')) {
+        !await _confirmMove('将“${_event.name}”移动到“${event.name}”下吗？')) {
       return;
     }
-    await _setParent(selected.id);
+    await _setParent(event.id);
   }
 
   Future<void> _chooseChild() async {
-    final candidates = await widget.controller.childCandidates(_event.id);
+    final legalIds = (await widget.controller.childCandidates(_event.id))
+        .map((event) => event.id)
+        .toSet();
     if (!mounted) return;
-    final selected = await _choose('选择下层事件', candidates);
+    final result = await _choose(
+      title: '选择下层事件',
+      mode: _PickerMode.child,
+      legalIds: legalIds,
+    );
+    final selected = result?.event;
     if (selected == null || !mounted) return;
     final existingParent = await widget.controller.parentOf(selected.id);
     if (!mounted) return;
@@ -153,26 +171,161 @@ class _EventHierarchyDialogState extends State<_EventHierarchyDialog> {
     if (error == null) _refresh();
   }
 
-  Future<JaxEvent?> _choose(String title, List<JaxEvent> candidates) {
-    return showDialog<JaxEvent>(
+  Future<_PickerResult?> _choose({
+    required String title,
+    required _PickerMode mode,
+    required Set<String> legalIds,
+    JaxEvent? existingParent,
+  }) {
+    final candidates = _categoryTree();
+    final directChildren = widget.controller.worldEvents
+        .where((event) => event.parentEventId == _event.id)
+        .map((event) => event.id)
+        .toSet();
+    return showDialog<_PickerResult>(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => AlertDialog(
         title: Text(title),
-        children: candidates.isEmpty
-            ? const [
-                Padding(padding: EdgeInsets.all(24), child: Text('没有可选择的事件')),
-              ]
-            : candidates
-                  .map(
-                    (candidate) => SimpleDialogOption(
-                      key: ValueKey('hierarchy-candidate-${candidate.id}'),
-                      onPressed: () => Navigator.pop(context, candidate),
-                      child: Text(candidate.name),
+        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        content: SizedBox(
+          width: 520,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * .62,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                if (mode == _PickerMode.parent) ...[
+                  ListTile(
+                    key: const ValueKey('hierarchy-no-parent'),
+                    leading: const Icon(Icons.radio_button_unchecked),
+                    title: const Text('无上层'),
+                    trailing: existingParent == null
+                        ? const Text('当前', style: TextStyle(fontSize: 12))
+                        : null,
+                    onTap: () => Navigator.pop(
+                      context,
+                      const _PickerResult.removeParent(),
                     ),
-                  )
-                  .toList(),
+                  ),
+                  const Divider(),
+                ],
+                for (final candidate in candidates)
+                  _candidateTile(
+                    context,
+                    candidate,
+                    mode: mode,
+                    enabled: legalIds.contains(candidate.id),
+                    existingParent: existingParent,
+                    directChildren: directChildren,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ],
       ),
     );
+  }
+
+  List<JaxEvent> _categoryTree() {
+    final currentCategory = _effectiveCategoryId(_event);
+    return widget.controller.worldEvents
+        .where((event) => _effectiveCategoryId(event) == currentCategory)
+        .toList(growable: false);
+  }
+
+  String? _effectiveCategoryId(JaxEvent event) {
+    final byId = {
+      for (final candidate in widget.controller.worldEvents)
+        candidate.id: candidate,
+    };
+    var root = event;
+    final visited = <String>{};
+    while (root.parentEventId != null && visited.add(root.id)) {
+      final parent = byId[root.parentEventId];
+      if (parent == null) break;
+      root = parent;
+    }
+    return root.categoryId;
+  }
+
+  Widget _candidateTile(
+    BuildContext context,
+    JaxEvent candidate, {
+    required _PickerMode mode,
+    required bool enabled,
+    required JaxEvent? existingParent,
+    required Set<String> directChildren,
+  }) {
+    final self = candidate.id == _event.id;
+    final currentParent = candidate.id == existingParent?.id;
+    final currentChild =
+        mode == _PickerMode.child && directChildren.contains(candidate.id);
+    final relation = self
+        ? '当前事件'
+        : currentParent
+        ? '当前上层'
+        : currentChild
+        ? '当前下层'
+        : !enabled
+        ? mode == _PickerMode.parent && _isUnder(candidate, _event.id)
+              ? '下层，不能作为上层'
+              : mode == _PickerMode.child && _isUnder(_event, candidate.id)
+              ? '上层，不能作为下层'
+              : '当前状态不可选'
+        : null;
+    final depth = widget.controller.hierarchyDepthFor(candidate.id).clamp(0, 6);
+    return Padding(
+      padding: EdgeInsets.only(left: depth * 18.0),
+      child: ListTile(
+        key: ValueKey('hierarchy-candidate-${candidate.id}'),
+        dense: true,
+        enabled: enabled,
+        leading: Icon(
+          depth == 0
+              ? Icons.account_tree_outlined
+              : Icons.subdirectory_arrow_right,
+          size: 18,
+        ),
+        title: Text(
+          candidate.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: relation == null
+            ? null
+            : Text(
+                relation,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+        onTap: enabled
+            ? () => Navigator.pop(context, _PickerResult.event(candidate))
+            : null,
+      ),
+    );
+  }
+
+  bool _isUnder(JaxEvent event, String ancestorId) {
+    final byId = {
+      for (final candidate in widget.controller.worldEvents)
+        candidate.id: candidate,
+    };
+    var parentId = event.parentEventId;
+    final visited = <String>{};
+    while (parentId != null && visited.add(parentId)) {
+      if (parentId == ancestorId) return true;
+      parentId = byId[parentId]?.parentEventId;
+    }
+    return false;
   }
 
   Future<bool> _confirmMove(String message) async =>
@@ -221,4 +374,14 @@ class _HierarchyViewData {
 
   final JaxEvent? parent;
   final List<JaxEvent> children;
+}
+
+enum _PickerMode { parent, child }
+
+class _PickerResult {
+  const _PickerResult.event(this.event) : removeParent = false;
+  const _PickerResult.removeParent() : event = null, removeParent = true;
+
+  final JaxEvent? event;
+  final bool removeParent;
 }

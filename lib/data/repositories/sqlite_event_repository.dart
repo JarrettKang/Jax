@@ -338,6 +338,17 @@ class SqliteEventRepository
           [parentEventId, eventId],
         );
         if (cycle.isNotEmpty) throw StateError('Hierarchy cycle detected');
+        final childRootCategory = await _effectiveCategoryId(
+          transaction,
+          eventId,
+        );
+        final parentRootCategory = await _effectiveCategoryId(
+          transaction,
+          parentEventId,
+        );
+        if (childRootCategory != parentRootCategory) {
+          throw StateError('Hierarchy cannot cross categories');
+        }
       }
       String? categoryId;
       if (parentEventId == null) {
@@ -367,6 +378,19 @@ class SqliteEventRepository
       );
       if (count != 1) throw StateError('Event not found: $eventId');
     });
+  }
+
+  Future<String?> _effectiveCategoryId(dynamic executor, String eventId) async {
+    final root = await executor.rawQuery(
+      '''WITH RECURSIVE ancestors(id, parent_event_id, category_id) AS (
+        SELECT id, parent_event_id, category_id FROM events WHERE id = ?
+        UNION ALL
+        SELECT e.id, e.parent_event_id, e.category_id FROM events e
+        JOIN ancestors a ON e.id = a.parent_event_id
+      ) SELECT category_id FROM ancestors WHERE parent_event_id IS NULL LIMIT 1''',
+      [eventId],
+    );
+    return root.isEmpty ? null : root.single['category_id'] as String?;
   }
 
   @override

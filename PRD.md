@@ -237,7 +237,8 @@ F1 验收须覆盖弱化问候、Running Event、Running Routine、真实持续�
 
 - 没有直接上层事件的 Event 是顶级事件；每个 Event 最多一个直接上层事件，可以有多个直接下层事件，层级深度不限且始终必须无环。
 - 层级只保存当前 Event 的直接上层事件 ID；下层事件由该关系查询，不保存重复列表。设置新上层或添加下层均表示移动已有 Event，不复制或新建 Event；解除关系只使下层成为顶级事件，不删除 Event、run_segments 或历史事实。
-- 事件和记录中的 Event 均可查看、设置、移动和解除上下层关系。未完成 Event 的上层候选只能是未完成 Event、下层候选可以是任意 Event；completed Event 的上层候选可以是任意 Event、下层候选只能是 completed Event。候选必须排除自身、后代和其他会形成非法关系的 Event。
+- 事件和记录中的 Event 均可查看、设置、移动和解除上下层关系。层级编辑只能在当前 effective Category（即 root Event 直接拥有、descendants 继承的 Category）内进行，“未分类”虚拟分组同样独立限定范围。候选器按 World Category detail 的 root/sibling/recursive 稳定顺序展示轻量 Event tree，并标记当前事件、当前上层和当前直接下层。未完成 Event 的上层候选只能是未完成 Event、completed Event 的下层候选只能是 completed Event；自身、后代、祖先或其他会形成非法关系的 Event 保留在树中但禁用。Parent picker 顶部固定提供“无上层”，解除后 Event 成为原 Category 的 root。
+- 修改上下层不承担跨 Category 移动。root Event 通过更多菜单中的低频“移动到分类…”独立修改 Category；child Event 需先解除上层成为 root，再移动到其他分类。
 - completed Event 仍是原 Event，调整层级只改变时间向哪些上层聚合，不修改其执行时间事实。
 
 ### 10.2 执行与状态

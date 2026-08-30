@@ -9,30 +9,47 @@ class EventHierarchyService {
 
   Future<List<JaxEvent>> parentCandidates(String eventId) async {
     final current = await _required(eventId);
+    final categoryId = await _effectiveCategoryId(current);
     final descendants = await _descendantIds(eventId);
-    return (await _allEvents())
-        .where((event) => event.id != eventId)
-        .where((event) => !descendants.contains(event.id))
-        .where(
-          (event) =>
-              current.status == EventStatus.completed ||
-              event.status != EventStatus.completed,
-        )
-        .toList(growable: false);
+    final result = <JaxEvent>[];
+    for (final event in await _allEvents()) {
+      if (await _effectiveCategoryId(event) != categoryId) continue;
+      if (event.id == eventId || descendants.contains(event.id)) continue;
+      if (current.status != EventStatus.completed &&
+          event.status == EventStatus.completed) {
+        continue;
+      }
+      result.add(event);
+    }
+    return result;
   }
 
   Future<List<JaxEvent>> childCandidates(String eventId) async {
     final current = await _required(eventId);
+    final categoryId = await _effectiveCategoryId(current);
     final ancestors = await _ancestorIds(eventId);
-    return (await _allEvents())
-        .where((event) => event.id != eventId)
-        .where((event) => !ancestors.contains(event.id))
-        .where(
-          (event) =>
-              current.status != EventStatus.completed ||
-              event.status == EventStatus.completed,
-        )
-        .toList(growable: false);
+    final result = <JaxEvent>[];
+    for (final event in await _allEvents()) {
+      if (await _effectiveCategoryId(event) != categoryId) continue;
+      if (event.id == eventId || ancestors.contains(event.id)) continue;
+      if (current.status == EventStatus.completed &&
+          event.status != EventStatus.completed) {
+        continue;
+      }
+      result.add(event);
+    }
+    return result;
+  }
+
+  Future<String?> _effectiveCategoryId(JaxEvent event) async {
+    var root = event;
+    final visited = <String>{};
+    while (root.parentEventId != null && visited.add(root.id)) {
+      final parent = await repository.getParent(root.id);
+      if (parent == null) break;
+      root = parent;
+    }
+    return root.categoryId;
   }
 
   Future<Set<String>> _descendantIds(String eventId) async {
