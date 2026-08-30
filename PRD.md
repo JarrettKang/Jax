@@ -334,7 +334,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 11. v0.1 不包含的内容
 
 - Windows 与 Android 之间的数据同步
-- 开发阶段的 Sync Preview 仅提供只读差异与冲突预览，不代表 Jax 已支持正式双端同步；任何 Apply、回滚和 baseline 提交仍不在当前产品范围。
+- Windows Debug 开发工具支持通过 ADB 完成显式的连接检查、Analyze、冲突解决、Dry Run 与受保护双端 Apply，并提供 backup、rollback、final verification 和 baseline。该能力仅面向开发阶段，不代表正式消费者级或 LAN 同步已经完成。
 - 服务器、账号和登录系统
 - 云备份、数据导入或数据导出
 - 循环事件、子任务、提醒、标签、分类和优先级

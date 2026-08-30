@@ -220,3 +220,10 @@
 - Orchestrator 在两端 backup 均成功后依次执行 Windows/Android copy transaction、readiness/invariant validation 与最终 canonical snapshot verification；任一步失败恢复两端并核对执行前 fingerprint，恢复失败显式报告 critical rollback。
 - baseline 接口只在双端验证完全成功后调用；辅助 baseline 写失败保留已验证的业务结果并单独报告。当前只有内存测试 store，不写真实 baseline。
 - 本阶段 Apply API 由 `FixtureSyncDatabase` 强制限制在系统临时目录；已在 fixture 及 Phase 2A 真实形状数据库的独立临时副本上演练，不向真实 Windows/Android DB 写入，不开放 UI Apply。Phase 2B-2 才处理真实授权、传输、恢复 UX 和生产 baseline。
+
+## 18. 双端同步 Phase 2B-2：Standalone ADB Debug Sync
+
+- Windows Debug 顶栏提供 Developer Sync 入口，并切换到不打开业务 DB 的独立进程；用户可在 UI 内完成设备检查、显式设备选择、Analyze、差异查看、冲突选择、Dry Run、二次确认、Apply 进度和结果查看。
+- UI 通过 Coordinator 调用 ADB Debug transport；正常路径不要求环境变量、terminal、Dart tool、ADB 命令或 JSON 编辑。既有 CLI 保留用于诊断和回归。
+- 真实 Apply 继续强制 stale fingerprint、单 session lock、双端一致性 backup、entity-level transaction、双端 readiness/invariant/final fingerprint 验证、rollback 和 success-only baseline；baseline 写失败不回滚已验证成功的业务事实。
+- 当前仍依赖 Android 开发者模式、USB 调试、ADB 和 Debug `run-as`。Phase 3 仅替换连接/transport 层，不重写 snapshot、compare、resolution、mutation 或 conflict UI。详见 `docs/sync_phase2b2.md`。
