@@ -208,7 +208,7 @@
 
 ## 16. 双端同步 Phase 2A：Read / Compare / Conflict Preview
 
-- Phase 2A 以独立 `syncProtocolVersion = 1` 建立确定性 `SyncSnapshot`：v13 SQLite Adapter 只读导出全部同步业务实体、tombstone、稳定逻辑列表及 readiness warning，不包含本地 UI preference。
+- Phase 2A 最初以独立 `syncProtocolVersion = 1` 建立确定性 `SyncSnapshot`：v13 SQLite Adapter 只读导出当时全部同步业务实体、tombstone、稳定逻辑列表及 readiness warning，不包含本地 UI preference；Planning P1 已将当前协议升级为 v2。
 - Compare Engine 支持 global UUID matching、字段 diff、missing/deleted 区分、无 baseline 的 UnknownHistory，以及 Last Successful Sync Snapshot 存在时的 Base/Windows/Android 三方比较；`updatedAt` 只作证据，不默认 LWW。
 - order 以 Category、Event sibling、Routine Category、分类内 Routine 和单日 Today 的完整 global-ID list 比较；不同 UUID 的独立新增不误报 reorder，shared item 相对顺序不同才产生 ListConflict。
 - Sync Plan 区分 auto-mergeable、entity/field/hierarchy/delete-modify、list 和 global-running/open-segment/segment-overlap invariant conflict；Debug Preview 的电脑/手机选择仅存在内存，不调用 Apply。
@@ -232,3 +232,15 @@
 - Standalone Sync 持久化路径统一由 device-local `SyncStorageRoot` 解析；未配置时兼容 `%APPDATA%\Jax` 旧 baseline/backup，用户可在 UI 中以 copy→verify→switch→cleanup 安全迁移至自选目录，迁移不重建 baseline 也不改变 fingerprint。
 - backup 默认按最近 5 个 session 整体保留（可设 1–50），仅在 session 终态后清理；当前 recovery source 不可删除，`CRITICAL_ROLLBACK_FAILURE` 现场永不自动清理。路径配置仅保留在 Windows 本机，不进入 snapshot 或 Android。
 - 当前仍依赖 Android 开发者模式、USB 调试、ADB 和 Debug `run-as`。Phase 3 仅替换连接/transport 层，不重写 snapshot、compare、resolution、mutation 或 conflict UI。详见 `docs/sync_phase2b2.md`。
+
+## 19. Planning Phase P1：WorldNode shadow foundation
+
+- schema v13→v14 新增 `world_nodes` 与 `legacy_event_world_node_links`。合法 v13 数据库在单次 SQLite upgrade transaction 内先验证 legacy hierarchy，再按拓扑顺序完成一比一 backfill；失败由 upgrade transaction 整体回滚。
+- migration 使用固定 Jax namespace 的 UUID v5，以 `jax:legacy-event:<legacy UUID>` 为 name，保证 Windows/Android 对相同 Event 生成相同 WorldNode。重复打开和显式 rerun 使用 deterministic primary key、unique mapping 与映射复核保证幂等。
+- root WorldNode 复制 direct World Category，child 的 direct category 为 null；root order 以 Category 为 scope，child order 以 parent 为 scope，均按旧 Event 实际显示顺序归一化为连续 index。
+- Core/Data 新增独立 WorldNode entity、repository 与 SQLite implementation；支持读取、创建/更新、状态修改、reparent 和 scoped reorder，但 P1 不接 UI。迁移后的 WorldNode 与 Event 不做状态或字段双向联动。
+- Sync contract 升级为 protocol 2，完整覆盖 WorldNode、legacy mapping、tombstone、hierarchy/category 和 `worldNodeSiblings` scoped list。snapshot、compare、resolved plan、mutation apply、readiness、rollback 与 stale fingerprint 沿用 Phase 2 引擎。
+- protocol 1 persisted baseline 读取时显式 normalized：从 baseline 中的 live legacy Event deterministic 派生 WorldNode/mapping/list，再作为 protocol 2 baseline 参与三方比较，避免双端相同迁移产生 false Only Windows / Only Android。
+- rollout 顺序固定为：只读统计 → 每端独立一致性备份 → 副本 migration/report → 自动测试和 Debug build → 每端真实 migration/report。Android 未连接时禁止用旧备份冒充本轮实机结果。
+- P1 保持 World UI、Today/Home、Record 与全部 legacy Event execution truth source 不变，不创建 Plan/PlanItem。后续依次为 P2 Planning Core、P3 Planning → Event → Today，之后才正式切换 World UI。
+- 详细 schema、映射、Sync 与验收契约见 `docs/planning_phase_p1.md`。

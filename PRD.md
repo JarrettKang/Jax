@@ -389,3 +389,13 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 真实 Event/Routine segment 不按对象聚合或合并。跨小时只生成持有同一 segment identity 的 rendering fragments；点击任意 fragment 显示完整真实 segment，而非该小时切片。
 - 跨 JaxDay segment 仅按窗口 overlap 绘制，open segment 绘制至当前时间；底层 segment 不拆分，统计和历史事实来源不变。
 - Category 颜色 identity 区分 Event 与 Routine 来源；窄 fragment 允许扩大横向 hit area，但可视宽度不得失真。第一版只提供 tooltip/tap 信息与既有编辑入口，不支持图形化拖动或 resize。
+
+## 15. Planning 重构 Phase P1：WorldNode shadow foundation
+
+- `WorldNode` 表示长期、稳定、值得保留的关键节点，不是可执行 Event。它只有 `inProgress` / `completed` 两种结构状态，不进入 Today，不拥有 running/paused/waiting，不产生 RunSegment，也不参与 Record 统计。
+- P1 将每个迁移时存在的 legacy World Event 一比一生成同名 WorldNode，使用固定 namespace 的 UUID v5 从 legacy Event UUID 确定性派生 identity；层级、Category 内 root order、child sibling order 与 root direct Category 一次性复制，child 继续通过 root 继承 Category。
+- `LegacyEventWorldNodeLink` 独立保存 legacy Event 与迁移节点的一对一关系。原 Event、EventDayPlan、RunSegment、状态、时间戳与执行历史永久保留；WorldNode 永远不能成为 RunSegment owner。
+- 初始状态只映射一次：completed Event → completed WorldNode，其余 Event 状态 → inProgress WorldNode。迁移完成后两者状态和编辑完全解耦，任何一侧完成、恢复、改名或移动都不自动修改另一侧。
+- P1 是 shadow migration。现有 World、Today、Home、Record 和 legacy Event 工作流继续使用 Event 数据源，unfinished legacy Event 保持可达并自然耗尽；正式 World UI 切换要等 P2 Planning Core 与 P3 Plan → Event → Today 完成。
+- P1 不创建 Plan 或 PlanItem，不推断旧 Event 是计划、步骤还是关键节点，也不改变 Event completion hierarchy、global one-running、Routine 或手工执行记录语义。
+- WorldNode、Legacy link、tombstone 与 Category/parent/scoped-order 进入 Sync protocol 2。旧 protocol 1 baseline 在读取时按同一确定性派生规则显式归一化为 protocol 2，WorldNode order 继续使用完整 scoped list 冲突，不以逐行 `updatedAt` 解决。

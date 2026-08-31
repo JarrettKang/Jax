@@ -11,11 +11,13 @@ tombstones, baselines, order values, or conflict choices. The ADB PowerShell
 tool only acquires a stopped Debug app's database/WAL files and restarts the app
 if it was running. The adapter and compare engine contain no ADB code.
 
-## Snapshot protocol 1
+## Snapshot protocol history
 
-`syncProtocolVersion = 1` is independent from SQLite schema v13. A future
-schema may continue to emit protocol 1 if an adapter can map every business
-fact without loss. Unknown protocol versions stop comparison.
+`syncProtocolVersion = 1` was introduced independently from SQLite schema v13.
+Planning P1 adds WorldNode and upgrades the current contract to protocol 2 with
+SQLite schema v14. Unknown protocol versions stop comparison. A persisted
+protocol 1 baseline is the sole compatibility exception: it is explicitly
+normalized to protocol 2 by the deterministic legacy Event → WorldNode rule.
 
 `SyncSnapshot` contains schema/protocol versions, export UTC time, readiness
 warnings, sorted records, and sorted logical lists. Records cover EventCategory,
@@ -93,5 +95,5 @@ launching Jax.
 - Tombstone acknowledgement, retention, and garbage collection.
 - Final conflict policy and production navigation.
 
-LAN discovery/authorization remains Phase 3 and will reuse protocol 1,
+LAN discovery/authorization remains Phase 3 and will reuse the current protocol,
 snapshots, comparison, and plans.
