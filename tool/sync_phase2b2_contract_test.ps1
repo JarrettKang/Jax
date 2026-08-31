@@ -25,6 +25,14 @@ $required = @{
   'reports critical rollback failure' = 'CRITICAL_ROLLBACK_FAILURE'
   'writes structured IPC as UTF-8 without BOM' = '[Text.UTF8Encoding]::new($false)'
   'reads structured JSON explicitly as UTF-8' = '-Raw -Encoding UTF8 | ConvertFrom-Json'
+  'loads the device-local storage configuration' = 'Jax\sync_storage.json'
+  'derives the baseline from storage root' = "Join-Path `$StorageRoot 'baseline\last_successful_sync.json'"
+  'derives backups from storage root' = "Join-Path `$StorageRoot 'backups'"
+  'writes session output under storage root' = "Join-Path `$StorageRoot 'sessions'"
+  'places the active lock under storage root' = "Join-Path `$StorageRoot '.active_session.lock'"
+  'writes terminal backup metadata' = "Join-Path `$backupDirectory 'metadata.json'"
+  'protects critical rollback evidence' = "candidateStatus -eq 'CRITICAL_ROLLBACK_FAILURE'"
+  'cleans backup sessions only after terminal status' = 'Complete-BackupSession $script:report.status $true'
 }
 foreach ($entry in $required.GetEnumerator()) {
   if (-not $content.Contains($entry.Value)) { throw "Missing Phase 2B-2 contract: $($entry.Key)" }

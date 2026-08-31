@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/sync/sync_compare_engine.dart';
 import 'package:jax/core/sync/sync_contract.dart';
+import 'package:jax/data/sync/sync_storage_service.dart';
 import 'package:jax/data/sync/windows_debug_sync_coordinator.dart';
 
 void main() {
@@ -81,25 +82,31 @@ void main() {
       );
       File('${tool.path}${Platform.pathSeparator}sync_phase2b2.ps1')
           .writeAsStringSync(r'''
-param([string]$Action,[string]$Device,[int]$KeepWindowsProcessId,[switch]$NoLaunchPreview,[string]$StatusPath,[string]$ResultPath)
+param([string]$Action,[string]$Device,[int]$KeepWindowsProcessId,[switch]$NoLaunchPreview,[string]$StatusPath,[string]$ResultPath,[string]$StorageRoot,[int]$StorageLayoutVersion,[int]$BackupRetention)
 $utf8 = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8
 Write-Output ([string]([char]0x68C0)+[char]0x67E5+[char]0x8D85+[char]0x7B97)
-[IO.File]::WriteAllText($ResultPath,[IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\fixtures\report.json'),$utf8),$utf8)
+$report = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\fixtures\report.json'),$utf8) | ConvertFrom-Json
+$report | Add-Member -NotePropertyName storageRoot -NotePropertyValue $StorageRoot
+[IO.File]::WriteAllText($ResultPath,($report | ConvertTo-Json -Depth 20),$utf8)
 ''');
-      final analysis = await WindowsDebugSyncCoordinator(projectRoot: root.path)
-          .analyze('real-device', onStage: (_) {});
+      final storageService = SyncStorageService(appDataRoot: root.path);
+      final analysis = await WindowsDebugSyncCoordinator(
+        projectRoot: root.path,
+        storageService: storageService,
+      ).analyze('real-device', onStage: (_) {});
       expect(analysis.plan.manualConflicts.single.title, '优化界面和操作');
       expect(
         analysis.windowsSnapshot.records.map((r) => r.payload['name']),
         contains('检查超算'),
       );
-      final resultBytes =
-          Directory('${root.path}${Platform.pathSeparator}.debug_snapshots')
-              .listSync(recursive: true)
-              .whereType<File>()
-              .firstWhere((file) => file.path.endsWith('result.json'))
-              .readAsBytesSync();
+      final settings = await storageService.load();
+      expect(analysis.report['storageRoot'], settings.root);
+      final resultBytes = Directory(settings.sessionsPath)
+          .listSync(recursive: true)
+          .whereType<File>()
+          .firstWhere((file) => file.path.endsWith('result.json'))
+          .readAsBytesSync();
       expect(resultBytes.take(3), isNot([0xEF, 0xBB, 0xBF]));
       expect(() => utf8.decode(resultBytes), returnsNormally);
     },

@@ -4,6 +4,7 @@ import 'package:jax/core/sync/resolved_sync_plan.dart';
 import 'package:jax/core/sync/sync_compare_engine.dart';
 import 'package:jax/core/sync/sync_contract.dart';
 import 'package:jax/data/sync/windows_debug_sync_coordinator.dart';
+import 'package:jax/data/sync/sync_storage_service.dart';
 import 'package:jax/ui/pages/debug_sync_page.dart';
 
 void main() {
@@ -16,6 +17,9 @@ void main() {
       ),
     );
     await tester.pumpWidget(_app(coordinator));
+    await tester.pumpAndSettle();
+    expect(find.text('同步数据存储位置'), findsOneWidget);
+    expect(find.text(r'C:\Users\test\AppData\Roaming\Jax'), findsOneWidget);
     await tester.tap(find.text('检查连接'));
     await tester.pumpAndSettle();
     expect(find.textContaining('未检测到设备'), findsOneWidget);
@@ -43,6 +47,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sync Analysis'), findsOneWidget);
     expect(find.textContaining('Baseline：尚未建立'), findsOneWidget);
+    await tester.tap(find.text('同步数据存储位置'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '更改位置'))
+          .onPressed,
+      isNull,
+    );
     expect(coordinator.analyzeCalls, 1);
   });
 
@@ -99,6 +111,32 @@ class _FakeCoordinator implements DebugSyncCoordinator {
   Future<DebugSyncConnection> inspectDevices() async => connection;
   @override
   Future<String?> verifyDevice(String serial) async => null;
+
+  @override
+  Future<SyncStorageSettings> loadStorage() async => const SyncStorageSettings(
+    root: r'C:\Users\test\AppData\Roaming\Jax',
+    layoutVersion: 0,
+    backupRetention: 5,
+  );
+
+  @override
+  Future<SyncStorageInventory> storageInventory(
+    SyncStorageSettings settings,
+  ) async => const SyncStorageInventory(
+    baselineExists: true,
+    backupSessions: 1,
+    totalBytes: 1024,
+  );
+
+  @override
+  Future<String?> chooseStorageDirectory() async => null;
+  @override
+  Future<SyncStorageMigrationResult> migrateStorage(String destination) =>
+      throw UnimplementedError();
+  @override
+  Future<void> updateBackupRetention(int count) async {}
+  @override
+  Future<void> openStorageFolder() async {}
 
   @override
   Future<DebugSyncAnalysis> analyze(
