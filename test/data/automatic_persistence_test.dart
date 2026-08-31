@@ -4,10 +4,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/use_cases/complete_event.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 
 void main() {
+  test(
+    'corrected completion atomically persists the event and original segment',
+    () async {
+      final database = await AppDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = SqliteEventRepository(database);
+      final startedAt = DateTime.utc(2026, 8, 24, 10);
+      final now = DateTime.utc(2026, 8, 24, 12, 30);
+      final correctedEnd = DateTime.utc(2026, 8, 24, 12);
+      final event = JaxEvent(
+        id: 'forgot-to-stop',
+        name: '忘停了',
+        status: EventStatus.running,
+        firstStartedAt: startedAt,
+        createdAt: startedAt,
+        updatedAt: startedAt,
+      );
+      final segment = RunSegment(
+        id: 'original-open-segment',
+        eventId: event.id,
+        startedAt: startedAt,
+        createdAt: startedAt,
+      );
+      await repository.insertEvent(event.copyWith(status: EventStatus.pending));
+      await repository.startEvent(event, segment);
+
+      await CompleteEvent(repository: repository, now: () => now)(
+        event.id,
+        endTime: correctedEnd,
+      );
+
+      final persistedEvent = await repository.getEvent(event.id);
+      final persistedSegments = await repository.getRunSegments(event.id);
+      expect(persistedEvent!.status, EventStatus.completed);
+      expect(persistedEvent.completedAt, correctedEnd);
+      expect(persistedSegments, hasLength(1));
+      expect(persistedSegments.single.id, segment.id);
+      expect(persistedSegments.single.startedAt, startedAt);
+      expect(persistedSegments.single.endedAt, correctedEnd);
+    },
+  );
+
   test(
     'restores incomplete events, history, and segments after reopen',
     () async {

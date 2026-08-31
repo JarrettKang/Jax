@@ -290,4 +290,57 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
+
+  test(
+    'corrected Routine completion closes only its original segment',
+    () async {
+      var now = DateTime.utc(2026, 8, 31, 12, 30);
+      final start = DateTime.utc(2026, 8, 31, 10);
+      final corrected = DateTime.utc(2026, 8, 31, 12);
+      final repo = MemoryRepository()
+        ..routines.add(
+          Routine(
+            id: 'routine',
+            name: '晚间复盘',
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: start,
+            updatedAt: start,
+          ),
+        )
+        ..routineExecutions.add(
+          RoutineExecution(
+            id: 'execution',
+            routineId: 'routine',
+            occurrenceDate: '2026-08-31',
+            status: RoutineExecutionStatus.running,
+            createdAt: start,
+            updatedAt: start,
+          ),
+        )
+        ..routineSegments.add(
+          RoutineRunSegment(
+            id: 'open',
+            executionId: 'execution',
+            startedAt: start,
+            createdAt: start,
+          ),
+        );
+      final service = RoutineService(
+        repository: repo,
+        newId: () => 'unused',
+        now: () => now,
+      );
+      await service.complete(repo.routineExecutions.single, endTime: corrected);
+      expect(
+        repo.routineExecutions.single.status,
+        RoutineExecutionStatus.completed,
+      );
+      expect(repo.routineExecutions.single.completedAt, corrected);
+      expect(repo.routineSegments, hasLength(1));
+      expect(repo.routineSegments.single.endedAt, corrected);
+    },
+  );
 }

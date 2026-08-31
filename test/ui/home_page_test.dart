@@ -139,11 +139,43 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('home-running-more')));
     await tester.pumpAndSettle();
     expect(find.text('完成'), findsOneWidget);
+    expect(find.text('完成并修改结束时间…'), findsOneWidget);
     expect(find.text('等待'), findsOneWidget);
     await tester.tap(find.text('等待'));
     await tester.pumpAndSettle();
     expect(repository.events.single.status, EventStatus.waiting);
     expect(find.text('等待中 · 1'), findsOneWidget);
+  });
+
+  testWidgets('corrected completion dialog fits a narrow phone', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 700);
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+    });
+    final now = DateTime(2026, 8, 31, 12, 30);
+    final repository =
+        MemoryRepository([_event('run', '优化界面和操作', EventStatus.running, now)])
+          ..segments.add(
+            RunSegment(
+              id: 'open',
+              eventId: 'run',
+              startedAt: DateTime(2026, 8, 31, 10),
+              createdAt: now,
+            ),
+          );
+    await tester.pumpWidget(JaxApp(repository: repository, now: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('home-running-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完成并修改结束时间…'));
+    await tester.pumpAndSettle();
+    expect(find.text('修改结束时间'), findsOneWidget);
+    expect(find.textContaining('开始时间：2026-08-31 10:00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('running Routine shows category recurrence and can pause', (

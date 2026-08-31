@@ -275,4 +275,97 @@ void main() {
       expect(repo.segments, hasLength(1));
     },
   );
+
+  test(
+    'completion correction reports the conflicting record and time',
+    () async {
+      final repo = MemoryRepository([event('running'), event('午饭')])
+        ..segments.addAll([
+          RunSegment(
+            id: 'open',
+            eventId: 'running',
+            startedAt: DateTime(2026, 8, 28, 10),
+            createdAt: now,
+          ),
+          segment('lunch', '午饭', 12, 13),
+        ]);
+      final service = ExecutionSegmentService(repository: repo, now: () => now);
+      await expectLater(
+        service.validateCompletionEnd(
+          'open',
+          DateTime(2026, 8, 28, 10),
+          DateTime(2026, 8, 28, 12, 30),
+        ),
+        throwsA(
+          isA<DomainFailure>().having(
+            (failure) => failure.message,
+            'message',
+            allOf(contains('午饭'), contains('12:00–13:00')),
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'on-demand history reuses paused execution or creates completed one',
+    () async {
+      final repo = MemoryRepository()
+        ..routines.addAll([
+          for (final id in ['paused', 'fresh'])
+            Routine(
+              id: id,
+              name: id,
+              type: RoutineType.onDemand,
+              recurrence: RoutineRecurrence.daily,
+              weekdayMask: 0,
+              isActive: true,
+              sortOrder: 0,
+              createdAt: now,
+              updatedAt: now,
+            ),
+        ])
+        ..routineExecutions.add(
+          RoutineExecution(
+            id: 'existing',
+            routineId: 'paused',
+            occurrenceDate: '2026-08-28',
+            status: RoutineExecutionStatus.paused,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+      final service = ExecutionSegmentService(repository: repo, now: () => now);
+      await service.addRoutine(
+        'paused',
+        'unused',
+        'paused-segment',
+        '2026-08-28',
+        DateTime(2026, 8, 28, 8),
+        DateTime(2026, 8, 28, 9),
+      );
+      await service.addRoutine(
+        'fresh',
+        'independent',
+        'fresh-segment',
+        '2026-08-28',
+        DateTime(2026, 8, 28, 9),
+        DateTime(2026, 8, 28, 10),
+      );
+      expect(
+        repo.routineSegments
+            .firstWhere((segment) => segment.id == 'paused-segment')
+            .executionId,
+        'existing',
+      );
+      expect(
+        repo.routineExecutions.firstWhere((e) => e.id == 'existing').status,
+        RoutineExecutionStatus.paused,
+      );
+      expect(
+        repo.routineExecutions.firstWhere((e) => e.id == 'independent').status,
+        RoutineExecutionStatus.completed,
+      );
+    },
+  );
 }

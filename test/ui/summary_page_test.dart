@@ -5,6 +5,7 @@ import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/entities/routine.dart';
 
 import '../support/memory_repository.dart';
 
@@ -87,5 +88,128 @@ void main() {
     expect(find.text('今日时间分布'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('执行记录'), 500);
     expect(find.text('执行记录'), findsOneWidget);
+  });
+
+  testWidgets('add execution record shows only grouped eligible candidates', (
+    tester,
+  ) async {
+    final now = DateTime(2026, 8, 31, 12);
+    JaxEvent event(String id, EventStatus status) => JaxEvent(
+      id: id,
+      name: 'Event $id',
+      status: status,
+      createdAt: now,
+      updatedAt: now,
+      firstStartedAt: status == EventStatus.pending ? null : now,
+      completedAt: status == EventStatus.completed ? now : null,
+    );
+    Routine routine(
+      String id, {
+      RoutineType type = RoutineType.scheduled,
+      bool active = true,
+      RoutineRecurrence recurrence = RoutineRecurrence.daily,
+    }) => Routine(
+      id: id,
+      name: 'Routine $id',
+      type: type,
+      recurrence: recurrence,
+      weekdayMask: 0,
+      isActive: active,
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final repo =
+        MemoryRepository([
+            event('pending', EventStatus.pending),
+            event('paused', EventStatus.paused),
+            event('waiting', EventStatus.waiting),
+            event('running-event', EventStatus.running),
+            event('completed', EventStatus.completed),
+          ])
+          ..segments.add(
+            RunSegment(
+              id: 'event-open',
+              eventId: 'running-event',
+              startedAt: now,
+              createdAt: now,
+            ),
+          )
+          ..routines.addAll([
+            routine('scheduled-unstarted'),
+            routine('scheduled-paused'),
+            routine('scheduled-running'),
+            routine('scheduled-completed'),
+            routine(
+              'scheduled-not-today',
+              recurrence: RoutineRecurrence.weekends,
+            ),
+            routine('quick', type: RoutineType.onDemand),
+            routine('not-shortcut', type: RoutineType.onDemand, active: false),
+            routine('quick-running', type: RoutineType.onDemand),
+            routine('quick-paused', type: RoutineType.onDemand),
+          ])
+          ..routineExecutions.addAll([
+            for (final pair in [
+              ('scheduled-paused', RoutineExecutionStatus.paused),
+              ('scheduled-running', RoutineExecutionStatus.running),
+              ('scheduled-completed', RoutineExecutionStatus.completed),
+              ('quick-running', RoutineExecutionStatus.running),
+              ('quick-paused', RoutineExecutionStatus.paused),
+            ])
+              RoutineExecution(
+                id: 'execution-${pair.$1}',
+                routineId: pair.$1,
+                occurrenceDate: '2026-08-31',
+                status: pair.$2,
+                createdAt: now,
+                updatedAt: now,
+              ),
+          ]);
+    await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('记录'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('添加执行记录'), 500);
+    await tester.tap(find.text('添加执行记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('未完成事项'), findsOneWidget);
+    expect(find.text('今日日常'), findsOneWidget);
+    expect(find.text('快捷动作'), findsOneWidget);
+    for (final id in [
+      'pending',
+      'paused',
+      'waiting',
+      'scheduled-unstarted',
+      'scheduled-paused',
+    ]) {
+      expect(find.byKey(ValueKey('segment-candidate-$id')), findsOneWidget);
+    }
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('segment-candidate-quick')),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(
+      find.byKey(const ValueKey('segment-candidate-quick')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('segment-candidate-quick-paused')),
+      findsOneWidget,
+    );
+    for (final id in [
+      'running-event',
+      'completed',
+      'scheduled-running',
+      'scheduled-completed',
+      'scheduled-not-today',
+      'not-shortcut',
+      'quick-running',
+    ]) {
+      expect(find.byKey(ValueKey('segment-candidate-$id')), findsNothing);
+    }
+    expect(tester.takeException(), isNull);
   });
 }
