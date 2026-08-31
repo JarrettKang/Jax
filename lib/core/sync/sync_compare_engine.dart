@@ -717,7 +717,10 @@ class SyncCompareEngine {
 
   SyncConflictType _fieldType(List<SyncFieldDiff> fields) =>
       fields.any(
-        (f) => f.field == 'parentSyncId' || f.field == 'categorySyncId',
+        (f) =>
+            f.field == 'parentSyncId' ||
+            f.field == 'parentWorldNodeSyncId' ||
+            f.field == 'categorySyncId',
       )
       ? SyncConflictType.hierarchy
       : fields.isEmpty
@@ -758,11 +761,14 @@ class SyncCompareEngine {
   ) {
     const relations = {
       'parentSyncId',
+      'parentWorldNodeSyncId',
       'categorySyncId',
       'routineCategorySyncId',
       'routineSyncId',
       'eventSyncId',
       'routineExecutionSyncId',
+      'legacyEventSyncId',
+      'worldNodeSyncId',
     };
     if (value is! String || !relations.contains(field)) return null;
     return _nameFor(value, records) ?? value;
@@ -782,5 +788,6 @@ class SyncCompareEngine {
     SyncListKind.routineCategories => 'Routine 分类顺序',
     SyncListKind.routines => 'Routine ${list.scopeId} 分类内顺序',
     SyncListKind.eventDayPlans => '${list.scopeId} Today 顺序',
+    SyncListKind.worldNodeSiblings => 'WorldNode ${list.scopeId} 顺序',
   };
 }

@@ -4,7 +4,7 @@ import '../../core/sync/sync_contract.dart';
 import '../database/app_database.dart';
 import 'sqlite_sync_readiness.dart';
 
-/// Read-only v13 SQLite to transport-neutral snapshot adapter.
+/// Read-only v14 SQLite to transport-neutral snapshot adapter.
 class SqliteSyncSnapshotAdapter {
   const SqliteSyncSnapshotAdapter(this.database, {this.now = DateTime.now});
   final Database database;
@@ -38,6 +38,11 @@ class SqliteSyncSnapshotAdapter {
         SyncEntityKind.routineRunSegment,
       ),
       ...await _readPlans(),
+      ...await _readTable('world_nodes', SyncEntityKind.worldNode),
+      ...await _readTable(
+        'legacy_event_world_node_links',
+        SyncEntityKind.legacyEventWorldNodeLink,
+      ),
     ];
     records.addAll(await _readTombstones(records));
     return SyncSnapshot(
@@ -165,11 +170,19 @@ class SqliteSyncSnapshotAdapter {
       SyncListKind.eventDayPlans,
       'SELECT event_id id, day_date scope FROM event_day_plans ORDER BY scope, order_index, created_at_utc, event_id',
     );
+    await add(SyncListKind.worldNodeSiblings, '''SELECT id,
+        CASE
+          WHEN parent_world_node_id IS NOT NULL THEN 'parent:' || parent_world_node_id
+          ELSE 'category:' || COALESCE(category_id, 'uncategorized')
+        END scope
+      FROM world_nodes
+      ORDER BY scope, sort_order, created_at_utc, id''');
     return result;
   }
 
   String _rename(String sql) => switch (sql) {
     'parent_event_id' => 'parentSyncId',
+    'parent_world_node_id' => 'parentWorldNodeSyncId',
     'category_id' => 'categorySyncId',
     'event_id' => 'eventSyncId',
     'routine_category_id' => 'routineCategorySyncId',
@@ -186,6 +199,8 @@ class SqliteSyncSnapshotAdapter {
     'ended_at_utc' => 'endedAtUtc',
     'occurrence_date' => 'jaxDay',
     'color_key' => 'colorKey',
+    'legacy_event_id' => 'legacyEventSyncId',
+    'world_node_id' => 'worldNodeSyncId',
     _ => sql,
   };
   DateTime _date(Object? value) =>
@@ -199,6 +214,8 @@ class SqliteSyncSnapshotAdapter {
     'routine' => SyncEntityKind.routine,
     'routineExecution' => SyncEntityKind.routineExecution,
     'routineRunSegment' => SyncEntityKind.routineRunSegment,
+    'worldNode' => SyncEntityKind.worldNode,
+    'legacyEventWorldNodeLink' => SyncEntityKind.legacyEventWorldNodeLink,
     _ => throw StateError('Unknown tombstone entity type: $value'),
   };
 }

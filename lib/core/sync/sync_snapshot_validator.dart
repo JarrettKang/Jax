@@ -1,4 +1,5 @@
 import 'sync_contract.dart';
+import '../entities/world_node_ids.dart';
 
 class SyncSnapshotValidator {
   const SyncSnapshotValidator();
@@ -75,6 +76,38 @@ class SyncSnapshotValidator {
           if (!has(SyncEntityKind.event, p['eventSyncId'])) {
             issues.add('today-owner:${record.metadata.id}');
           }
+        case SyncEntityKind.worldNode:
+          if (!WorldNodeIds.isValid(record.metadata.id)) {
+            issues.add('world-node-invalid-uuid:${record.metadata.id}');
+          }
+          if (!{'inProgress', 'completed'}.contains(p['status'])) {
+            issues.add('world-node-status:${record.metadata.id}');
+          }
+          if (!has(SyncEntityKind.worldNode, p['parentWorldNodeSyncId'])) {
+            issues.add('world-node-parent:${record.metadata.id}');
+          }
+          if (!has(SyncEntityKind.eventCategory, p['categorySyncId'])) {
+            issues.add('world-node-category:${record.metadata.id}');
+          }
+          if (p['parentWorldNodeSyncId'] != null &&
+              p['categorySyncId'] != null) {
+            issues.add(
+              'world-node-child-direct-category:${record.metadata.id}',
+            );
+          }
+        case SyncEntityKind.legacyEventWorldNodeLink:
+          if (!has(SyncEntityKind.event, p['legacyEventSyncId'])) {
+            issues.add('legacy-link-event:${record.metadata.id}');
+          }
+          if (!has(SyncEntityKind.worldNode, p['worldNodeSyncId'])) {
+            issues.add('legacy-link-world-node:${record.metadata.id}');
+          }
+          final legacyId = p['legacyEventSyncId'];
+          if (legacyId is! String ||
+              record.metadata.id != legacyId ||
+              p['worldNodeSyncId'] != WorldNodeIds.fromLegacyEvent(legacyId)) {
+            issues.add('legacy-link-deterministic:${record.metadata.id}');
+          }
         case SyncEntityKind.eventCategory || SyncEntityKind.routineCategory:
           break;
       }
@@ -82,8 +115,44 @@ class SyncSnapshotValidator {
     _eventRules(live, issues);
     _routineRules(live, issues);
     _executionRules(live, issues);
+    _worldNodeRules(live, issues);
     _listRules(snapshot, live, issues);
     return issues;
+  }
+
+  void _worldNodeRules(Map<String, SyncRecord> live, List<String> issues) {
+    final nodes = {
+      for (final record in live.values.where(
+        (record) => record.kind == SyncEntityKind.worldNode,
+      ))
+        record.metadata.id: record,
+    };
+    for (final node in nodes.values) {
+      final seen = <String>{node.metadata.id};
+      var parent = node.payload['parentWorldNodeSyncId'] as String?;
+      while (parent != null) {
+        if (!seen.add(parent)) {
+          issues.add('world-node-cycle:${node.metadata.id}');
+          break;
+        }
+        parent = nodes[parent]?.payload['parentWorldNodeSyncId'] as String?;
+      }
+    }
+    final links = live.values.where(
+      (record) => record.kind == SyncEntityKind.legacyEventWorldNodeLink,
+    );
+    final eventIds = <String>{};
+    final nodeIds = <String>{};
+    for (final link in links) {
+      final eventId = link.payload['legacyEventSyncId'];
+      final nodeId = link.payload['worldNodeSyncId'];
+      if (eventId is String && !eventIds.add(eventId)) {
+        issues.add('duplicate-legacy-event-link:$eventId');
+      }
+      if (nodeId is String && !nodeIds.add(nodeId)) {
+        issues.add('duplicate-world-node-link:$nodeId');
+      }
+    }
   }
 
   void _segmentRange(SyncRecord record, List<String> issues) {
@@ -210,6 +279,7 @@ class SyncSnapshotValidator {
           SyncListKind.routineCategories => SyncEntityKind.routineCategory,
           SyncListKind.routines => SyncEntityKind.routine,
           SyncListKind.eventDayPlans => SyncEntityKind.event,
+          SyncListKind.worldNodeSiblings => SyncEntityKind.worldNode,
         };
         if (!live.containsKey('${kind.name}:$id')) {
           issues.add('list-owner:${list.key}:$id');
@@ -236,6 +306,15 @@ class SyncSnapshotValidator {
                   record.payload['jaxDay'] == list.scopeId,
             )) {
           issues.add('list-scope:${list.key}:$id');
+        }
+        if (list.kind == SyncListKind.worldNodeSiblings) {
+          final node = live['${SyncEntityKind.worldNode.name}:$id'];
+          final expectedScope = node?.payload['parentWorldNodeSyncId'] == null
+              ? 'category:${node?.payload['categorySyncId'] ?? 'uncategorized'}'
+              : 'parent:${node!.payload['parentWorldNodeSyncId']}';
+          if (expectedScope != list.scopeId) {
+            issues.add('list-scope:${list.key}:$id');
+          }
         }
       }
     }
@@ -267,6 +346,15 @@ class SyncSnapshotValidator {
             '${SyncListKind.eventDayPlans.name}:${record.payload['jaxDay']}',
             record.payload['eventSyncId']! as String,
           );
+        case SyncEntityKind.worldNode:
+          final parent = record.payload['parentWorldNodeSyncId'];
+          addExpected(
+            '${SyncListKind.worldNodeSiblings.name}:'
+            '${parent == null ? 'category:${record.payload['categorySyncId'] ?? 'uncategorized'}' : 'parent:$parent'}',
+            id,
+          );
+        case SyncEntityKind.legacyEventWorldNodeLink:
+          break;
         case SyncEntityKind.eventRunSegment ||
             SyncEntityKind.routineExecution ||
             SyncEntityKind.routineRunSegment:

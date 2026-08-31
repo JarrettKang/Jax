@@ -224,6 +224,7 @@ class SyncPlanCompiler {
                   r.payload['jaxDay'] == list.scopeId,
             )
             .firstOrNull,
+      SyncListKind.worldNodeSiblings => find(SyncEntityKind.worldNode),
     };
     if (record == null || record.isDeleted) return false;
     return switch (list.kind) {
@@ -231,6 +232,11 @@ class SyncPlanCompiler {
         (record.payload['parentSyncId'] ?? 'root') == list.scopeId,
       SyncListKind.routines =>
         (record.payload['routineCategorySyncId'] ?? 'uncategorized') ==
+            list.scopeId,
+      SyncListKind.worldNodeSiblings =>
+        (record.payload['parentWorldNodeSyncId'] == null
+                ? 'category:${record.payload['categorySyncId'] ?? 'uncategorized'}'
+                : 'parent:${record.payload['parentWorldNodeSyncId']}') ==
             list.scopeId,
       _ => true,
     };

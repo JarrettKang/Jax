@@ -1,5 +1,6 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' show Database;
 
+import '../../core/entities/world_node_ids.dart';
 import '../database/app_database.dart';
 
 class SyncReadinessIssue {
@@ -38,6 +39,8 @@ class SqliteSyncReadiness {
       'routines',
       'routine_executions',
       'routine_run_segments',
+      'world_nodes',
+      'legacy_event_world_node_links',
     ];
     for (final table in identityTables) {
       final invalid = await db.rawQuery(
@@ -85,6 +88,65 @@ class SqliteSyncReadiness {
       issues.add(
         SyncReadinessIssue('child-direct-category', row['id'].toString()),
       );
+    }
+
+    final worldCycles = await db.rawQuery(
+      '''WITH RECURSIVE ancestry(origin, id, path, cycle) AS (
+      SELECT id, parent_world_node_id, '|' || id || '|', 0
+      FROM world_nodes WHERE parent_world_node_id IS NOT NULL
+      UNION ALL
+      SELECT ancestry.origin, world_nodes.parent_world_node_id,
+        ancestry.path || world_nodes.id || '|',
+        instr(ancestry.path, '|' || world_nodes.id || '|') > 0
+      FROM ancestry JOIN world_nodes ON world_nodes.id = ancestry.id
+      WHERE world_nodes.parent_world_node_id IS NOT NULL AND ancestry.cycle = 0
+    ) SELECT DISTINCT origin FROM ancestry WHERE cycle = 1''',
+    );
+    for (final row in worldCycles) {
+      issues.add(
+        SyncReadinessIssue('world-node-cycle', row['origin'].toString()),
+      );
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM world_nodes
+      WHERE parent_world_node_id IS NOT NULL AND category_id IS NOT NULL''')) {
+      issues.add(
+        SyncReadinessIssue(
+          'world-node-child-direct-category',
+          row['id'].toString(),
+        ),
+      );
+    }
+    for (final row in await db.query('world_nodes', columns: ['id'])) {
+      final id = row['id']! as String;
+      if (!WorldNodeIds.isValid(id)) {
+        issues.add(SyncReadinessIssue('world-node-invalid-uuid', id));
+      }
+    }
+    for (final row in await db.query('legacy_event_world_node_links')) {
+      final legacyId = row['legacy_event_id']! as String;
+      final expected = WorldNodeIds.fromLegacyEvent(legacyId);
+      if (row['id'] != legacyId || row['world_node_id'] != expected) {
+        issues.add(
+          SyncReadinessIssue(
+            'world-node-invalid-migration-mapping',
+            '$legacyId -> ${row['world_node_id']} (expected $expected)',
+          ),
+        );
+      }
+    }
+    for (final column in ['legacy_event_id', 'world_node_id']) {
+      for (final row in await db.rawQuery(
+        '''SELECT $column identity, count(*) count
+        FROM legacy_event_world_node_links
+        GROUP BY $column HAVING count(*) > 1''',
+      )) {
+        issues.add(
+          SyncReadinessIssue(
+            'world-node-duplicate-migration-mapping',
+            row.toString(),
+          ),
+        );
+      }
     }
 
     final running = SqfliteCount.value(
@@ -198,6 +260,14 @@ class SqliteSyncReadiness {
           SyncReadinessIssue(entry.key, row.toString(), isBlocking: false),
         );
       }
+    }
+    final worldOrderDuplicates = await db.rawQuery('''SELECT
+      parent_world_node_id, category_id, sort_order, count(*) count
+      FROM world_nodes
+      GROUP BY parent_world_node_id, category_id, sort_order
+      HAVING count(*) > 1''');
+    for (final row in worldOrderDuplicates) {
+      issues.add(SyncReadinessIssue('world-node-scoped-order', row.toString()));
     }
   }
 }

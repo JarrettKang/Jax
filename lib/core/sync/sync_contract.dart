@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-const syncProtocolVersion = 1;
+import '../entities/world_node_ids.dart';
+
+const syncProtocolVersion = 2;
 
 enum SyncEntityKind {
   eventCategory,
@@ -13,6 +15,8 @@ enum SyncEntityKind {
   routine,
   routineExecution,
   routineRunSegment,
+  worldNode,
+  legacyEventWorldNodeLink,
 }
 
 enum SyncListKind {
@@ -21,6 +25,7 @@ enum SyncListKind {
   routineCategories,
   routines,
   eventDayPlans,
+  worldNodeSiblings,
 }
 
 class SyncMetadata {
@@ -150,21 +155,26 @@ class SyncSnapshot {
   String toJsonString({bool pretty = false}) =>
       (pretty ? const JsonEncoder.withIndent('  ') : const JsonEncoder())
           .convert(toJson());
-  factory SyncSnapshot.fromJson(Map<String, Object?> json) => SyncSnapshot(
-    protocolVersion: json['syncProtocolVersion']! as int,
-    schemaVersion: json['schemaVersion']! as int,
-    exportedAtUtc: DateTime.fromMillisecondsSinceEpoch(
-      json['exportedAtUtc']! as int,
-      isUtc: true,
-    ),
-    records: (json['records']! as List).map(
-      (value) => SyncRecord.fromJson((value as Map).cast<String, Object?>()),
-    ),
-    lists: (json['lists']! as List).map(
-      (value) => SyncList.fromJson((value as Map).cast<String, Object?>()),
-    ),
-    warnings: (json['warnings'] as List? ?? const []).cast<String>(),
-  );
+  factory SyncSnapshot.fromJson(Map<String, Object?> json) {
+    final snapshot = SyncSnapshot(
+      protocolVersion: json['syncProtocolVersion']! as int,
+      schemaVersion: json['schemaVersion']! as int,
+      exportedAtUtc: DateTime.fromMillisecondsSinceEpoch(
+        json['exportedAtUtc']! as int,
+        isUtc: true,
+      ),
+      records: (json['records']! as List).map(
+        (value) => SyncRecord.fromJson((value as Map).cast<String, Object?>()),
+      ),
+      lists: (json['lists']! as List).map(
+        (value) => SyncList.fromJson((value as Map).cast<String, Object?>()),
+      ),
+      warnings: (json['warnings'] as List? ?? const []).cast<String>(),
+    );
+    return snapshot.protocolVersion == 1
+        ? _upgradeProtocol1Baseline(snapshot)
+        : snapshot;
+  }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
   );
@@ -177,6 +187,126 @@ class SyncSnapshot {
   });
   String get businessFingerprintSha256 =>
       sha256.convert(utf8.encode(businessFingerprint)).toString();
+}
+
+SyncSnapshot _upgradeProtocol1Baseline(SyncSnapshot source) {
+  final events = source.records
+      .where(
+        (record) => record.kind == SyncEntityKind.event && !record.isDeleted,
+      )
+      .toList();
+  final additions = <SyncRecord>[];
+  for (final event in events) {
+    final nodeId = WorldNodeIds.fromLegacyEvent(event.metadata.id);
+    final parent = event.payload['parentSyncId'] as String?;
+    additions.addAll([
+      SyncRecord(
+        kind: SyncEntityKind.worldNode,
+        metadata: SyncMetadata(
+          id: nodeId,
+          createdAtUtc: event.metadata.createdAtUtc,
+          updatedAtUtc: event.metadata.updatedAtUtc,
+        ),
+        payload: {
+          'name': event.payload['name'],
+          'status': event.payload['status'] == 'completed'
+              ? 'completed'
+              : 'inProgress',
+          'parentWorldNodeSyncId': parent == null
+              ? null
+              : WorldNodeIds.fromLegacyEvent(parent),
+          'categorySyncId': parent == null
+              ? event.payload['categorySyncId']
+              : null,
+          'order': event.payload['order'],
+        },
+      ),
+      SyncRecord(
+        kind: SyncEntityKind.legacyEventWorldNodeLink,
+        metadata: SyncMetadata(
+          id: event.metadata.id,
+          createdAtUtc: event.metadata.createdAtUtc,
+          updatedAtUtc: event.metadata.updatedAtUtc,
+        ),
+        payload: {
+          'legacyEventSyncId': event.metadata.id,
+          'worldNodeSyncId': nodeId,
+        },
+      ),
+    ]);
+  }
+  final eventById = {for (final event in events) event.metadata.id: event};
+  final rootOrder = source.lists
+      .where(
+        (list) =>
+            list.kind == SyncListKind.eventSiblings && list.scopeId == 'root',
+      )
+      .firstOrNull
+      ?.itemIds;
+  final groups = <String, List<String>>{};
+  Iterable<SyncRecord> orderedEvents(String? parent) {
+    final matching = events.where(
+      (event) => event.payload['parentSyncId'] == parent,
+    );
+    final ids = parent == null
+        ? rootOrder
+        : source.lists
+              .where(
+                (list) =>
+                    list.kind == SyncListKind.eventSiblings &&
+                    list.scopeId == parent,
+              )
+              .firstOrNull
+              ?.itemIds;
+    if (ids == null) {
+      return matching.toList()..sort((a, b) {
+        final order = ((a.payload['order'] as int?) ?? 0).compareTo(
+          (b.payload['order'] as int?) ?? 0,
+        );
+        return order != 0 ? order : a.metadata.id.compareTo(b.metadata.id);
+      });
+    }
+    return ids.map((id) => eventById[id]).nonNulls.where(matching.contains);
+  }
+
+  for (final event in events) {
+    final parent = event.payload['parentSyncId'] as String?;
+    final scope = parent == null
+        ? 'category:${event.payload['categorySyncId'] ?? 'uncategorized'}'
+        : 'parent:${WorldNodeIds.fromLegacyEvent(parent)}';
+    groups.putIfAbsent(scope, () => []);
+  }
+  for (final parent in <String?>{
+    null,
+    ...events.map((event) => event.payload['parentSyncId'] as String?),
+  }) {
+    for (final event in orderedEvents(parent)) {
+      final scope = parent == null
+          ? 'category:${event.payload['categorySyncId'] ?? 'uncategorized'}'
+          : 'parent:${WorldNodeIds.fromLegacyEvent(parent)}';
+      groups[scope]!.add(WorldNodeIds.fromLegacyEvent(event.metadata.id));
+    }
+  }
+  return SyncSnapshot(
+    protocolVersion: syncProtocolVersion,
+    schemaVersion: source.schemaVersion,
+    exportedAtUtc: source.exportedAtUtc,
+    records: [...source.records, ...additions],
+    lists: [
+      ...source.lists,
+      for (final entry in groups.entries)
+        if (entry.value.isNotEmpty)
+          SyncList(
+            kind: SyncListKind.worldNodeSiblings,
+            scopeId: entry.key,
+            itemIds: entry.value,
+          ),
+    ],
+    warnings: [
+      ...source.warnings,
+      'baseline-upgraded: sync protocol 1 normalized to protocol 2 WorldNodes',
+    ],
+  );
 }
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {

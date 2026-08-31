@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/sync/sync_contract.dart';
 import 'package:jax/data/database/app_database.dart';
+import 'package:jax/data/database/world_node_shadow_migration.dart';
 import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 
 void main() {
@@ -19,6 +20,8 @@ void main() {
       'routine_executions',
       'routine_run_segments',
       'event_day_plans',
+      'world_nodes',
+      'legacy_event_world_node_links',
       'sync_tombstones',
     ]) {
       result.addAll(
@@ -69,28 +72,46 @@ void main() {
         'updated_at_utc': 40,
       });
       await db.insert('routine_categories', {
-        'id': 'routine-category', 'name': '起居', 'sort_order': 0,
-        'color_key': 3, 'created_at_utc': 10, 'updated_at_utc': 10,
+        'id': 'routine-category',
+        'name': '起居',
+        'sort_order': 0,
+        'color_key': 3,
+        'created_at_utc': 10,
+        'updated_at_utc': 10,
       });
       await db.insert('routines', {
-        'id': 'routine', 'name': '洗漱', 'routine_category_id': 'routine-category',
-        'routine_type': 'scheduled', 'recurrence_type': 'daily',
-        'weekday_mask': 0, 'is_active': 1, 'sort_order': 0,
-        'created_at_utc': 10, 'updated_at_utc': 10,
+        'id': 'routine',
+        'name': '洗漱',
+        'routine_category_id': 'routine-category',
+        'routine_type': 'scheduled',
+        'recurrence_type': 'daily',
+        'weekday_mask': 0,
+        'is_active': 1,
+        'sort_order': 0,
+        'created_at_utc': 10,
+        'updated_at_utc': 10,
       });
       await db.insert('routine_executions', {
-        'id': 'execution', 'routine_id': 'routine',
-        'occurrence_date': '2026-08-30', 'status': 'completed',
-        'completed_at_utc': 60, 'created_at_utc': 50, 'updated_at_utc': 60,
+        'id': 'execution',
+        'routine_id': 'routine',
+        'occurrence_date': '2026-08-30',
+        'status': 'completed',
+        'completed_at_utc': 60,
+        'created_at_utc': 50,
+        'updated_at_utc': 60,
       });
       await db.insert('routine_run_segments', {
-        'id': 'routine-segment', 'routine_execution_id': 'execution',
-        'started_at_utc': 50, 'ended_at_utc': 60,
-        'created_at_utc': 50, 'updated_at_utc': 60,
+        'id': 'routine-segment',
+        'routine_execution_id': 'execution',
+        'started_at_utc': 50,
+        'ended_at_utc': 60,
+        'created_at_utc': 50,
+        'updated_at_utc': 60,
       });
       await db.insert('world_category_collapse_preferences', {
         'section_key': 'category',
       });
+      await WorldNodeShadowMigration.run(db);
 
       final adapter = SqliteSyncSnapshotAdapter(
         db,
@@ -109,6 +130,8 @@ void main() {
           SyncEntityKind.eventCategory,
           SyncEntityKind.event,
           SyncEntityKind.eventDayPlan,
+          SyncEntityKind.worldNode,
+          SyncEntityKind.legacyEventWorldNodeLink,
         ]),
       );
       final event = first.records.singleWhere(
@@ -117,23 +140,52 @@ void main() {
       expect(event.payload, containsPair('categorySyncId', 'category'));
       expect(event.payload, containsPair('firstStartedAtUtc', 20));
       expect(event.payload.keys.toSet(), {
-        'name', 'status', 'parentSyncId', 'order', 'categorySyncId',
-        'firstStartedAtUtc', 'completedAtUtc',
+        'name',
+        'status',
+        'parentSyncId',
+        'order',
+        'categorySyncId',
+        'firstStartedAtUtc',
+        'completedAtUtc',
       });
       expect(
-        first.records.singleWhere((r) => r.kind == SyncEntityKind.routine).payload.keys.toSet(),
-        {'name', 'routineCategorySyncId', 'routineType', 'recurrenceType', 'weekdayMask', 'isActive', 'order'},
+        first.records
+            .singleWhere((r) => r.kind == SyncEntityKind.routine)
+            .payload
+            .keys
+            .toSet(),
+        {
+          'name',
+          'routineCategorySyncId',
+          'routineType',
+          'recurrenceType',
+          'weekdayMask',
+          'isActive',
+          'order',
+        },
       );
       expect(
-        first.records.singleWhere((r) => r.kind == SyncEntityKind.routineExecution).payload.keys.toSet(),
+        first.records
+            .singleWhere((r) => r.kind == SyncEntityKind.routineExecution)
+            .payload
+            .keys
+            .toSet(),
         {'routineSyncId', 'jaxDay', 'status', 'completedAtUtc'},
       );
       expect(
-        first.records.singleWhere((r) => r.kind == SyncEntityKind.eventRunSegment).payload.keys.toSet(),
+        first.records
+            .singleWhere((r) => r.kind == SyncEntityKind.eventRunSegment)
+            .payload
+            .keys
+            .toSet(),
         {'eventSyncId', 'startedAtUtc', 'endedAtUtc'},
       );
       expect(
-        first.records.singleWhere((r) => r.kind == SyncEntityKind.routineRunSegment).payload.keys.toSet(),
+        first.records
+            .singleWhere((r) => r.kind == SyncEntityKind.routineRunSegment)
+            .payload
+            .keys
+            .toSet(),
         {'routineExecutionSyncId', 'startedAtUtc', 'endedAtUtc'},
       );
       expect(
@@ -141,6 +193,12 @@ void main() {
             .singleWhere((l) => l.kind == SyncListKind.eventDayPlans)
             .itemIds,
         ['event'],
+      );
+      expect(
+        first.lists
+            .singleWhere((l) => l.kind == SyncListKind.worldNodeSiblings)
+            .scopeId,
+        'category:category',
       );
       expect(first.toJsonString(), second.toJsonString());
       expect(after, before, reason: 'Analyze must not mutate business facts');

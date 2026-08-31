@@ -154,9 +154,7 @@ void main() {
     expect(
       plan.invariantConflicts,
       anyElement(
-        predicate<SyncInvariantConflict>(
-          (item) => item.title == '状态与执行历史冲突',
-        ),
+        predicate<SyncInvariantConflict>((item) => item.title == '状态与执行历史冲突'),
       ),
     );
   });
@@ -165,7 +163,7 @@ void main() {
     expect(
       () => engine.compare(
         windows: snapshot(const []),
-        android: snapshot(const [], protocol: 2),
+        android: snapshot(const [], protocol: syncProtocolVersion + 1),
       ),
       throwsStateError,
     );
@@ -177,7 +175,7 @@ final instant = DateTime.fromMillisecondsSinceEpoch(1, isUtc: true);
 SyncSnapshot snapshot(
   List<SyncRecord> records, {
   List<SyncList> lists = const [],
-  int protocol = 1,
+  int protocol = syncProtocolVersion,
 }) => SyncSnapshot(
   protocolVersion: protocol,
   schemaVersion: 13,

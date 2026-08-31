@@ -125,6 +125,7 @@ class SqliteSyncMutationExecutor {
       case SyncEntityKind.event:
       case SyncEntityKind.routineCategory:
       case SyncEntityKind.routine:
+      case SyncEntityKind.worldNode:
         row.remove('sort_order');
         break;
       case SyncEntityKind.eventDayPlan:
@@ -133,6 +134,7 @@ class SqliteSyncMutationExecutor {
       case SyncEntityKind.eventRunSegment:
       case SyncEntityKind.routineExecution:
       case SyncEntityKind.routineRunSegment:
+      case SyncEntityKind.legacyEventWorldNodeLink:
         break;
     }
     final oldUpdated = (existing.single['updated_at_utc'] as num).toInt();
@@ -205,6 +207,9 @@ class SqliteSyncMutationExecutor {
       index,
       column: 'order_index',
     ),
+    SyncListKind.worldNodeSiblings => _setOrder(db, 'world_nodes', 'id = ?', [
+      id,
+    ], index),
   };
 
   Future<List<String>> _readListItemIds(
@@ -265,6 +270,30 @@ class SqliteSyncMutationExecutor {
         'day_date = ?',
         <Object?>[list.scopeId],
       ),
+      SyncListKind.worldNodeSiblings =>
+        list.scopeId.startsWith('parent:')
+            ? (
+                'world_nodes',
+                'id',
+                'sort_order',
+                'parent_world_node_id = ?',
+                <Object?>[list.scopeId.substring('parent:'.length)],
+              )
+            : list.scopeId == 'category:uncategorized'
+            ? (
+                'world_nodes',
+                'id',
+                'sort_order',
+                'parent_world_node_id IS NULL AND category_id IS NULL',
+                <Object?>[],
+              )
+            : (
+                'world_nodes',
+                'id',
+                'sort_order',
+                'parent_world_node_id IS NULL AND category_id = ?',
+                <Object?>[list.scopeId.substring('category:'.length)],
+              ),
     };
     final rows = await db.query(
       table,
@@ -396,6 +425,21 @@ class SqliteSyncMutationExecutor {
         'order_index': p['order'],
         ...metadata,
       },
+      SyncEntityKind.worldNode => {
+        'id': record.metadata.id,
+        'name': p['name'],
+        'status': p['status'],
+        'parent_world_node_id': p['parentWorldNodeSyncId'],
+        'sort_order': p['order'],
+        'category_id': p['categorySyncId'],
+        ...metadata,
+      },
+      SyncEntityKind.legacyEventWorldNodeLink => {
+        'id': record.metadata.id,
+        'legacy_event_id': p['legacyEventSyncId'],
+        'world_node_id': p['worldNodeSyncId'],
+        ...metadata,
+      },
     };
   }
 
@@ -432,13 +476,23 @@ class SqliteSyncMutationExecutor {
       'event_id = ? AND day_date = ?',
       [record.payload['eventSyncId'], record.payload['jaxDay']],
     ),
+    SyncEntityKind.worldNode => _SqlTarget('world_nodes', 'id = ?', [
+      record.metadata.id,
+    ]),
+    SyncEntityKind.legacyEventWorldNodeLink => _SqlTarget(
+      'legacy_event_world_node_links',
+      'id = ?',
+      [record.metadata.id],
+    ),
   };
 
   int _deleteRank(SyncEntityKind kind) => switch (kind) {
-    SyncEntityKind.eventDayPlan => 0,
+    SyncEntityKind.eventDayPlan || SyncEntityKind.legacyEventWorldNodeLink => 0,
     SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 1,
     SyncEntityKind.routineExecution => 2,
-    SyncEntityKind.routine || SyncEntityKind.event => 3,
+    SyncEntityKind.routine ||
+    SyncEntityKind.event ||
+    SyncEntityKind.worldNode => 3,
     SyncEntityKind.routineCategory || SyncEntityKind.eventCategory => 4,
   };
   int _upsertRank(SyncEntityKind kind) => switch (kind) {
@@ -448,6 +502,8 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.routineExecution => 3,
     SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 4,
     SyncEntityKind.eventDayPlan => 5,
+    SyncEntityKind.worldNode => 1,
+    SyncEntityKind.legacyEventWorldNodeLink => 6,
   };
   String _tombstoneType(SyncEntityKind kind) => switch (kind) {
     SyncEntityKind.eventCategory => 'category',
@@ -458,6 +514,8 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.routine => 'routine',
     SyncEntityKind.routineExecution => 'routineExecution',
     SyncEntityKind.routineRunSegment => 'routineRunSegment',
+    SyncEntityKind.worldNode => 'worldNode',
+    SyncEntityKind.legacyEventWorldNodeLink => 'legacyEventWorldNodeLink',
   };
 }
 
