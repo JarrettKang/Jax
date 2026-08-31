@@ -382,8 +382,9 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 14. Record 今日时间分布
 
 - 日总结依次展示分类时间统计、今日时间分布和执行记录。今日时间分布使用 24 行×60 分钟的紧凑栅格，行顺序严格为 JaxDay 的 23:00、00:00…22:00。
-- “添加执行记录”候选按“未完成事项 / 今日日常 / 快捷动作”分组：Event 仅包含 pending、paused、waiting；计划型 Routine 仅包含当前 JaxDay recurrence 命中且 execution 未完成、非 running 的对象；按需 Routine 仅包含 Home 快捷动作中的 active definition。任何当前 running 对象均直接从候选中排除。
+- “添加执行记录”候选按“今日事项 / 今日日常 / 快捷动作”分组：Event 必须已加入 current JaxDay Today，且为 pending、paused 或 waiting；计划型 Routine 仅包含当前 JaxDay recurrence 命中且 execution 未完成、非 running 的对象；按需 Routine 仅包含 Home 快捷动作中的 active definition。任何当前 running 对象均直接从候选中排除。
 - 补录仍只新增真实 RunSegment，不改变现有 Event/RoutineExecution 状态。按需 Routine 存在 paused unfinished execution 时归入该 execution；否则为该次已独立发生的补录创建 completed RoutineExecution，不与另一次按需执行合并。
+- 补录时间编辑器不复制完整 24×60 图，而是根据真实 Event/Routine segment 动态显示 derived available gaps。Gap 使用 23:00 JaxDay clipping，open segment 按 startedAt 到 now 占用；点击 gap 只预填 start/end，用户仍需确认且提交继续执行 Core 全局 overlap 校验。新增记录后不缓存 gap，下次打开时从真实 segment 重新计算。
 - 每个小时行高度一致，横向位置和宽度分别表示小时内的开始分钟与 duration；15/30/45 分钟只使用轻量 guide。空白不解释、不补齐。
 - 真实 Event/Routine segment 不按对象聚合或合并。跨小时只生成持有同一 segment identity 的 rendering fragments；点击任意 fragment 显示完整真实 segment，而非该小时切片。
 - 跨 JaxDay segment 仅按窗口 overlap 绘制，open segment 绘制至当前时间；底层 segment 不拆分，统计和历史事实来源不变。
