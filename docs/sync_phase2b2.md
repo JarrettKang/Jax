@@ -43,6 +43,12 @@ backup, apply, validation, final verification, baseline writing, post-analysis,
 and rollback stages. The coordinator writes atomic structured status/report
 files; PowerShell output is not the user interface.
 
+All Flutter/coordinator interchange uses JSON encoded as strict UTF-8 without a
+BOM. Status/result files are atomically staged and renamed. The PowerShell
+launch prefix fixes console stdout/stderr to UTF-8 before invoking the script;
+Dart decodes those diagnostic streams strictly and never enables malformed-byte
+replacement. Snapshot and SyncPlan JSON use the same UTF-8 contract.
+
 Normal failure paths distinguish stale plans, invalid plans, backup/apply/final
 verification errors, successful two-device rollback, critical rollback failure,
 and verified business synchronization followed by baseline-write failure.
@@ -67,4 +73,3 @@ without changing those sync contracts.
 Automated fixture/widget coverage and Windows build validation are complete.
 The final real-device Analyze must be repeated whenever the target phone is
 reconnected; a disconnected phone never causes an old plan to be reused.
-

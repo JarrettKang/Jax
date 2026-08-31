@@ -253,30 +253,33 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
     final script =
         '$projectRoot${Platform.pathSeparator}tool'
         '${Platform.pathSeparator}sync_phase2b2.ps1';
+    String quote(String value) => "'${value.replaceAll("'", "''")}'";
+    final invocation = <String>[
+      '& ${quote(script)}',
+      '-Action ${quote(action)}',
+      '-Device ${quote(serial)}',
+      '-KeepWindowsProcessId ${quote('$pid')}',
+      '-NoLaunchPreview',
+      '-StatusPath ${quote(statusPath)}',
+      '-ResultPath ${quote(resultPath)}',
+      if (resolution != null) '-Resolution ${quote(resolution)}',
+      if (action == 'Apply')
+        '-Confirmation ${quote('FIRST_REAL_DUAL_DEVICE_SYNC')}',
+    ].join(' ');
+    final command = <String>[
+      r'$utf8 = [Text.UTF8Encoding]::new($false)',
+      r'$OutputEncoding = $utf8',
+      r'[Console]::OutputEncoding = $utf8',
+      invocation,
+    ].join('; ');
     final args = [
       '-NoProfile',
       '-WindowStyle',
       'Hidden',
       '-ExecutionPolicy',
       'Bypass',
-      '-File',
-      script,
-      '-Action',
-      action,
-      '-Device',
-      serial,
-      '-KeepWindowsProcessId',
-      '$pid',
-      '-NoLaunchPreview',
-      '-StatusPath',
-      statusPath,
-      '-ResultPath',
-      resultPath,
-      if (resolution != null) ...['-Resolution', resolution],
-      if (action == 'Apply') ...[
-        '-Confirmation',
-        'FIRST_REAL_DUAL_DEVICE_SYNC',
-      ],
+      '-Command',
+      command,
     ];
     Timer? timer;
     try {
@@ -299,8 +302,10 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
       });
       final values = await Future.wait<Object>([
         process.exitCode,
-        process.stdout.transform(utf8.decoder).join(),
-        process.stderr.transform(utf8.decoder).join(),
+        // The PowerShell launch prefix and structured IPC contract guarantee
+        // strict UTF-8. Malformed output is a producer-contract failure.
+        process.stdout.transform(const Utf8Decoder()).join(),
+        process.stderr.transform(const Utf8Decoder()).join(),
       ]);
       final report = File(resultPath).existsSync()
           ? (jsonDecode(await File(resultPath).readAsString()) as Map)

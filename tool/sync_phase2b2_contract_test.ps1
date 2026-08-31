@@ -23,6 +23,8 @@ $required = @{
   'runs post-sync three-way analysis' = 'PostSyncAnalyze'
   'restores both sides on failure' = 'Restore-Windows $script:report.windowsBackup'
   'reports critical rollback failure' = 'CRITICAL_ROLLBACK_FAILURE'
+  'writes structured IPC as UTF-8 without BOM' = '[Text.UTF8Encoding]::new($false)'
+  'reads structured JSON explicitly as UTF-8' = '-Raw -Encoding UTF8 | ConvertFrom-Json'
 }
 foreach ($entry in $required.GetEnumerator()) {
   if (-not $content.Contains($entry.Value)) { throw "Missing Phase 2B-2 contract: $($entry.Key)" }

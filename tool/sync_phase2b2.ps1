@@ -7,7 +7,7 @@ param(
     [string]$Confirmation,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
     [string]$Package = 'com.example.jax',
-    [string]$OutputRoot = (Join-Path $PSScriptRoot '..\.debug_snapshots'),
+    [string]$OutputRoot,
     [string]$BackupRoot = (Join-Path $env:APPDATA 'Jax\sync_backups'),
     [string]$Baseline = (Join-Path $env:APPDATA 'Jax\sync\last_successful_sync.json'),
     [int]$KeepWindowsProcessId = 0,
@@ -19,6 +19,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not $OutputRoot) { $OutputRoot = Join-Path $projectRoot '.debug_snapshots' }
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8NoBom
+[Console]::OutputEncoding = $utf8NoBom
+[Console]::InputEncoding = $utf8NoBom
 $androidHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { '<android-sdk>' }
 $adb = Join-Path $androidHome 'platform-tools\adb.exe'
 $dart = '<flutter-sdk>\bin\dart.bat'
@@ -51,7 +56,7 @@ function Write-ExternalJson([string]$Path, [object]$Value) {
     $directory = Split-Path -Parent $Path
     if ($directory) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     $staged = "$Path.pending"
-    $Value | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $staged -Encoding utf8
+    [IO.File]::WriteAllText($staged, ($Value | ConvertTo-Json -Depth 30), $script:utf8NoBom)
     Move-Item -LiteralPath $staged -Destination $Path -Force
 }
 
@@ -75,7 +80,10 @@ function Export-AdbFile([string]$Remote, [string]$Destination) {
     $start.UseShellExecute = $false
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    foreach ($argument in @('-s', $script:serial, 'exec-out', 'run-as', $Package, 'cat', $Remote)) { [void]$start.ArgumentList.Add($argument) }
+    # Windows PowerShell 5.1 uses .NET Framework ProcessStartInfo, which has no
+    # ArgumentList property. These values are validated serial/package/relative
+    # app paths and contain no shell metacharacters; stdout remains binary.
+    $start.Arguments = "-s $($script:serial) exec-out run-as $Package cat $Remote"
     $process = [Diagnostics.Process]::Start($start)
     $stream = [IO.File]::Create($Destination)
     try { $process.StandardOutput.BaseStream.CopyTo($stream) } finally { $stream.Dispose() }
@@ -163,14 +171,14 @@ function Apply-Android([string]$MutationPath) {
     $commandName = "sync_command_$($script:session).json"
     $resultName = "sync_result_$($script:session).json"
     $remoteResult = "/data/user/0/$Package/files/$resultName"
-    $mutation = Get-Content -LiteralPath $MutationPath -Raw | ConvertFrom-Json
+    $mutation = Get-Content -LiteralPath $MutationPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $command = [ordered]@{
         action = 'applyMutationPlan'
         resultPath = $remoteResult
         mutationPlan = $mutation
     }
     $localCommand = Join-Path $script:sessionDirectory $commandName
-    $command | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $localCommand -Encoding utf8
+    [IO.File]::WriteAllText($localCommand, ($command | ConvertTo-Json -Depth 100), $script:utf8NoBom)
     $remoteCommand = Push-AppFile $localCommand $commandName
     Get-AdbText @('shell', 'run-as', $Package, 'rm', '-f', "files/$resultName") | Out-Null
     & $adb -s $script:serial shell am start -n "$Package/.MainActivity" --es jax_sync_command $remoteCommand | Out-Null
@@ -180,7 +188,7 @@ function Apply-Android([string]$MutationPath) {
     $localResult = Join-Path $script:sessionDirectory $resultName
     Export-AdbFile "files/$resultName" $localResult
     & $adb -s $script:serial shell am force-stop $Package | Out-Null
-    $result = Get-Content -LiteralPath $localResult -Raw | ConvertFrom-Json
+    $result = Get-Content -LiteralPath $localResult -Raw -Encoding UTF8 | ConvertFrom-Json
     if (-not $result.ok) { throw "Android Apply failed: $($result.error)" }
     $script:report.androidResult = $result
     Set-Stage 'ValidatingAndroid'
@@ -208,7 +216,7 @@ function Restore-Android([string]$Backup) {
 
 function Write-Report {
     if ($null -ne $script:sessionDirectory) {
-        $script:report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $script:sessionDirectory 'sync_session_report.json') -Encoding utf8
+        [IO.File]::WriteAllText((Join-Path $script:sessionDirectory 'sync_session_report.json'), ($script:report | ConvertTo-Json -Depth 20), $script:utf8NoBom)
     }
     Write-ExternalJson $ResultPath $script:report
 }
@@ -261,7 +269,7 @@ try {
     $compare = @('run', 'tool/sync_phase2a.dart', 'compare', $windowsJson, $androidJson, $planPath)
     if (Test-Path -LiteralPath $Baseline) { $compare += $Baseline }
     Invoke-Checked $dart $compare | Out-Null
-    $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+    $plan = Get-Content -LiteralPath $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $script:report.preWindowsFingerprint = $plan.windowsSourceFingerprint
     $script:report.preAndroidFingerprint = $plan.androidSourceFingerprint
     $script:report.preBaselineFingerprint = if ($plan.PSObject.Properties.Name -contains 'baselineFingerprint') { $plan.baselineFingerprint } else { $null }
@@ -291,7 +299,7 @@ try {
     $compile = @('run', 'tool/sync_phase2b2.dart', 'compile', $planPath, $windowsJson, $androidJson, $Resolution, $mutationPath)
     if (Test-Path -LiteralPath $Baseline) { $compile += $Baseline }
     $compileOutput = Invoke-Checked $dart $compile
-    $mutation = Get-Content -LiteralPath $mutationPath -Raw | ConvertFrom-Json
+    $mutation = Get-Content -LiteralPath $mutationPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $script:report.windowsOperations = @($mutation.windowsOperations).Count
     $script:report.androidOperations = @($mutation.androidOperations).Count
     $script:report.windowsOperationSummary = $mutation.windowsSummary
@@ -349,7 +357,7 @@ try {
     Export-Snapshot $postAndroid $postAndroidJson
     $postPlan = Join-Path $script:sessionDirectory 'post_sync_plan.json'
     Invoke-Checked $dart @('run', 'tool/sync_phase2a.dart', 'compare', $postWindowsJson, $postAndroidJson, $postPlan, $Baseline) | Out-Null
-    $post = Get-Content -LiteralPath $postPlan -Raw | ConvertFrom-Json
+    $post = Get-Content -LiteralPath $postPlan -Raw -Encoding UTF8 | ConvertFrom-Json
     $script:report.postSyncSummary = $post.summary
     if ($post.summary.onlyWindows -ne 0 -or $post.summary.onlyAndroid -ne 0 -or $post.summary.different -ne 0 -or $post.summary.manualConflicts -ne 0 -or $post.summary.listConflicts -ne 0 -or $post.summary.invariantConflicts -ne 0) {
         throw 'FINAL_STATE_MISMATCH: post-sync Analyze still contains synchronized differences.'
