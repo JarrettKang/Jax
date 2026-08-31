@@ -7,9 +7,12 @@ param(
     [string]$Confirmation,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
     [string]$Package = 'com.example.jax',
+    [string]$StorageRoot,
+    [int]$StorageLayoutVersion = -1,
+    [int]$BackupRetention = 0,
     [string]$OutputRoot,
-    [string]$BackupRoot = (Join-Path $env:APPDATA 'Jax\sync_backups'),
-    [string]$Baseline = (Join-Path $env:APPDATA 'Jax\sync\last_successful_sync.json'),
+    [string]$BackupRoot,
+    [string]$Baseline,
     [int]$KeepWindowsProcessId = 0,
     [switch]$NoLaunchPreview,
     [string]$StatusPath,
@@ -19,17 +22,35 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $OutputRoot) { $OutputRoot = Join-Path $projectRoot '.debug_snapshots' }
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OutputEncoding = $utf8NoBom
 [Console]::OutputEncoding = $utf8NoBom
 [Console]::InputEncoding = $utf8NoBom
+$storageConfigPath = Join-Path $env:APPDATA 'Jax\sync_storage.json'
+if (-not $StorageRoot) {
+    if (Test-Path -LiteralPath $storageConfigPath) {
+        $storageConfig = Get-Content -LiteralPath $storageConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $StorageRoot = $storageConfig.root
+        if ($StorageLayoutVersion -lt 0) { $StorageLayoutVersion = [int]$storageConfig.layoutVersion }
+        if ($BackupRetention -le 0) { $BackupRetention = [int]$storageConfig.backupRetention }
+    } else {
+        $StorageRoot = Join-Path $env:APPDATA 'Jax'
+        if ($StorageLayoutVersion -lt 0) { $StorageLayoutVersion = 0 }
+    }
+}
+if ($StorageLayoutVersion -lt 0) { $StorageLayoutVersion = 1 }
+if ($BackupRetention -lt 1 -or $BackupRetention -gt 50) { $BackupRetention = 5 }
+if (-not $Baseline) {
+    $Baseline = if ($StorageLayoutVersion -eq 0) { Join-Path $StorageRoot 'sync\last_successful_sync.json' } else { Join-Path $StorageRoot 'baseline\last_successful_sync.json' }
+}
+if (-not $BackupRoot) { $BackupRoot = if ($StorageLayoutVersion -eq 0) { Join-Path $StorageRoot 'sync_backups' } else { Join-Path $StorageRoot 'backups' } }
+if (-not $OutputRoot) { $OutputRoot = Join-Path $StorageRoot 'sessions' }
 $androidHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { '<android-sdk>' }
 $adb = Join-Path $androidHome 'platform-tools\adb.exe'
 $dart = '<flutter-sdk>\bin\dart.bat'
 $remoteDatabase = 'databases/jax.db'
 $windowsExe = Join-Path $projectRoot 'build\windows\x64\runner\Debug\jax.exe'
-$lockPath = Join-Path $env:APPDATA 'Jax\sync\active_session.lock'
+$lockPath = Join-Path $StorageRoot '.active_session.lock'
 $script:serial = $null
 $script:session = $null
 $script:androidWasRunning = $false
@@ -221,6 +242,30 @@ function Write-Report {
     Write-ExternalJson $ResultPath $script:report
 }
 
+function Complete-BackupSession([string]$Status, [bool]$Cleanup) {
+    if (-not $script:report.Contains('windowsBackup')) { return }
+    $backupDirectory = Split-Path -Parent $script:report.windowsBackup
+    Write-ExternalJson (Join-Path $backupDirectory 'metadata.json') ([ordered]@{
+        status = $Status
+        timestamp = $script:session
+        report = (Join-Path $script:sessionDirectory 'sync_session_report.json')
+    })
+    if (-not $Cleanup) { return }
+    $sessions = @(Get-ChildItem -LiteralPath $BackupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+    $normalSeen = 0
+    foreach ($candidate in $sessions) {
+        if ($candidate.FullName -eq $backupDirectory) { $normalSeen++; continue }
+        $metadataPath = Join-Path $candidate.FullName 'metadata.json'
+        $candidateStatus = $null
+        if (Test-Path -LiteralPath $metadataPath) {
+            try { $candidateStatus = (Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json).status } catch { $candidateStatus = $null }
+        }
+        if ($candidateStatus -eq 'CRITICAL_ROLLBACK_FAILURE') { continue }
+        $normalSeen++
+        if ($normalSeen -gt $BackupRetention) { Remove-Item -LiteralPath $candidate.FullName -Recurse -Force }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $adb)) { throw "adb not found: $adb" }
 if (-not (Test-Path -LiteralPath $WindowsDatabase)) { throw "Windows database not found: $WindowsDatabase" }
 $devices = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^([^\s]+)\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
@@ -249,6 +294,9 @@ try {
     New-Item -ItemType Directory -Path $script:sessionDirectory -Force | Out-Null
     $script:report.timestamp = $script:session
     $script:report.sessionDirectory = $script:sessionDirectory
+    $script:report.storageRoot = $StorageRoot
+    $script:report.storageLayoutVersion = $StorageLayoutVersion
+    $script:report.backupRetention = $BackupRetention
     $script:report.baselinePath = $Baseline
 
     if ($Action -eq 'Apply') {
@@ -342,6 +390,7 @@ try {
         $script:report.status = 'SYNC_APPLIED_BASELINE_WRITE_FAILED'
         $script:report.error = "Business data is synchronized and verified, but the baseline could not be persisted: $_"
         Write-Report
+        Complete-BackupSession $script:report.status $true
         Start-Apps
         Write-Warning $script:report.error
         return
@@ -365,6 +414,7 @@ try {
     $script:report.finalFingerprint = $mutation.expectedFinalFingerprint
     $script:report.status = 'Success'
     Write-Report
+    Complete-BackupSession $script:report.status $true
     Start-Apps
     Write-Host "FIRST_REAL_DUAL_DEVICE_SYNC_SUCCESS report=$(Join-Path $script:sessionDirectory 'sync_session_report.json')"
 } catch {
@@ -386,6 +436,7 @@ try {
             }
             $script:report.status = 'SYNC_FAILED_ROLLED_BACK'
             Write-Report
+            Complete-BackupSession $script:report.status $true
             Start-Apps
             throw "SYNC_FAILED_ROLLED_BACK: $failure"
         } catch {
@@ -393,6 +444,7 @@ try {
                 $script:report.status = 'CRITICAL_ROLLBACK_FAILURE'
                 $script:report.rollbackError = "$_"
                 Write-Report
+                Complete-BackupSession $script:report.status $false
                 throw "CRITICAL_ROLLBACK_FAILURE: $_"
             }
             throw

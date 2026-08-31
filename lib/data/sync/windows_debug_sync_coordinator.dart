@@ -5,6 +5,7 @@ import 'dart:io';
 import '../../core/sync/resolved_sync_plan.dart';
 import '../../core/sync/sync_compare_engine.dart';
 import '../../core/sync/sync_contract.dart';
+import 'sync_storage_service.dart';
 
 class DebugAndroidDevice {
   const DebugAndroidDevice({
@@ -72,13 +73,23 @@ abstract interface class DebugSyncCoordinator {
     ResolvedSyncPlan resolved, {
     required DebugSyncStageChanged onStage,
   });
+  Future<SyncStorageSettings> loadStorage();
+  Future<SyncStorageInventory> storageInventory(SyncStorageSettings settings);
+  Future<String?> chooseStorageDirectory();
+  Future<SyncStorageMigrationResult> migrateStorage(String destination);
+  Future<void> updateBackupRetention(int count);
+  Future<void> openStorageFolder();
 }
 
 class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
-  WindowsDebugSyncCoordinator({required this.projectRoot});
+  WindowsDebugSyncCoordinator({
+    required this.projectRoot,
+    SyncStorageService? storageService,
+  }) : storageService = storageService ?? SyncStorageService();
 
   @override
   final String projectRoot;
+  final SyncStorageService storageService;
   bool _running = false;
   @override
   bool get running => _running;
@@ -179,10 +190,12 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
     String serial, {
     required DebugSyncStageChanged onStage,
   }) async {
+    final storage = await storageService.load();
     final result = await _run(
       action: 'Analyze',
       serial: serial,
       onStage: onStage,
+      storage: storage,
     );
     if (result.exitCode != 0 || result.status != 'AnalysisReady') {
       throw StateError(_friendlyFailure(result));
@@ -227,26 +240,67 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
       const JsonEncoder.withIndent('  ').convert(resolved.toResolutionJson()),
       flush: true,
     );
+    final storage = await storageService.load();
     return _run(
       action: 'Apply',
       serial: serial,
       resolution: analysis.resolutionPath,
       onStage: onStage,
+      storage: storage,
     );
+  }
+
+  @override
+  Future<SyncStorageSettings> loadStorage() => storageService.load();
+
+  @override
+  Future<SyncStorageInventory> storageInventory(SyncStorageSettings settings) =>
+      storageService.inventory(settings);
+
+  @override
+  Future<String?> chooseStorageDirectory() async {
+    const command =
+        r'''$u=[Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=$u;$f=(New-Object -ComObject Shell.Application).BrowseForFolder(0,'选择 Jax Sync 存储位置',0,0);if($f){[Console]::Out.Write($f.Self.Path)}''';
+    final result = await Process.run(
+      'powershell.exe',
+      const ['-NoProfile', '-STA', '-Command', command],
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    );
+    if (result.exitCode != 0) throw StateError('${result.stderr}');
+    final value = '${result.stdout}'.trim();
+    return value.isEmpty ? null : value;
+  }
+
+  @override
+  Future<SyncStorageMigrationResult> migrateStorage(String destination) =>
+      storageService.migrate(destination);
+
+  @override
+  Future<void> updateBackupRetention(int count) async {
+    await storageService.updateRetention(count);
+    await storageService.cleanupBackups();
+  }
+
+  @override
+  Future<void> openStorageFolder() async {
+    final settings = await storageService.load();
+    await Directory(settings.root).create(recursive: true);
+    await Process.start('explorer.exe', [settings.root]);
   }
 
   Future<DebugSyncRunResult> _run({
     required String action,
     required String serial,
     required DebugSyncStageChanged onStage,
+    required SyncStorageSettings storage,
     String? resolution,
   }) async {
     if (_running) throw StateError('SYNC_SESSION_ACTIVE：已有同步任务正在运行。');
     _running = true;
     final session = DateTime.now().microsecondsSinceEpoch;
     final exchange = Directory(
-      '$projectRoot${Platform.pathSeparator}.debug_snapshots'
-      '${Platform.pathSeparator}sync_ui_$session',
+      '${storage.sessionsPath}${Platform.pathSeparator}sync_ui_$session',
     )..createSync(recursive: true);
     final statusPath = '${exchange.path}${Platform.pathSeparator}status.json';
     final resultPath = '${exchange.path}${Platform.pathSeparator}result.json';
@@ -262,6 +316,9 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
       '-NoLaunchPreview',
       '-StatusPath ${quote(statusPath)}',
       '-ResultPath ${quote(resultPath)}',
+      '-StorageRoot ${quote(storage.root)}',
+      '-StorageLayoutVersion ${quote('${storage.layoutVersion}')}',
+      '-BackupRetention ${quote('${storage.backupRetention}')}',
       if (resolution != null) '-Resolution ${quote(resolution)}',
       if (action == 'Apply')
         '-Confirmation ${quote('FIRST_REAL_DUAL_DEVICE_SYNC')}',

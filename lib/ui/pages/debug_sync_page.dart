@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/sync/resolved_sync_plan.dart';
 import '../../data/sync/windows_debug_sync_coordinator.dart';
+import '../../data/sync/sync_storage_service.dart';
 import 'sync_preview_page.dart';
 
 class DebugSyncPage extends StatefulWidget {
@@ -29,6 +30,8 @@ class _DebugSyncPageState extends State<DebugSyncPage> {
   String? _error;
   String _stage = '等待检查连接';
   bool _busy = false;
+  SyncStorageSettings? _storage;
+  SyncStorageInventory? _inventory;
 
   @override
   void initState() {
@@ -36,6 +39,24 @@ class _DebugSyncPageState extends State<DebugSyncPage> {
     _analysis = widget.initialAnalysis;
     _serial = widget.initialSerial;
     if (_analysis != null) _stage = '分析完成';
+    _loadStorage();
+  }
+
+  Future<void> _loadStorage() async {
+    try {
+      final storage = await widget.coordinator.loadStorage();
+      final inventory = await widget.coordinator.storageInventory(storage);
+      if (mounted) {
+        setState(() {
+          _storage = storage;
+          _inventory = inventory;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = '无法读取同步存储配置：$error');
+      }
+    }
   }
 
   Future<void> _checkConnection() async {
@@ -163,18 +184,30 @@ class _DebugSyncPageState extends State<DebugSyncPage> {
   Widget _body() {
     if (_result != null) return _resultView(_result!);
     if (_analysis != null) {
-      return SyncPreviewPage(
-        plan: _analysis!.plan,
-        windowsSnapshot: _analysis!.windowsSnapshot,
-        androidSnapshot: _analysis!.androidSnapshot,
-        baseline: _analysis!.baseline,
-        onConfirmedApply: _busy ? null : _apply,
-        embedded: true,
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: _storageCard(),
+          ),
+          Expanded(
+            child: SyncPreviewPage(
+              plan: _analysis!.plan,
+              windowsSnapshot: _analysis!.windowsSnapshot,
+              androidSnapshot: _analysis!.androidSnapshot,
+              baseline: _analysis!.baseline,
+              onConfirmedApply: _busy ? null : _apply,
+              embedded: true,
+            ),
+          ),
+        ],
       );
     }
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        _storageCard(),
+        const SizedBox(height: 20),
         Text('连接状态', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 16),
         ListTile(
@@ -231,6 +264,129 @@ class _DebugSyncPageState extends State<DebugSyncPage> {
       ],
     );
   }
+
+  Widget _storageCard() {
+    final storage = _storage;
+    if (storage == null) return const LinearProgressIndicator();
+    final canChange = !_busy && _analysis == null && _result == null;
+    return Card(
+      child: ExpansionTile(
+        title: const Text('同步数据存储位置'),
+        subtitle: Text(storage.root),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('保存同步基线、同步前备份和诊断信息。选择的目录将直接作为 SyncStorageRoot。'),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('备份保留：最近 '),
+              DropdownButton<int>(
+                value: storage.backupRetention,
+                items: List.generate(50, (index) => index + 1)
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text('$value')),
+                    )
+                    .toList(),
+                onChanged: !canChange
+                    ? null
+                    : (value) async {
+                        if (value == null) return;
+                        await widget.coordinator.updateBackupRetention(value);
+                        await _loadStorage();
+                      },
+              ),
+              const Text(' 次'),
+              const Spacer(),
+              if (_inventory != null)
+                Text(
+                  '${_inventory!.backupSessions} 个备份 · ${_formatBytes(_inventory!.totalBytes)}',
+                ),
+            ],
+          ),
+          Wrap(
+            spacing: 12,
+            children: [
+              OutlinedButton.icon(
+                onPressed: canChange ? _changeStorage : null,
+                icon: const Icon(Icons.drive_file_move_outline),
+                label: const Text('更改位置'),
+              ),
+              TextButton.icon(
+                onPressed: _busy ? null : widget.coordinator.openStorageFolder,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('打开文件夹'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _changeStorage() async {
+    final destination = await widget.coordinator.chooseStorageDirectory();
+    if (destination == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('迁移现有同步数据？'),
+        content: Text(
+          '旧位置：${_storage!.root}\n\n新位置：$destination\n\n'
+          '将复制并验证 Last Successful Sync Baseline、${_inventory?.backupSessions ?? 0} 次备份及诊断数据。'
+          '验证成功并切换配置后，才会清理旧副本。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('迁移并使用新位置'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _stage = '正在复制并验证同步数据…';
+    });
+    try {
+      final result = await widget.coordinator.migrateStorage(destination);
+      await _loadStorage();
+      if (mounted) {
+        setState(() => _stage = '同步存储迁移完成');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.removedOldCopies
+                  ? '迁移完成，旧副本已安全清理。'
+                  : '迁移完成；部分旧副本未能清理，可稍后手工检查。',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = '迁移失败，当前仍使用原同步数据位置。\n$error';
+          _stage = '迁移失败';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _formatBytes(int bytes) => bytes < 1024 * 1024
+      ? '${(bytes / 1024).toStringAsFixed(1)} KB'
+      : '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
 
   Widget _resultView(DebugSyncRunResult result) {
     final success = result.status == 'Success';
