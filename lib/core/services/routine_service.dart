@@ -166,22 +166,31 @@ class RoutineService {
     );
   }
 
-  Future<void> complete(RoutineExecution e) async {
+  Future<void> complete(RoutineExecution e, {DateTime? endTime}) async {
     final t = now().toUtc();
     final open = (await repository.getRoutineRunSegments(e.id))
         .where((s) => s.endedAt == null)
         .firstOrNull;
+    final correctedEnd = endTime?.toUtc() ?? t;
+    if (endTime != null &&
+        open != null &&
+        !correctedEnd.isAfter(open.startedAt)) {
+      throw const DomainFailure('结束时间必须晚于开始时间');
+    }
+    if (endTime != null && correctedEnd.isAfter(t)) {
+      throw const DomainFailure('结束时间不能晚于当前时间');
+    }
     final done = e.copyWith(
       status: RoutineExecutionStatus.completed,
       updatedAt: t,
-      completedAt: t,
+      completedAt: correctedEnd,
     );
     if (open == null) {
       await repository.updateRoutineExecutionOnly(done);
     } else {
       await repository.completeRoutineExecution(
         done,
-        open.copyWith(endedAt: t),
+        open.copyWith(endedAt: correctedEnd),
       );
       SegmentLifecycleLog.close(
         reason: 'routine_complete',
@@ -190,7 +199,7 @@ class RoutineService {
         executionId: e.id,
         segmentId: open.id,
         startedAt: open.startedAt,
-        endedAt: t,
+        endedAt: correctedEnd,
       );
     }
   }

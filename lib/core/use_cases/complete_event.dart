@@ -9,7 +9,7 @@ class CompleteEvent {
   const CompleteEvent({required this.repository, required this.now});
   final EventRepository repository;
   final Clock now;
-  Future<CompletedRecord> call(String id) async {
+  Future<CompletedRecord> call(String id, {DateTime? endTime}) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
     final children = await repository.getDirectChildren(id);
@@ -41,12 +41,19 @@ class CompleteEvent {
         .where((segment) => segment.endedAt == null)
         .firstOrNull;
     if (open == null) throw const DomainFailure('执行计时数据不完整');
+    final correctedEnd = endTime?.toUtc() ?? timestamp;
+    if (endTime != null && !correctedEnd.isAfter(open.startedAt)) {
+      throw const DomainFailure('结束时间必须晚于开始时间');
+    }
+    if (endTime != null && correctedEnd.isAfter(timestamp)) {
+      throw const DomainFailure('结束时间不能晚于当前时间');
+    }
     final completed = current.copyWith(
       status: EventStatus.completed,
-      completedAt: timestamp,
+      completedAt: correctedEnd,
       updatedAt: timestamp,
     );
-    final closed = open.copyWith(endedAt: timestamp);
+    final closed = open.copyWith(endedAt: correctedEnd);
     await repository.pauseEvent(completed, closed);
     SegmentLifecycleLog.close(
       reason: 'event_complete',
@@ -54,7 +61,7 @@ class CompleteEvent {
       ownerId: id,
       segmentId: open.id,
       startedAt: open.startedAt,
-      endedAt: timestamp,
+      endedAt: correctedEnd,
     );
     final duration = segments.fold(
       Duration.zero,

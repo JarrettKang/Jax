@@ -312,13 +312,36 @@ class _SummaryPageState extends State<SummaryPage> {
     trailing: TextButton(onPressed: tap, child: Text(_clock(value))),
   );
   Future<void> _addSegment(BuildContext context) async {
-    final candidates = <_Candidate>[
-      for (final e in widget.controller.todayEvents)
-        _Candidate.event(e.id, e.name),
-      for (final r in widget.controller.routines.where(
-        (r) => r.appliesTo(_anchor),
-      ))
-        _Candidate.routine(r.id, r.name),
+    final eventCandidates = [
+      for (final event in widget.controller.historicalEventCandidates)
+        _Candidate.event(
+          event.id,
+          event.name,
+          widget.controller.historicalEventContext(event),
+        ),
+    ];
+    final scheduledCandidates = [
+      for (final routine
+          in widget.controller.historicalScheduledRoutineCandidates)
+        _Candidate.routine(
+          routine.id,
+          routine.name,
+          widget.controller.historicalRoutineContext(routine),
+        ),
+    ];
+    final onDemandCandidates = [
+      for (final routine
+          in widget.controller.historicalOnDemandRoutineCandidates)
+        _Candidate.routine(
+          routine.id,
+          routine.name,
+          widget.controller.historicalRoutineContext(routine),
+        ),
+    ];
+    final candidates = [
+      ...eventCandidates,
+      ...scheduledCandidates,
+      ...onDemandCandidates,
     ];
     if (candidates.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -327,17 +350,34 @@ class _SummaryPageState extends State<SummaryPage> {
     }
     final picked = await showModalBottomSheet<_Candidate>(
       context: context,
-      builder: (context) => ListView(
-        shrinkWrap: true,
-        children: [
-          const ListTile(title: Text('选择要补记的事项')),
-          for (final c in candidates)
-            ListTile(
-              title: Text(c.name),
-              subtitle: Text(c.routine ? '日常' : '事项'),
-              onTap: () => Navigator.pop(context, c),
-            ),
-        ],
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(title: Text('选择要补记的对象')),
+              if (eventCandidates.isNotEmpty) ...[
+                const _CandidateGroupTitle('未完成事项'),
+                for (final candidate in eventCandidates)
+                  _CandidateTile(candidate),
+              ],
+              if (scheduledCandidates.isNotEmpty) ...[
+                const _CandidateGroupTitle('今日日常'),
+                for (final candidate in scheduledCandidates)
+                  _CandidateTile(candidate),
+              ],
+              if (onDemandCandidates.isNotEmpty) ...[
+                const _CandidateGroupTitle('快捷动作'),
+                for (final candidate in onDemandCandidates)
+                  _CandidateTile(candidate),
+              ],
+            ],
+          ),
+        ),
       ),
     );
     if (picked == null || !context.mounted) return;
@@ -499,11 +539,41 @@ String _clock(DateTime value) =>
     '${value.toLocal().hour.toString().padLeft(2, '0')}:${value.toLocal().minute.toString().padLeft(2, '0')}';
 
 class _Candidate {
-  const _Candidate(this.id, this.name, this.routine);
+  const _Candidate(this.id, this.name, this.context, this.routine);
   final String id, name;
+  final String context;
   final bool routine;
-  const _Candidate.event(String id, String name) : this(id, name, false);
-  const _Candidate.routine(String id, String name) : this(id, name, true);
+  const _Candidate.event(String id, String name, String context)
+    : this(id, name, context, false);
+  const _Candidate.routine(String id, String name, String context)
+    : this(id, name, context, true);
+}
+
+class _CandidateGroupTitle extends StatelessWidget {
+  const _CandidateGroupTitle(this.label);
+  final String label;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+    child: Text(label, style: Theme.of(context).textTheme.labelLarge),
+  );
+}
+
+class _CandidateTile extends StatelessWidget {
+  const _CandidateTile(this.candidate);
+  final _Candidate candidate;
+  @override
+  Widget build(BuildContext context) => ListTile(
+    key: ValueKey('segment-candidate-${candidate.id}'),
+    dense: true,
+    title: Text(candidate.name),
+    subtitle: Text(
+      candidate.context,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    ),
+    onTap: () => Navigator.pop(context, candidate),
+  );
 }
 
 class _CategoryBar extends StatelessWidget {

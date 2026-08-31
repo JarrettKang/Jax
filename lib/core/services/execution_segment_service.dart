@@ -1,4 +1,5 @@
 import '../entities/daily_execution_segment.dart';
+import '../entities/event_status.dart';
 import '../entities/jax_day.dart';
 import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
@@ -70,6 +71,15 @@ class ExecutionSegmentService {
     return _routines!.deleteClosedRoutineRunSegment(segment.id);
   }
 
+  Future<void> validateCompletionEnd(
+    String openSegmentId,
+    DateTime start,
+    DateTime end,
+  ) async {
+    _validateClosed(start, end);
+    await _validateOverlap(start, end, exceptId: openSegmentId);
+  }
+
   Future<void> addEvent(
     String id,
     String segmentId,
@@ -77,6 +87,11 @@ class ExecutionSegmentService {
     DateTime end,
   ) async {
     _validateClosed(start, end);
+    final event = await _events.getEvent(id);
+    if (event == null) throw const DomainFailure('事项不存在');
+    if (event.status == EventStatus.running) {
+      throw const DomainFailure('正在执行的对象不能补录');
+    }
     await _validateOverlap(start, end);
     await _events.insertHistoricalRunSegment(
       RunSegment(
@@ -103,14 +118,26 @@ class ExecutionSegmentService {
     }
     _validateClosed(start, end);
     await _validateOverlap(start, end);
-    var execution = await repo.getRoutineExecution(routineId, dayKey);
+    final routine = (await repo.getRoutines())
+        .where((item) => item.id == routineId)
+        .firstOrNull;
+    if (routine == null) throw const DomainFailure('日常不存在');
+    var execution = routine.isScheduled
+        ? await repo.getRoutineExecution(routineId, dayKey)
+        : await repo.getUnfinishedRoutineExecution(routineId);
+    if (execution?.status == RoutineExecutionStatus.running) {
+      throw const DomainFailure('正在执行的对象不能补录');
+    }
     execution ??= RoutineExecution(
       id: executionId,
       routineId: routineId,
       occurrenceDate: dayKey,
-      status: RoutineExecutionStatus.paused,
+      status: routine.isScheduled
+          ? RoutineExecutionStatus.paused
+          : RoutineExecutionStatus.completed,
       createdAt: _now().toUtc(),
       updatedAt: _now().toUtc(),
+      completedAt: routine.isScheduled ? null : end.toUtc(),
     );
     await repo.insertHistoricalRoutineExecution(
       execution,

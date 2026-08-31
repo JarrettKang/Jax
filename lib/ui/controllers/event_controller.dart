@@ -180,6 +180,26 @@ class EventController extends ChangeNotifier {
       .where((routine) => routine.isActive && !routine.isScheduled)
       .toList(growable: false);
 
+  List<JaxEvent> get historicalEventCandidates => _events
+      .where((event) => event.status != EventStatus.running)
+      .toList(growable: false);
+
+  List<Routine> get historicalScheduledRoutineCandidates => todayRoutines
+      .where((routine) {
+        final status = executionFor(routine)?.status;
+        return status != RoutineExecutionStatus.running &&
+            status != RoutineExecutionStatus.completed;
+      })
+      .toList(growable: false);
+
+  List<Routine> get historicalOnDemandRoutineCandidates =>
+      activeOnDemandRoutines
+          .where(
+            (routine) =>
+                executionFor(routine)?.status != RoutineExecutionStatus.running,
+          )
+          .toList(growable: false);
+
   RoutineExecution? executionFor(Routine r) => _todayExecutions[r.id];
   RoutineExecution? get runningRoutineExecution => _todayExecutions.values
       .where((e) => e?.status == RoutineExecutionStatus.running)
@@ -420,6 +440,21 @@ class EventController extends ChangeNotifier {
       _enqueueExecution(() => _change(() => _wait(id)));
   Future<String?> complete(String id) =>
       _enqueueExecution(() => _change(() => _complete(id)));
+  Future<String?> completeAt(String id, DateTime endTime) => _enqueueExecution(
+    () => _change(() async {
+      final open = (_segments[id] ?? const <RunSegment>[])
+          .where((segment) => segment.endedAt == null)
+          .firstOrNull;
+      if (open == null) throw const DomainFailure('执行计时数据不完整');
+      await _executionSegments.validateCompletionEnd(
+        open.id,
+        open.startedAt,
+        endTime,
+      );
+      await _complete(id, endTime: endTime);
+      return null;
+    }),
+  );
   Future<String?> restore(String id) => _change(() => _restore(id));
   Future<String?> addToToday(String id) => _change(() => _ensureToday(id));
   Future<String?> addManyToToday(Iterable<String> ids) => _change(() async {
@@ -600,6 +635,76 @@ class EventController extends ChangeNotifier {
   Future<String?> completeRoutine(Routine r) => _enqueueExecution(
     () => _change(() => _routineService!.complete(executionFor(r)!)),
   );
+  Future<String?> completeRoutineAt(Routine r, DateTime endTime) =>
+      _enqueueExecution(
+        () => _change(() async {
+          final execution = executionFor(r);
+          if (execution == null) throw const DomainFailure('执行记录不存在');
+          final open =
+              (_routineSegments[execution.id] ?? const <RoutineRunSegment>[])
+                  .where((segment) => segment.endedAt == null)
+                  .firstOrNull;
+          if (open == null) throw const DomainFailure('执行计时数据不完整');
+          await _executionSegments.validateCompletionEnd(
+            open.id,
+            open.startedAt,
+            endTime,
+          );
+          await _routineService!.complete(execution, endTime: endTime);
+          return null;
+        }),
+      );
+
+  DateTime? runningEventStartedAt(String eventId) =>
+      (_segments[eventId] ?? const <RunSegment>[])
+          .where((segment) => segment.endedAt == null)
+          .firstOrNull
+          ?.startedAt
+          .toLocal();
+
+  DateTime? runningRoutineStartedAt(Routine routine) {
+    final execution = executionFor(routine);
+    if (execution == null) return null;
+    return (_routineSegments[execution.id] ?? const <RoutineRunSegment>[])
+        .where((segment) => segment.endedAt == null)
+        .firstOrNull
+        ?.startedAt
+        .toLocal();
+  }
+
+  String historicalEventContext(JaxEvent event) {
+    final byId = {for (final item in _worldEvents) item.id: item};
+    var root = event;
+    final seen = <String>{};
+    while (root.parentEventId != null && seen.add(root.id)) {
+      final parent = byId[root.parentEventId];
+      if (parent == null) break;
+      root = parent;
+    }
+    final category = _categoryItems
+        .where((item) => item.id == root.categoryId)
+        .firstOrNull;
+    final breadcrumb = eventBreadcrumb(event);
+    return [
+      category?.name ?? '未分类',
+      if (breadcrumb.isNotEmpty) breadcrumb,
+    ].join(' › ');
+  }
+
+  String historicalRoutineContext(Routine routine) {
+    final category = _routineCategories
+        .where((item) => item.id == routine.routineCategoryId)
+        .firstOrNull;
+    return '${category?.name ?? '未分类'} · ${routine.isScheduled ? _routineRecurrence(routine.recurrence) : '按需'}';
+  }
+
+  String _routineRecurrence(RoutineRecurrence recurrence) =>
+      switch (recurrence) {
+        RoutineRecurrence.daily => '每日',
+        RoutineRecurrence.weekdays => '工作日',
+        RoutineRecurrence.weekends => '周末',
+        RoutineRecurrence.selectedWeekdays => '指定星期',
+      };
   Duration routineElapsed(Routine r) =>
       (_routineSegments[executionFor(r)?.id] ?? const []).fold(
         Duration.zero,
@@ -661,16 +766,18 @@ class EventController extends ChangeNotifier {
     DateTime day,
     DateTime start,
     DateTime end,
-  ) => _change(
-    () => _executionSegments.addRoutine(
+  ) => _change(() {
+    final routine = _routines.where((item) => item.id == routineId).firstOrNull;
+    if (routine == null) throw const DomainFailure('日常不存在');
+    return _executionSegments.addRoutine(
       routineId,
       _newId(),
       _newId(),
-      JaxDay.forDisplayDate(day).key,
+      routine.isScheduled ? currentJaxDay.key : JaxDay.forDisplayDate(day).key,
       start,
       end,
-    ),
-  );
+    );
+  });
   Duration elapsedFor(JaxEvent event) =>
       (_segments[event.id] ?? const <RunSegment>[]).fold(
         Duration.zero,

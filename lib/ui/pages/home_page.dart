@@ -170,13 +170,25 @@ class _HomePageState extends State<HomePage> {
       menu: PopupMenuButton<_HeroAction>(
         key: const ValueKey('home-running-more'),
         tooltip: '更多操作',
-        onSelected: (value) => _act(
-          value == _HeroAction.complete
-              ? () => widget.controller.complete(event.id)
-              : () => widget.controller.wait(event.id),
-        ),
+        onSelected: (value) {
+          switch (value) {
+            case _HeroAction.complete:
+              _act(() => widget.controller.complete(event.id));
+            case _HeroAction.completeCorrected:
+              _showCorrectedCompletion(
+                startedAt: widget.controller.runningEventStartedAt(event.id),
+                complete: (end) => widget.controller.completeAt(event.id, end),
+              );
+            case _HeroAction.wait:
+              _act(() => widget.controller.wait(event.id));
+          }
+        },
         itemBuilder: (_) => const [
           PopupMenuItem(value: _HeroAction.complete, child: Text('完成')),
+          PopupMenuItem(
+            value: _HeroAction.completeCorrected,
+            child: Text('完成并修改结束时间…'),
+          ),
           PopupMenuItem(value: _HeroAction.wait, child: Text('等待')),
         ],
       ),
@@ -198,10 +210,23 @@ class _HomePageState extends State<HomePage> {
       menu: PopupMenuButton<_HeroAction>(
         key: const ValueKey('home-running-more'),
         tooltip: '更多操作',
-        onSelected: (_) =>
-            _act(() => widget.controller.completeRoutine(routine)),
+        onSelected: (value) {
+          if (value == _HeroAction.complete) {
+            _act(() => widget.controller.completeRoutine(routine));
+          } else {
+            _showCorrectedCompletion(
+              startedAt: widget.controller.runningRoutineStartedAt(routine),
+              complete: (end) =>
+                  widget.controller.completeRoutineAt(routine, end),
+            );
+          }
+        },
         itemBuilder: (_) => const [
           PopupMenuItem(value: _HeroAction.complete, child: Text('完成')),
+          PopupMenuItem(
+            value: _HeroAction.completeCorrected,
+            child: Text('完成并修改结束时间…'),
+          ),
         ],
       ),
     );
@@ -308,6 +333,126 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _act(Future<String?> Function() action) async =>
       _showError(await action());
+
+  Future<void> _showCorrectedCompletion({
+    required DateTime? startedAt,
+    required Future<String?> Function(DateTime end) complete,
+  }) async {
+    if (startedAt == null) {
+      _showError('执行计时数据不完整');
+      return;
+    }
+    var end = widget.controller.currentTime;
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('修改结束时间'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('开始时间：${_dateTime(startedAt)}'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('结束时间：'),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: end,
+                          firstDate: DateTime(
+                            startedAt.year,
+                            startedAt.month,
+                            startedAt.day,
+                          ),
+                          lastDate: widget.controller.currentTime,
+                        );
+                        if (date != null) {
+                          setDialog(() {
+                            end = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              end.hour,
+                              end.minute,
+                            );
+                            error = null;
+                          });
+                        }
+                      },
+                      child: Text(_date(end)),
+                    ),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.fromDateTime(end),
+                        );
+                        if (time != null) {
+                          setDialog(() {
+                            end = DateTime(
+                              end.year,
+                              end.month,
+                              end.day,
+                              time.hour,
+                              time.minute,
+                            );
+                            error = null;
+                          });
+                        }
+                      },
+                      child: Text(_clock(end)),
+                    ),
+                  ],
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final result = await complete(end);
+                if (!context.mounted) return;
+                if (result == null) {
+                  Navigator.pop(dialogContext);
+                } else {
+                  setDialog(() => error = result);
+                }
+              },
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _date(DateTime value) =>
+      '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+  String _clock(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+  String _dateTime(DateTime value) => '${_date(value)} ${_clock(value)}';
   void _showError(String? error) {
     if (error != null && mounted) {
       ScaffoldMessenger.of(context)
@@ -640,7 +785,7 @@ class _NextItem {
   final Routine? routine;
 }
 
-enum _HeroAction { complete, wait }
+enum _HeroAction { complete, completeCorrected, wait }
 
 Category? _eventCategory(EventController controller, JaxEvent event) {
   final byId = {for (final e in controller.worldEvents) e.id: e};
