@@ -52,9 +52,57 @@ replacement. Snapshot and SyncPlan JSON use the same UTF-8 contract.
 Normal failure paths distinguish stale plans, invalid plans, backup/apply/final
 verification errors, successful two-device rollback, critical rollback failure,
 and verified business synchronization followed by baseline-write failure.
-Whole-database restore is used only by rollback. The first real backup artifacts
-are retained under `%APPDATA%\Jax\sync_backups\<timestamp>`. The successful
-canonical baseline is `%APPDATA%\Jax\sync\last_successful_sync.json`.
+Whole-database restore is used only by rollback.
+
+## Sync Storage
+
+All durable coordinator artifacts resolve from one device-local
+`SyncStorageRoot`. With no setting file, existing installations retain the
+legacy root `%APPDATA%\Jax`: the baseline remains at
+`sync\last_successful_sync.json` and existing session backups remain under
+`sync_backups\`. This compatibility mode prevents an upgrade from appearing to
+lose the Last Successful Sync Baseline.
+
+After a user-selected migration, the chosen directory itself is the root and
+uses this versioned layout:
+
+```text
+<SyncStorageRoot>\
+  baseline\last_successful_sync.json
+  backups\<timestamp>\windows_before_sync.db
+  backups\<timestamp>\android_before_sync.db
+  sessions\...
+  logs\...
+```
+
+The low-frequency storage panel in the standalone UI displays the exact root,
+opens it in Explorer, and lets the user select a directory with the native
+Windows folder picker. A change always offers **迁移并使用新位置**; there is no
+path-only switch that could silently discard three-way history. The migration
+is `validate -> copy -> SHA-256/readability verification -> baseline fingerprint
+verification -> persist setting -> reopen baseline -> clean old copies`. Backup
+SQLite files are opened read-only and exported through the snapshot adapter as
+part of verification. If any step fails, the exact old setting remains active,
+the old baseline/backups are untouched, and incomplete target artifacts are
+removed. Moving to the same, ancestor, or descendant root is rejected.
+
+The small root/layout/retention setting remains at
+`%APPDATA%\Jax\sync_storage.json`; it is a Windows-only preference and is never
+included in a Sync Snapshot or sent to Android. The Windows business database
+also remains `%APPDATA%\Jax\jax.db`; it is not a sync artifact and is not moved
+by this feature. Flutter passes the resolved root, layout version, and retention
+to PowerShell, while direct CLI use reads the same setting unless explicit
+`-StorageRoot`, `-StorageLayoutVersion`, `-BackupRetention`, `-Baseline`, or
+`-BackupRoot` overrides are supplied.
+
+Backup retention defaults to the most recent five sessions and accepts 1–50.
+Both device databases and metadata are retained or deleted as a whole session
+directory. Cleanup runs only after a terminal Apply result (or an explicit safe
+retention-setting change), never during Apply or rollback. The current backup
+is retained, recent failed/rolled-back sessions participate in the same newest-N
+policy, and `CRITICAL_ROLLBACK_FAILURE` evidence is never automatically deleted.
+Analyze/session reports and every reported baseline/backup path use the resolved
+root rather than a UI hard-coded AppData path.
 
 No uninstall, package-data clearing, database reset, automatic repair,
 background sync, or automatic Apply is used. The CLI tools remain available for

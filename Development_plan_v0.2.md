@@ -226,4 +226,6 @@
 - Windows Debug 顶栏提供 Developer Sync 入口，并切换到不打开业务 DB 的独立进程；用户可在 UI 内完成设备检查、显式设备选择、Analyze、差异查看、冲突选择、Dry Run、二次确认、Apply 进度和结果查看。
 - UI 通过 Coordinator 调用 ADB Debug transport；正常路径不要求环境变量、terminal、Dart tool、ADB 命令或 JSON 编辑。既有 CLI 保留用于诊断和回归。
 - 真实 Apply 继续强制 stale fingerprint、单 session lock、双端一致性 backup、entity-level transaction、双端 readiness/invariant/final fingerprint 验证、rollback 和 success-only baseline；baseline 写失败不回滚已验证成功的业务事实。
+- Standalone Sync 持久化路径统一由 device-local `SyncStorageRoot` 解析；未配置时兼容 `%APPDATA%\Jax` 旧 baseline/backup，用户可在 UI 中以 copy→verify→switch→cleanup 安全迁移至自选目录，迁移不重建 baseline 也不改变 fingerprint。
+- backup 默认按最近 5 个 session 整体保留（可设 1–50），仅在 session 终态后清理；当前 recovery source 不可删除，`CRITICAL_ROLLBACK_FAILURE` 现场永不自动清理。路径配置仅保留在 Windows 本机，不进入 snapshot 或 Android。
 - 当前仍依赖 Android 开发者模式、USB 调试、ADB 和 Debug `run-as`。Phase 3 仅替换连接/transport 层，不重写 snapshot、compare、resolution、mutation 或 conflict UI。详见 `docs/sync_phase2b2.md`。
