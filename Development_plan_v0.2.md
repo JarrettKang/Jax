@@ -172,6 +172,8 @@
 - F10.1 在既有 Event `run_segments` 与 Routine `routine_run_segments` 上提供统一的按 JaxDay 查询；展示按实际开始时间排序且允许同一对象重复出现，跨 23:00 只在读取时 overlap，不物理拆段。
 - F10.2 Core `ExecutionSegmentService` 负责 closed segment 的新增、修改、删除，以及 Event/Routine 全局 `[start,end)` 不重叠、start < end、非未来时间的校验；open segment 仅可继续通过 Today 状态机暂停/完成。
 - F10.3 Record 日总结提供低噪音顺序列表、上一项/下一项上下文、closed 编辑器与“添加执行记录”入口。补记复用已有 Event/Routine execution，不建立第二套历史事实来源；删除最后一个 segment 不改变 completed 状态。
+- F10.4 Home 为 running Event 与 Scheduled/On-demand RoutineExecution 提供低频“完成并修改结束时间”入口；Core `complete(..., endTime:)` 在既有 SQLite transaction 内同时更新 completed 状态并直接关闭原 open segment，不经过 complete→reopen→edit，不生成额外极短 segment。
+- F10.5 Record 补录候选收紧为非 running 的未完成 Event、当前 JaxDay 未完成 Scheduled Routine occurrence 与 Home active On-demand 快捷动作，并按三组展示。按需补录复用 paused unfinished execution；无 unfinished 时创建独立 completed execution。时间范围与全局 overlap 继续由 `ExecutionSegmentService` 统一校验，不修改 schema。
 - F10.4 schema 保持 v10：两张现有 segment 表已经具备查询、插入、更新、删除所需字段，迁移不变。
 
 ## 12. F11：Record 今日时间分布

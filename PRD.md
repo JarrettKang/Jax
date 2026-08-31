@@ -222,7 +222,7 @@ v0.1 至少需要通过以下行为验证：
 - Jax 在 Windows 和 Android 的导航中均按“首页 / 事件 / 记录”排列，并默认从首页启动；两端共用首页内容和业务规则，仅导航外壳可响应屏幕宽度变化。
 - 首页顶部按设备当前本地时间显示弱化的“早上好”“上午好”“中午好”“下午好”或“晚上好”。时间区间沿用既有规则，问候语在进入、返回首页及跨越区间边界后刷新，不作为业务数据持久化。
 - 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event ancestor breadcrumb 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
-- Running Hero 直接提供“暂停”主操作；More 对 Event 提供“完成 / 等待”，对 Routine 提供“完成”。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
+- Running Hero 直接提供“暂停”主操作；More 对 Event 提供“完成 / 完成并修改结束时间… / 等待”，对 Routine 提供“完成 / 完成并修改结束时间…”。普通完成仍以当前时间结束；修正入口只允许 open segment 开始后、当前时间前的真实结束时间，并在同一业务事务内完成对象和直接关闭原 open segment，不新增修正 segment。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
 - Event 的当前 parent 上下文可在 Hero 底部以紧凑 direct children 列表和“已完成数 / 总数”呈现；它只辅助理解当前执行位置，不得取代 running 名称或扩展为预测、百分比进度条。
 - Running Hero 之后优先显示 Waiting，然后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始或恢复候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
 - 没有 running 时，首页显示“现在没有正在执行的事项”和“接下来可以做”，仍提供 Today 候选启动入口；无候选时可进入今日页。
@@ -382,6 +382,8 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 14. Record 今日时间分布
 
 - 日总结依次展示分类时间统计、今日时间分布和执行记录。今日时间分布使用 24 行×60 分钟的紧凑栅格，行顺序严格为 JaxDay 的 23:00、00:00…22:00。
+- “添加执行记录”候选按“未完成事项 / 今日日常 / 快捷动作”分组：Event 仅包含 pending、paused、waiting；计划型 Routine 仅包含当前 JaxDay recurrence 命中且 execution 未完成、非 running 的对象；按需 Routine 仅包含 Home 快捷动作中的 active definition。任何当前 running 对象均直接从候选中排除。
+- 补录仍只新增真实 RunSegment，不改变现有 Event/RoutineExecution 状态。按需 Routine 存在 paused unfinished execution 时归入该 execution；否则为该次已独立发生的补录创建 completed RoutineExecution，不与另一次按需执行合并。
 - 每个小时行高度一致，横向位置和宽度分别表示小时内的开始分钟与 duration；15/30/45 分钟只使用轻量 guide。空白不解释、不补齐。
 - 真实 Event/Routine segment 不按对象聚合或合并。跨小时只生成持有同一 segment identity 的 rendering fragments；点击任意 fragment 显示完整真实 segment，而非该小时切片。
 - 跨 JaxDay segment 仅按窗口 overlap 绘制，open segment 绘制至当前时间；底层 segment 不拆分，统计和历史事实来源不变。
