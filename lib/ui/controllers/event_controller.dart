@@ -18,6 +18,7 @@ import '../../core/services/world_display_state_service.dart';
 import '../../core/services/time_summary_service.dart';
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/daily_execution_segment.dart';
+import '../../core/entities/available_time_gap.dart';
 import '../../core/services/execution_segment_service.dart';
 import '../../core/entities/routine.dart';
 import '../../core/entities/routine_category.dart';
@@ -180,8 +181,12 @@ class EventController extends ChangeNotifier {
       .where((routine) => routine.isActive && !routine.isScheduled)
       .toList(growable: false);
 
-  List<JaxEvent> get historicalEventCandidates => _events
-      .where((event) => event.status != EventStatus.running)
+  List<JaxEvent> get historicalEventCandidates => todayEvents
+      .where(
+        (event) =>
+            event.status != EventStatus.running &&
+            event.status != EventStatus.completed,
+      )
       .toList(growable: false);
 
   List<Routine> get historicalScheduledRoutineCandidates => todayRoutines
@@ -688,7 +693,7 @@ class EventController extends ChangeNotifier {
     return [
       category?.name ?? '未分类',
       if (breadcrumb.isNotEmpty) breadcrumb,
-    ].join(' › ');
+    ].join(' · ');
   }
 
   String historicalRoutineContext(Routine routine) {
@@ -748,6 +753,20 @@ class EventController extends ChangeNotifier {
       _summaries.week(date);
   Future<List<DailyExecutionSegment>> dailyExecutionSegments(DateTime date) =>
       _executionSegments.forJaxDay(date);
+  Future<List<AvailableTimeGap>> availableTimeGaps(DateTime date) =>
+      _executionSegments.availableGapsForJaxDay(date);
+  Future<String?> validateHistoricalSegmentRange(
+    DateTime start,
+    DateTime end,
+  ) async {
+    try {
+      await _executionSegments.validateNewRange(start, end);
+      return null;
+    } on DomainFailure catch (failure) {
+      return failure.message;
+    }
+  }
+
   Future<String?> updateClosedExecutionSegment(
     DailyExecutionSegment segment,
     DateTime start,

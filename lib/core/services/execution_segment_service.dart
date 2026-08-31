@@ -1,4 +1,5 @@
 import '../entities/daily_execution_segment.dart';
+import '../entities/available_time_gap.dart';
 import '../entities/event_status.dart';
 import '../entities/jax_day.dart';
 import '../entities/jax_event.dart';
@@ -28,6 +29,38 @@ class ExecutionSegmentService {
       final end = (s.endedAt ?? now).toLocal();
       return end.isAfter(day.start) && s.startedAt.toLocal().isBefore(day.end);
     }).toList()..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+  }
+
+  Future<List<AvailableTimeGap>> availableGapsForJaxDay(DateTime date) async {
+    final day = JaxDay.forDisplayDate(date);
+    final now = _now().toLocal();
+    if (!now.isAfter(day.start)) return const [];
+    final windowEnd = now.isBefore(day.end) ? now : day.end;
+    final occupied = <({DateTime start, DateTime end})>[];
+    for (final segment in await _all()) {
+      final rawStart = segment.startedAt.toLocal();
+      final rawEnd = (segment.endedAt ?? now).toLocal();
+      if (!rawEnd.isAfter(day.start) || !rawStart.isBefore(windowEnd)) {
+        continue;
+      }
+      final start = rawStart.isBefore(day.start) ? day.start : rawStart;
+      final end = rawEnd.isAfter(windowEnd) ? windowEnd : rawEnd;
+      if (end.isAfter(start)) occupied.add((start: start, end: end));
+    }
+    occupied.sort((a, b) => a.start.compareTo(b.start));
+
+    final gaps = <AvailableTimeGap>[];
+    var cursor = day.start;
+    for (final interval in occupied) {
+      if (interval.start.isAfter(cursor)) {
+        gaps.add(AvailableTimeGap(start: cursor, end: interval.start));
+      }
+      if (interval.end.isAfter(cursor)) cursor = interval.end;
+    }
+    if (windowEnd.isAfter(cursor)) {
+      gaps.add(AvailableTimeGap(start: cursor, end: windowEnd));
+    }
+    return gaps;
   }
 
   Future<void> updateClosed(
@@ -78,6 +111,11 @@ class ExecutionSegmentService {
   ) async {
     _validateClosed(start, end);
     await _validateOverlap(start, end, exceptId: openSegmentId);
+  }
+
+  Future<void> validateNewRange(DateTime start, DateTime end) async {
+    _validateClosed(start, end);
+    await _validateOverlap(start, end);
   }
 
   Future<void> addEvent(

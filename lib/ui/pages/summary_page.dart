@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/daily_execution_segment.dart';
+import '../../core/entities/available_time_gap.dart';
 import '../controllers/event_controller.dart';
 import '../theme/category_palette_colors.dart';
 import '../widgets/daily_time_distribution.dart';
@@ -361,7 +362,7 @@ class _SummaryPageState extends State<SummaryPage> {
             children: [
               const ListTile(title: Text('选择要补记的对象')),
               if (eventCandidates.isNotEmpty) ...[
-                const _CandidateGroupTitle('未完成事项'),
+                const _CandidateGroupTitle('今日事项'),
                 for (final candidate in eventCandidates)
                   _CandidateTile(candidate),
               ],
@@ -381,73 +382,166 @@ class _SummaryPageState extends State<SummaryPage> {
       ),
     );
     if (picked == null || !context.mounted) return;
+    final gaps = await widget.controller.availableTimeGaps(_anchor);
+    if (!context.mounted) return;
     var start = _onDay(const TimeOfDay(hour: 12, minute: 0));
     var end = _onDay(const TimeOfDay(hour: 12, minute: 30));
+    var showAllGaps = false;
+    String? rangeError;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheet) => StatefulBuilder(
-        builder: (context, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '补记 ${picked.name}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              _timeButton(context, '开始', start, () async {
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(start),
-                );
-                if (t != null) setSheet(() => start = _onDay(t));
-              }),
-              _timeButton(context, '结束', end, () async {
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(end),
-                );
-                if (t != null) setSheet(() => end = _onDay(t));
-              }),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () async {
-                    final error = picked.routine
-                        ? await widget.controller.addHistoricalRoutineSegment(
-                            picked.id,
-                            _anchor,
-                            start,
-                            end,
-                          )
-                        : await widget.controller.addHistoricalEventSegment(
-                            picked.id,
-                            start,
-                            end,
-                          );
-                    if (context.mounted && error == null) {
-                      Navigator.pop(context);
-                    }
-                    if (context.mounted && error != null) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(error)));
-                    }
-                  },
-                  child: const Text('添加'),
+        builder: (context, setSheet) {
+          Future<void> setAndValidate({
+            TimeOfDay? newStart,
+            TimeOfDay? newEnd,
+          }) async {
+            setSheet(() {
+              if (newStart != null) start = _onDay(newStart);
+              if (newEnd != null) end = _onDay(newEnd);
+              rangeError = null;
+            });
+            final error = await widget.controller
+                .validateHistoricalSegmentRange(start, end);
+            if (context.mounted) setSheet(() => rangeError = error);
+          }
+
+          final containingGap = gaps
+              .where((gap) => gap.contains(start, end))
+              .firstOrNull;
+          final visibleGaps = showAllGaps ? gaps : gaps.take(5).toList();
+          return SafeArea(
+            child: FractionallySizedBox(
+              heightFactor: 0.84,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  20,
+                  24,
+                  20 + MediaQuery.viewInsetsOf(context).bottom,
                 ),
+                children: [
+                  Text('添加执行记录', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  Text(
+                    picked.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    picked.context,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 20),
+                  Text('可用空白时间', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  if (visibleGaps.isEmpty)
+                    Text(
+                      '当前没有可用空白时间',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (var index = 0; index < visibleGaps.length; index++)
+                          OutlinedButton(
+                            key: ValueKey('available-gap-$index'),
+                            onPressed: () => setSheet(() {
+                              start = visibleGaps[index].start;
+                              end = visibleGaps[index].end;
+                              rangeError = null;
+                            }),
+                            child: Text(_gapRange(visibleGaps[index])),
+                          ),
+                      ],
+                    ),
+                  if (gaps.length > 5)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () =>
+                            setSheet(() => showAllGaps = !showAllGaps),
+                        child: Text(showAllGaps ? '收起' : '查看全部'),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  _timeButton(context, '开始时间', start, () async {
+                    final value = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(start),
+                    );
+                    if (value != null) await setAndValidate(newStart: value);
+                  }),
+                  _timeButton(context, '结束时间', end, () async {
+                    final value = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(end),
+                    );
+                    if (value != null) await setAndValidate(newEnd: value);
+                  }),
+                  if (containingGap != null)
+                    Text(
+                      '位于可用空白 ${_gapRange(containingGap)} 内',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (rangeError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      rangeError!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('取消'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () async {
+                          final error = picked.routine
+                              ? await widget.controller
+                                    .addHistoricalRoutineSegment(
+                                      picked.id,
+                                      _anchor,
+                                      start,
+                                      end,
+                                    )
+                              : await widget.controller
+                                    .addHistoricalEventSegment(
+                                      picked.id,
+                                      start,
+                                      end,
+                                    );
+                          if (context.mounted && error == null) {
+                            Navigator.pop(context);
+                          }
+                          if (context.mounted && error != null) {
+                            setSheet(() => rangeError = error);
+                          }
+                        },
+                        child: const Text('添加记录'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
+
+  static String _gapRange(AvailableTimeGap gap) =>
+      '${_clock(gap.start)}–${_clock(gap.end)}';
 
   Widget _navigator() => Row(
     children: [
