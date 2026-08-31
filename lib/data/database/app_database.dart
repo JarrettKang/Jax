@@ -1,11 +1,13 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'world_node_shadow_migration.dart';
+
 class AppDatabase {
   AppDatabase._(this.database);
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 13;
+  static const schemaVersion = 14;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -57,6 +59,8 @@ class AppDatabase {
     await _createEventDayPlans(database);
     await _createWorldCategoryCollapsePreferences(database);
     await _createSyncMetadata(database);
+    await WorldNodeShadowMigration.createTables(database);
+    await _createSyncTriggers(database);
   }
 
   static Future<void> _upgradeSchema(
@@ -103,6 +107,10 @@ class AppDatabase {
     if (oldVersion < 11) await _migrateToCategoryColors(database);
     if (oldVersion < 12) await _migrateToOnDemandRoutines(database);
     if (oldVersion < 13) await _migrateToSyncMetadata(database);
+    if (oldVersion < 14) {
+      await WorldNodeShadowMigration.backfill(database);
+      await _createSyncTriggers(database);
+    }
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -304,34 +312,43 @@ class AppDatabase {
       'routines': 'routine',
       'routine_executions': 'routineExecution',
       'routine_run_segments': 'routineRunSegment',
+      'world_nodes': 'worldNode',
+      'legacy_event_world_node_links': 'legacyEventWorldNodeLink',
     };
     for (final entry in entities.entries) {
       if (!await _tableExists(database, entry.key)) continue;
-      await database.execute('''CREATE TRIGGER ${entry.key}_sync_delete
+      await database.execute(
+        '''CREATE TRIGGER IF NOT EXISTS ${entry.key}_sync_delete
         AFTER DELETE ON ${entry.key}
         BEGIN
           INSERT OR REPLACE INTO sync_tombstones(entity_type, entity_id, deleted_at_utc)
           VALUES('${entry.value}', OLD.id,
             CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-        END''');
-      await database.execute('''CREATE TRIGGER ${entry.key}_sync_insert
+        END''',
+      );
+      await database.execute(
+        '''CREATE TRIGGER IF NOT EXISTS ${entry.key}_sync_insert
         AFTER INSERT ON ${entry.key}
         BEGIN
           UPDATE ${entry.key} SET updated_at_utc = created_at_utc
           WHERE rowid = NEW.rowid AND updated_at_utc = 0;
           DELETE FROM sync_tombstones
           WHERE entity_type = '${entry.value}' AND entity_id = NEW.id;
-        END''');
+        END''',
+      );
     }
     if (await _tableExists(database, 'event_day_plans')) {
-      await database.execute('''CREATE TRIGGER event_day_plans_sync_delete
+      await database.execute(
+        '''CREATE TRIGGER IF NOT EXISTS event_day_plans_sync_delete
       AFTER DELETE ON event_day_plans
       BEGIN
         INSERT OR REPLACE INTO sync_tombstones(entity_type, entity_id, deleted_at_utc)
         VALUES('eventDayPlan', OLD.event_id || '@' || OLD.day_date,
           CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER));
-      END''');
-      await database.execute('''CREATE TRIGGER event_day_plans_sync_insert
+      END''',
+      );
+      await database.execute(
+        '''CREATE TRIGGER IF NOT EXISTS event_day_plans_sync_insert
       AFTER INSERT ON event_day_plans
       BEGIN
         UPDATE event_day_plans SET updated_at_utc = created_at_utc
@@ -339,7 +356,8 @@ class AppDatabase {
         DELETE FROM sync_tombstones
         WHERE entity_type = 'eventDayPlan'
           AND entity_id = NEW.event_id || '@' || NEW.day_date;
-      END''');
+      END''',
+      );
     }
 
     const timestampTables = <String>[
@@ -351,11 +369,14 @@ class AppDatabase {
       'routine_executions',
       'routine_run_segments',
       'event_day_plans',
+      'world_nodes',
+      'legacy_event_world_node_links',
     ];
     for (final table in timestampTables) {
       final columns = await database.rawQuery('PRAGMA table_info($table)');
       if (!columns.any((row) => row['name'] == 'updated_at_utc')) continue;
-      await database.execute('''CREATE TRIGGER ${table}_sync_update
+      await database.execute(
+        '''CREATE TRIGGER IF NOT EXISTS ${table}_sync_update
         AFTER UPDATE ON $table
         WHEN NEW.updated_at_utc = OLD.updated_at_utc
         BEGIN
@@ -363,7 +384,8 @@ class AppDatabase {
             MAX(OLD.updated_at_utc + 1,
               CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
           WHERE rowid = NEW.rowid;
-        END''');
+        END''',
+      );
     }
   }
 
