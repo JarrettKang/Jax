@@ -368,4 +368,129 @@ void main() {
       );
     },
   );
+
+  test(
+    'derives complete JaxDay gaps with clipping and adjacent occupancy',
+    () async {
+      final afterDay = DateTime(2026, 8, 29);
+      final repo = MemoryRepository([event('work')])
+        ..segments.addAll([
+          RunSegment(
+            id: 'late-night',
+            eventId: 'work',
+            startedAt: DateTime(2026, 8, 27, 23),
+            endedAt: DateTime(2026, 8, 27, 23, 30),
+            createdAt: now,
+          ),
+          RunSegment(
+            id: 'after-midnight',
+            eventId: 'work',
+            startedAt: DateTime(2026, 8, 28, 0, 10),
+            endedAt: DateTime(2026, 8, 28, 1),
+            createdAt: now,
+          ),
+          segment(
+            'morning',
+            'work',
+            10,
+            11,
+          ).copyWith(endedAt: DateTime(2026, 8, 28, 11, 20)),
+          segment('afternoon', 'work', 13, 14),
+        ]);
+      final gaps = await ExecutionSegmentService(
+        repository: repo,
+        now: () => afterDay,
+      ).availableGapsForJaxDay(DateTime(2026, 8, 28));
+
+      expect(gaps.map((gap) => (gap.start, gap.end)), [
+        (DateTime(2026, 8, 27, 23, 30), DateTime(2026, 8, 28, 0, 10)),
+        (DateTime(2026, 8, 28, 1), DateTime(2026, 8, 28, 10)),
+        (DateTime(2026, 8, 28, 11, 20), DateTime(2026, 8, 28, 13)),
+        (DateTime(2026, 8, 28, 14), DateTime(2026, 8, 28, 23)),
+      ]);
+
+      repo.segments.add(
+        RunSegment(
+          id: 'adjacent',
+          eventId: 'work',
+          startedAt: DateTime(2026, 8, 28, 11, 20),
+          endedAt: DateTime(2026, 8, 28, 13),
+          createdAt: now,
+        ),
+      );
+      final adjacent = await ExecutionSegmentService(
+        repository: repo,
+        now: () => afterDay,
+      ).availableGapsForJaxDay(DateTime(2026, 8, 28));
+      expect(
+        adjacent.any(
+          (gap) =>
+              gap.start == DateTime(2026, 8, 28, 11, 20) &&
+              gap.end == DateTime(2026, 8, 28, 13),
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'open segments occupy through now and a new record splits its gap',
+    () async {
+      final current = DateTime(2026, 8, 28, 17, 30);
+      final repo = MemoryRepository([event('work')])
+        ..segments.add(
+          RunSegment(
+            id: 'open-now',
+            eventId: 'work',
+            startedAt: DateTime(2026, 8, 28, 16),
+            createdAt: current,
+          ),
+        );
+      final service = ExecutionSegmentService(
+        repository: repo,
+        now: () => current,
+      );
+      final openGaps = await service.availableGapsForJaxDay(current);
+      expect(openGaps.last.end, DateTime(2026, 8, 28, 16));
+
+      repo.segments
+        ..clear()
+        ..addAll([
+          RunSegment(
+            id: 'before',
+            eventId: 'work',
+            startedAt: DateTime(2026, 8, 28, 14),
+            endedAt: DateTime(2026, 8, 28, 15, 10),
+            createdAt: current,
+          ),
+          RunSegment(
+            id: 'after',
+            eventId: 'work',
+            startedAt: DateTime(2026, 8, 28, 17, 30),
+            endedAt: DateTime(2026, 8, 28, 18),
+            createdAt: current,
+          ),
+        ]);
+      final pastService = ExecutionSegmentService(
+        repository: repo,
+        now: () => DateTime(2026, 8, 29),
+      );
+      await pastService.addEvent(
+        'work',
+        'manual',
+        DateTime(2026, 8, 28, 15, 30),
+        DateTime(2026, 8, 28, 16, 20),
+      );
+      final updated = await pastService.availableGapsForJaxDay(
+        DateTime(2026, 8, 28),
+      );
+      expect(
+        updated.map((gap) => (gap.start, gap.end)),
+        containsAll([
+          (DateTime(2026, 8, 28, 15, 10), DateTime(2026, 8, 28, 15, 30)),
+          (DateTime(2026, 8, 28, 16, 20), DateTime(2026, 8, 28, 17, 30)),
+        ]),
+      );
+    },
+  );
 }

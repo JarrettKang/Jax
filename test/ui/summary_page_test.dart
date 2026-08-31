@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/event_status.dart';
+import 'package:jax/core/entities/event_day_plan.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/routine.dart';
@@ -126,6 +127,23 @@ void main() {
             event('waiting', EventStatus.waiting),
             event('running-event', EventStatus.running),
             event('completed', EventStatus.completed),
+            event('not-today-pending', EventStatus.pending),
+            event('not-today-paused', EventStatus.paused),
+          ], false)
+          ..eventDayPlans.addAll([
+            for (var index = 0; index < 5; index++)
+              EventDayPlan(
+                eventId: [
+                  'pending',
+                  'paused',
+                  'waiting',
+                  'running-event',
+                  'completed',
+                ][index],
+                dayKey: '2026-08-31',
+                order: index,
+                createdAt: now,
+              ),
           ])
           ..segments.add(
             RunSegment(
@@ -174,7 +192,7 @@ void main() {
     await tester.tap(find.text('添加执行记录'));
     await tester.pumpAndSettle();
 
-    expect(find.text('未完成事项'), findsOneWidget);
+    expect(find.text('今日事项'), findsOneWidget);
     expect(find.text('今日日常'), findsOneWidget);
     expect(find.text('快捷动作'), findsOneWidget);
     for (final id in [
@@ -202,6 +220,8 @@ void main() {
     for (final id in [
       'running-event',
       'completed',
+      'not-today-pending',
+      'not-today-paused',
       'scheduled-running',
       'scheduled-completed',
       'scheduled-not-today',
@@ -212,4 +232,62 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'available gap tap prefills the manual record range on narrow UI',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 700);
+      addTearDown(() {
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPhysicalSize();
+      });
+      final now = DateTime(2026, 8, 31, 17, 30);
+      final event = JaxEvent(
+        id: 'planned',
+        name: '检查超算',
+        status: EventStatus.paused,
+        createdAt: now,
+        updatedAt: now,
+        firstStartedAt: now.subtract(const Duration(hours: 2)),
+      );
+      final repo = MemoryRepository([event], false)
+        ..eventDayPlans.add(
+          EventDayPlan(
+            eventId: event.id,
+            dayKey: '2026-08-31',
+            order: 0,
+            createdAt: now,
+          ),
+        )
+        ..segments.add(
+          RunSegment(
+            id: 'occupied',
+            eventId: event.id,
+            startedAt: DateTime(2026, 8, 31, 14),
+            endedAt: DateTime(2026, 8, 31, 15, 10),
+            createdAt: now,
+          ),
+        );
+      await tester.pumpWidget(JaxApp(repository: repo, now: () => now));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('记录'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('添加执行记录'), 500);
+      await tester.tap(find.text('添加执行记录'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('segment-candidate-planned')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('可用空白时间'), findsOneWidget);
+      final gap = find.byKey(const ValueKey('available-gap-1'));
+      expect(gap, findsOneWidget);
+      await tester.tap(gap);
+      await tester.pumpAndSettle();
+      expect(find.text('15:10'), findsWidgets);
+      expect(find.text('17:30'), findsWidgets);
+      expect(find.text('位于可用空白 15:10–17:30 内'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
