@@ -2,12 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
+import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_node.dart';
+import '../../core/errors/domain_failure.dart';
 import '../controllers/planning_controller.dart';
 
 class PlanningPage extends StatefulWidget {
-  const PlanningPage({required this.controller, super.key});
+  const PlanningPage({
+    required this.controller,
+    this.onAddEventToToday,
+    this.isEventToday,
+    super.key,
+  });
   final PlanningController controller;
+  final Future<String?> Function(String eventId)? onAddEventToToday;
+  final bool Function(String eventId)? isEventToday;
 
   @override
   State<PlanningPage> createState() => _PlanningPageState();
@@ -113,8 +122,12 @@ class _PlanningPageState extends State<PlanningPage> {
   Future<void> _openPlan(Plan plan) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            PlanDetailPage(controller: widget.controller, planId: plan.id),
+        builder: (_) => PlanDetailPage(
+          controller: widget.controller,
+          planId: plan.id,
+          onAddEventToToday: widget.onAddEventToToday,
+          isEventToday: widget.isEventToday,
+        ),
       ),
     );
     await widget.controller.load();
@@ -224,13 +237,15 @@ class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
 
   Widget _section(String? categoryId, String name) {
     final key = categoryId ?? 'unclassified';
-    final roots = widget.controller.worldNodes
-        .where(
-          (node) =>
-              node.parentWorldNodeId == null && node.categoryId == categoryId,
-        )
-        .toList()
-      ..sort(_sort);
+    final roots =
+        widget.controller.worldNodes
+            .where(
+              (node) =>
+                  node.parentWorldNodeId == null &&
+                  node.categoryId == categoryId,
+            )
+            .toList()
+          ..sort(_sort);
     final collapsed = _collapsedCategories.contains(key);
     return Column(
       children: [
@@ -253,10 +268,11 @@ class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
   }
 
   Widget _node(WorldNode node, int depth) {
-    final children = widget.controller.worldNodes
-        .where((value) => value.parentWorldNodeId == node.id)
-        .toList()
-      ..sort(_sort);
+    final children =
+        widget.controller.worldNodes
+            .where((value) => value.parentWorldNodeId == node.id)
+            .toList()
+          ..sort(_sort);
     final collapsed = _collapsedBranches.contains(node.id);
     final completed = node.status == WorldNodeStatus.completed;
     final occupied = widget.controller.hasCurrentPlan(node.id);
@@ -310,10 +326,14 @@ class PlanDetailPage extends StatelessWidget {
   const PlanDetailPage({
     required this.controller,
     required this.planId,
+    this.onAddEventToToday,
+    this.isEventToday,
     super.key,
   });
   final PlanningController controller;
   final String planId;
+  final Future<String?> Function(String eventId)? onAddEventToToday;
+  final bool Function(String eventId)? isEventToday;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -392,6 +412,7 @@ class PlanDetailPage extends StatelessWidget {
                 items.length,
                 (index) => _PlanItemRow(
                   item: items[index],
+                  linkedEvent: controller.linkedEventFor(items[index].id),
                   index: index,
                   count: items.length,
                   editable: plan.isCurrent,
@@ -410,6 +431,20 @@ class PlanDetailPage extends StatelessWidget {
                   ),
                   onAction: (action) =>
                       _itemAction(context, items[index], action),
+                  onAddToToday: onAddEventToToday == null
+                      ? null
+                      : () => _guard(context, () async {
+                          final event = controller.linkedEventFor(
+                            items[index].id,
+                          );
+                          if (event == null) {
+                            throw const DomainFailure('找不到已派发事项');
+                          }
+                          final error = await onAddEventToToday!(event.id);
+                          if (error != null) throw DomainFailure(error);
+                          await controller.load();
+                        }),
+                  isEventToday: isEventToday,
                 ),
               ),
           ],
@@ -547,20 +582,26 @@ class PlanDetailPage extends StatelessWidget {
 class _PlanItemRow extends StatelessWidget {
   const _PlanItemRow({
     required this.item,
+    required this.linkedEvent,
     required this.index,
     required this.count,
     required this.editable,
     required this.onToggle,
     required this.onMove,
     required this.onAction,
+    required this.onAddToToday,
+    required this.isEventToday,
   });
   final PlanItem item;
+  final JaxEvent? linkedEvent;
   final int index;
   final int count;
   final bool editable;
   final VoidCallback onToggle;
   final ValueChanged<int> onMove;
   final ValueChanged<String> onAction;
+  final VoidCallback? onAddToToday;
+  final bool Function(String eventId)? isEventToday;
 
   @override
   Widget build(BuildContext context) {
@@ -584,10 +625,19 @@ class _PlanItemRow extends StatelessWidget {
           ),
         ),
         title: Text(item.title),
-        subtitle: item.note == null
-            ? Text(_itemStatusText(item.status))
-            : Text('${_itemStatusText(item.status)}  ·  ${item.note}'),
-        trailing: editable
+        subtitle: Text(_itemSubtitle(item, linkedEvent)),
+        trailing:
+            item.status == PlanItemStatus.dispatched &&
+                linkedEvent != null &&
+                isEventToday?.call(linkedEvent!.id) != true &&
+                onAddToToday != null
+            ? IconButton(
+                key: ValueKey('add-dispatched-to-today-${item.id}'),
+                tooltip: '加入今日',
+                onPressed: onAddToToday,
+                icon: const Icon(Icons.today_outlined),
+              )
+            : editable
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -625,6 +675,21 @@ class _PlanItemRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _itemSubtitle(PlanItem item, JaxEvent? event) {
+  final parts = <String>[];
+  if (event != null) {
+    parts.add(
+      item.status == PlanItemStatus.done
+          ? '已完成'
+          : '已派发 · ${planningEventStatusText(event.status)}',
+    );
+  } else {
+    parts.add(_itemStatusText(item.status));
+  }
+  if (item.note != null) parts.add(item.note!);
+  return parts.join('  ·  ');
 }
 
 Future<String?> _textDialog(

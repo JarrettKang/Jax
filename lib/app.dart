@@ -213,7 +213,7 @@ class _JaxAppState extends State<JaxApp> {
       ),
       EventsPage(
         controller: _controller,
-        onOpenWorld: () => setState(() => _selectedIndex = 2),
+        planningController: _planningController,
       ),
       _planningController == null
           ? const Center(child: Text('世界数据库不可用'))
@@ -223,7 +223,11 @@ class _JaxAppState extends State<JaxApp> {
             ),
       _planningController == null
           ? const Center(child: Text('规划数据库不可用'))
-          : PlanningPage(controller: _planningController!),
+          : PlanningPage(
+              controller: _planningController!,
+              onAddEventToToday: _controller.addToToday,
+              isEventToday: _controller.isPlannedToday,
+            ),
       RoutinePage(
         controller: _controller,
         collapseStore: widget.routineCategoryCollapseStore,
@@ -304,6 +308,7 @@ class _JaxAppState extends State<JaxApp> {
                         onDestinationSelected: (index) {
                           setState(() => _selectedIndex = index);
                           _controller.load();
+                          _planningController?.load();
                         },
                         destinations: const [
                           NavigationRailDestination(
@@ -348,6 +353,7 @@ class _JaxAppState extends State<JaxApp> {
                     onDestinationSelected: (index) {
                       setState(() => _selectedIndex = index);
                       _controller.load();
+                      _planningController?.load();
                     },
                     destinations: const [
                       NavigationDestination(

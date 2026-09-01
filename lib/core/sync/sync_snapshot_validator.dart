@@ -177,9 +177,17 @@ class SyncSnapshotValidator {
     for (final item in live.values.where(
       (record) => record.kind == SyncEntityKind.planItem,
     )) {
-      if ({'dispatched', 'done'}.contains(item.payload['status']) &&
-          !eventBySource.containsKey(item.metadata.id)) {
+      final status = item.payload['status'];
+      final event = eventBySource[item.metadata.id];
+      if ({'dispatched', 'done'}.contains(status) && event == null) {
         issues.add('executed-plan-item-without-event:${item.metadata.id}');
+      }
+      if ({'draft', 'next', 'dropped'}.contains(status) && event != null) {
+        issues.add('unexecuted-plan-item-with-event:${item.metadata.id}');
+      }
+      if (event != null &&
+          (status == 'done') != (event.payload['status'] == 'completed')) {
+        issues.add('plan-item-event-status-mismatch:${item.metadata.id}');
       }
     }
     final activeByNode = <String, int>{};

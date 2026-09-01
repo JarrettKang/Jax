@@ -5,23 +5,42 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
+import '../controllers/planning_controller.dart';
 import '../theme/category_palette_colors.dart';
 import '../widgets/execution_action_buttons.dart';
 
-class EventsPage extends StatelessWidget {
+class EventsPage extends StatefulWidget {
   const EventsPage({
     required this.controller,
-    required this.onOpenWorld,
+    this.planningController,
     super.key,
   });
   final EventController controller;
-  final VoidCallback onOpenWorld;
+  final PlanningController? planningController;
+
+  @override
+  State<EventsPage> createState() => _EventsPageState();
+}
+
+class _EventsPageState extends State<EventsPage> {
+  final Set<String> _selectedRecommendations = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.planningController?.load();
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller,
+    animation: Listenable.merge([
+      widget.controller,
+      if (widget.planningController != null) widget.planningController!,
+    ]),
     builder: (context, _) {
-      if (controller.loading) {
+      final controller = widget.controller;
+      final planning = widget.planningController;
+      if (controller.loading || planning?.loading == true) {
         return const Center(child: CircularProgressIndicator());
       }
       final events = controller.todayEvents;
@@ -42,15 +61,26 @@ class EventsPage extends StatelessWidget {
               _SectionHeader(
                 title: '今日事项',
                 count: events.length,
-                action: TextButton.icon(
-                  key: const ValueKey('add-standalone-event'),
-                  onPressed: () => _createStandalone(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('临时事项'),
+                action: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      key: const ValueKey('today-add-existing'),
+                      onPressed: () => _addExisting(context),
+                      icon: const Icon(Icons.playlist_add, size: 18),
+                      label: const Text('已有事项'),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('add-standalone-event'),
+                      onPressed: () => _createStandalone(context),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('临时事项'),
+                    ),
+                  ],
                 ),
               ),
               if (events.isEmpty)
-                _EventEmptyState(onOpenWorld: onOpenWorld)
+                const _CompactEmptyState(text: '暂无今日事项')
               else
                 _ExecutionList(
                   children: [
@@ -64,6 +94,21 @@ class EventsPage extends StatelessWidget {
                   ],
                 ),
               const SizedBox(height: 20),
+              if (planning != null &&
+                  planning.recommendationGroups.isNotEmpty) ...[
+                _RecommendationSection(
+                  groups: planning.recommendationGroups,
+                  selected: _selectedRecommendations,
+                  dispatching: planning.dispatching,
+                  onChanged: (id, selected) => setState(() {
+                    selected
+                        ? _selectedRecommendations.add(id)
+                        : _selectedRecommendations.remove(id);
+                  }),
+                  onDispatch: () => _dispatchSelected(context),
+                ),
+                const SizedBox(height: 20),
+              ],
               _SectionHeader(title: '今日日常', count: routines.length),
               if (routines.isEmpty)
                 const _CompactEmptyState(text: '今天没有符合 recurrence 的日常')
@@ -108,7 +153,7 @@ class EventsPage extends StatelessWidget {
                     value: null,
                     child: Text('未分类'),
                   ),
-                  for (final category in controller.categories)
+                  for (final category in widget.controller.categories)
                     DropdownMenuItem<String?>(
                       value: category.id,
                       child: Text(category.name),
@@ -125,8 +170,7 @@ class EventsPage extends StatelessWidget {
             ),
             FilledButton(
               key: const ValueKey('save-standalone-event'),
-              onPressed: () =>
-                  Navigator.pop(dialogContext, (name, categoryId)),
+              onPressed: () => Navigator.pop(dialogContext, (name, categoryId)),
               child: const Text('添加到今日'),
             ),
           ],
@@ -134,13 +178,167 @@ class EventsPage extends StatelessWidget {
       ),
     );
     if (result == null) return;
-    final error = await controller.createStandaloneForToday(
+    final error = await widget.controller.createStandaloneForToday(
       result.$1,
       categoryId: result.$2,
     );
     if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
     }
+  }
+
+  Future<void> _dispatchSelected(BuildContext context) async {
+    final planning = widget.planningController!;
+    final selected = [
+      for (final group in planning.recommendationGroups)
+        for (final item in group.items)
+          if (_selectedRecommendations.contains(item.id)) item.id,
+    ];
+    if (selected.isEmpty) return;
+    try {
+      await planning.dispatchRecommendations(selected);
+      await widget.controller.load();
+      if (mounted) setState(_selectedRecommendations.clear);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
+  Future<void> _addExisting(BuildContext context) async {
+    final candidates = widget.controller.events
+        .where(
+          (event) =>
+              event.status != EventStatus.completed &&
+              !widget.controller.isPlannedToday(event.id),
+        )
+        .toList(growable: false);
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('没有可重新加入今日的事项')));
+      return;
+    }
+    final chosen = <String>{};
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('已有事项'),
+          content: SizedBox(
+            width: 480,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final event in candidates)
+                  CheckboxListTile(
+                    key: ValueKey('existing-event-${event.id}'),
+                    value: chosen.contains(event.id),
+                    title: Text(event.name),
+                    subtitle: Text(event.isPlanned ? '已派发事项' : '临时事项'),
+                    onChanged: (value) => setDialogState(() {
+                      value == true
+                          ? chosen.add(event.id)
+                          : chosen.remove(event.id);
+                    }),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: chosen.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, true),
+              child: const Text('加入今日'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) return;
+    final error = await widget.controller.addManyToToday(chosen);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+}
+
+class _RecommendationSection extends StatelessWidget {
+  const _RecommendationSection({
+    required this.groups,
+    required this.selected,
+    required this.dispatching,
+    required this.onChanged,
+    required this.onDispatch,
+  });
+
+  final List<PlanningRecommendationGroup> groups;
+  final Set<String> selected;
+  final bool dispatching;
+  final void Function(String id, bool selected) onChanged;
+  final VoidCallback onDispatch;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleIds = {
+      for (final group in groups)
+        for (final item in group.items) item.id,
+    };
+    final visibleSelected = selected.where(visibleIds.contains).toSet();
+    return Column(
+      key: const ValueKey('today-recommendations'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('今日建议', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        for (final group in groups) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 10, 4, 2),
+            child: Text(
+              '${group.category == null ? '' : '${group.category!.name} · '}'
+              '${group.node.name} · ${group.plan.displayTitle}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+          for (final item in group.items)
+            CheckboxListTile(
+              key: ValueKey('recommendation-${item.id}'),
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              value: visibleSelected.contains(item.id),
+              title: Text(item.title),
+              subtitle: item.note == null ? null : Text(item.note!),
+              onChanged: dispatching
+                  ? null
+                  : (value) => onChanged(item.id, value == true),
+            ),
+        ],
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            key: const ValueKey('dispatch-recommendations'),
+            onPressed: visibleSelected.isEmpty || dispatching
+                ? null
+                : onDispatch,
+            icon: dispatching
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.today_outlined),
+            label: const Text('加入今日'),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -150,16 +348,34 @@ class _SectionHeader extends StatelessWidget {
   final int count;
   final Widget? action;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(width: 8),
-        Text('$count', style: Theme.of(context).textTheme.labelSmall),
-        if (action != null) ...[const Spacer(), action!],
-      ],
-    ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final label = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(width: 8),
+          Text('$count', style: Theme.of(context).textTheme.labelSmall),
+        ],
+      );
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: action != null && constraints.maxWidth < 400
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  label,
+                  Align(alignment: Alignment.centerRight, child: action),
+                ],
+              )
+            : Row(
+                children: [
+                  label,
+                  if (action != null) ...[const Spacer(), action!],
+                ],
+              ),
+      );
+    },
   );
 }
 
@@ -174,33 +390,6 @@ class _ExecutionList extends StatelessWidget {
         if (i < children.length - 1) const Divider(height: 1),
       ],
     ],
-  );
-}
-
-class _EventEmptyState extends StatelessWidget {
-  const _EventEmptyState({required this.onOpenWorld});
-  final VoidCallback onOpenWorld;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '暂无今日事项',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-        TextButton.icon(
-          key: const ValueKey('today-open-world'),
-          onPressed: onOpenWorld,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('从世界添加'),
-        ),
-      ],
-    ),
   );
 }
 

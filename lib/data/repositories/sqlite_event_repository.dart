@@ -1,4 +1,4 @@
-import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
+import 'package:sqflite/sqflite.dart' show ConflictAlgorithm, DatabaseExecutor;
 
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
@@ -7,6 +7,7 @@ import '../../core/entities/category.dart';
 import '../../core/entities/event_day_plan.dart';
 import '../../core/entities/routine.dart';
 import '../../core/entities/routine_category.dart';
+import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/event_day_plan_repository.dart';
 import '../../core/repositories/routine_repository.dart';
@@ -57,18 +58,45 @@ class SqliteEventRepository
 
   @override
   Future<void> updateEvent(JaxEvent event) async {
-    final count = await _appDatabase.database.update(
-      'events',
-      _toRow(event),
-      where: 'id = ?',
-      whereArgs: [event.id],
-    );
-    if (count != 1) throw StateError('Event not found: ${event.id}');
+    await _appDatabase.database.transaction((tx) async {
+      final current = await tx.query(
+        'events',
+        columns: ['status', 'source_plan_item_id'],
+        where: 'id = ?',
+        whereArgs: [event.id],
+        limit: 1,
+      );
+      if (current.isEmpty) throw StateError('Event not found: ${event.id}');
+      if (current.single['source_plan_item_id'] != event.sourcePlanItemId) {
+        throw StateError('Event source cannot be changed');
+      }
+      final count = await tx.update(
+        'events',
+        _toRow(event),
+        where: 'id = ?',
+        whereArgs: [event.id],
+      );
+      if (count != 1) throw StateError('Event not found: ${event.id}');
+      if (current.single['status'] != EventStatus.completed.name) {
+        await _markLinkedItemDone(tx, event);
+      }
+    });
   }
 
   @override
   Future<void> deleteEvent(String id) async {
     await _appDatabase.database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'events',
+        columns: ['source_plan_item_id'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Event not found: $id');
+      if (rows.single['source_plan_item_id'] != null) {
+        throw const DomainFailure('已派发事项不能删除；从今日移除不会撤回派发');
+      }
       final count = await transaction.delete(
         'events',
         where: 'id = ?',
@@ -171,12 +199,24 @@ class SqliteEventRepository
   @override
   Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
     await _appDatabase.database.transaction((transaction) async {
-      await transaction.update(
+      final current = await transaction.query(
+        'events',
+        columns: ['source_plan_item_id'],
+        where: 'id = ?',
+        whereArgs: [event.id],
+        limit: 1,
+      );
+      if (current.isEmpty) throw StateError('Event not found: ${event.id}');
+      if (current.single['source_plan_item_id'] != event.sourcePlanItemId) {
+        throw StateError('Event source cannot be changed');
+      }
+      final eventCount = await transaction.update(
         'events',
         _toRow(event),
         where: 'id = ?',
         whereArgs: [event.id],
       );
+      if (eventCount != 1) throw StateError('Event not found: ${event.id}');
       final count = await transaction.update(
         'run_segments',
         _segmentToRow(segment),
@@ -184,6 +224,7 @@ class SqliteEventRepository
         whereArgs: [segment.id],
       );
       if (count != 1) throw StateError('Open run segment not found');
+      await _markLinkedItemDone(transaction, event);
     });
   }
 
@@ -194,7 +235,7 @@ class SqliteEventRepository
       for (final event in events) {
         final rows = await transaction.query(
           'events',
-          columns: ['status'],
+          columns: ['status', 'source_plan_item_id'],
           where: 'id = ?',
           whereArgs: [event.id],
           limit: 1,
@@ -205,6 +246,22 @@ class SqliteEventRepository
             event.completedAt != null) {
           throw StateError('Invalid completed Event restoration');
         }
+        final sourceId = rows.single['source_plan_item_id'] as String?;
+        if (sourceId != event.sourcePlanItemId) {
+          throw StateError('Event source cannot be changed');
+        }
+        if (sourceId != null) {
+          final items = await transaction.query(
+            'plan_items',
+            columns: ['status'],
+            where: 'id = ?',
+            whereArgs: [sourceId],
+            limit: 1,
+          );
+          if (items.length != 1 || items.single['status'] != 'done') {
+            throw StateError('Planned Event restore state mismatch');
+          }
+        }
       }
       for (final event in events) {
         final count = await transaction.update(
@@ -214,8 +271,40 @@ class SqliteEventRepository
           whereArgs: [event.id, EventStatus.completed.name],
         );
         if (count != 1) throw StateError('Event restore conflict: ${event.id}');
+        final sourceId = event.sourcePlanItemId;
+        if (sourceId != null) {
+          final itemCount = await transaction.update(
+            'plan_items',
+            {
+              'status': 'dispatched',
+              'updated_at_utc': event.updatedAt.millisecondsSinceEpoch,
+            },
+            where: "id = ? AND status = 'done'",
+            whereArgs: [sourceId],
+          );
+          if (itemCount != 1) {
+            throw StateError('Planned Event restore conflict: ${event.id}');
+          }
+        }
       }
     });
+  }
+
+  Future<void> _markLinkedItemDone(DatabaseExecutor tx, JaxEvent event) async {
+    final sourceId = event.sourcePlanItemId;
+    if (sourceId == null || event.status != EventStatus.completed) return;
+    final count = await tx.update(
+      'plan_items',
+      {
+        'status': 'done',
+        'updated_at_utc': event.updatedAt.millisecondsSinceEpoch,
+      },
+      where: "id = ? AND status = 'dispatched'",
+      whereArgs: [sourceId],
+    );
+    if (count != 1) {
+      throw StateError('Planned Event completion state mismatch');
+    }
   }
 
   @override
@@ -256,10 +345,7 @@ class SqliteEventRepository
   }
 
   @override
-  Future<void> setStandaloneCategory(
-    String eventId,
-    String? categoryId,
-  ) async {
+  Future<void> setStandaloneCategory(String eventId, String? categoryId) async {
     final count = await _appDatabase.database.update(
       'events',
       {'category_id': categoryId},

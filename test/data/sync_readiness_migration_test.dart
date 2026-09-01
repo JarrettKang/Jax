@@ -161,59 +161,84 @@ void main() {
     },
   );
 
-  test('executed PlanItem readiness requires its unique linked Event', () async {
-    final app = await AppDatabase.inMemory();
-    addTearDown(app.close);
-    final db = app.database;
-    const nodeId = '11111111-1111-4111-8111-111111111111';
-    await db.insert('world_nodes', {
-      'id': nodeId,
-      'name': 'Node',
-      'status': 'inProgress',
-      'parent_world_node_id': null,
-      'category_id': null,
-      'sort_order': 0,
-      'created_at_utc': 1,
-      'updated_at_utc': 1,
-    });
-    await db.insert('plans', {
-      'id': 'plan',
-      'world_node_id': nodeId,
-      'title': null,
-      'status': 'focused',
-      'round_number': 1,
-      'ended_at_utc': null,
-      'created_at_utc': 1,
-      'updated_at_utc': 1,
-    });
-    await db.insert('plan_items', {
-      'id': 'item',
-      'plan_id': 'plan',
-      'title': 'Step',
-      'note': null,
-      'status': 'dispatched',
-      'sort_order': 0,
-      'created_at_utc': 1,
-      'updated_at_utc': 1,
-    });
-    expect(
-      (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
-      contains('executed-plan-item-without-event'),
-    );
-    await db.insert('events', {
-      'id': 'event',
-      'name': 'Step',
-      'status': 'pending',
-      'source_plan_item_id': 'item',
-      'category_id': null,
-      'created_at_utc': 1,
-      'updated_at_utc': 1,
-    });
-    expect(
-      (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
-      isNot(contains('executed-plan-item-without-event')),
-    );
-  });
+  test(
+    'executed PlanItem readiness requires its unique linked Event',
+    () async {
+      final app = await AppDatabase.inMemory();
+      addTearDown(app.close);
+      final db = app.database;
+      const nodeId = '11111111-1111-4111-8111-111111111111';
+      await db.insert('world_nodes', {
+        'id': nodeId,
+        'name': 'Node',
+        'status': 'inProgress',
+        'parent_world_node_id': null,
+        'category_id': null,
+        'sort_order': 0,
+        'created_at_utc': 1,
+        'updated_at_utc': 1,
+      });
+      await db.insert('plans', {
+        'id': 'plan',
+        'world_node_id': nodeId,
+        'title': null,
+        'status': 'focused',
+        'round_number': 1,
+        'ended_at_utc': null,
+        'created_at_utc': 1,
+        'updated_at_utc': 1,
+      });
+      await db.insert('plan_items', {
+        'id': 'item',
+        'plan_id': 'plan',
+        'title': 'Step',
+        'note': null,
+        'status': 'dispatched',
+        'sort_order': 0,
+        'created_at_utc': 1,
+        'updated_at_utc': 1,
+      });
+      expect(
+        (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
+        contains('executed-plan-item-without-event'),
+      );
+      await db.insert('events', {
+        'id': 'event',
+        'name': 'Step',
+        'status': 'pending',
+        'source_plan_item_id': 'item',
+        'category_id': null,
+        'created_at_utc': 1,
+        'updated_at_utc': 1,
+      });
+      expect(
+        (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
+        isNot(contains('executed-plan-item-without-event')),
+      );
+
+      await db.update(
+        'plan_items',
+        {'status': 'next'},
+        where: 'id = ?',
+        whereArgs: ['item'],
+      );
+      expect(
+        (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
+        contains('unexecuted-plan-item-with-event'),
+      );
+
+      await db.update(
+        'plan_items',
+        {'status': 'done'},
+        where: 'id = ?',
+        whereArgs: ['item'],
+      );
+      expect(
+        (await SqliteSyncReadiness(app).validate()).map((issue) => issue.code),
+        contains('plan-item-event-status-mismatch'),
+      );
+    },
+  );
 
   test(
     'database metadata triggers cover updates and cascading deletes',

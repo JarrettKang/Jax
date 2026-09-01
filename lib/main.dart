@@ -123,10 +123,12 @@ Future<void> main(List<String> args) async {
       }
     }
   }
+  final eventRepository = SqliteEventRepository(database);
+  final planningRepository = SqlitePlanningRepository(database);
   runApp(
     JaxApp(
-      repository: SqliteEventRepository(database),
-      planningRepository: SqlitePlanningRepository(database),
+      repository: eventRepository,
+      planningRepository: planningRepository,
       worldNodeRepository: SqliteWorldNodeRepository(database),
       saveService: SqliteSaveService(database),
       worldCategoryCollapseStore: SqliteWorldCategoryCollapseStore(database),

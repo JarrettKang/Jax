@@ -71,14 +71,23 @@ class SqliteSyncReadiness {
       WHERE event.source_plan_item_id IS NOT NULL AND item.id IS NULL''')) {
       issues.add(SyncReadinessIssue('event-plan-item', row['id'].toString()));
     }
-    for (final row in await db.rawQuery('''SELECT source_plan_item_id, count(*) count
+    for (final row in await db.rawQuery(
+      '''SELECT source_plan_item_id, count(*) count
       FROM events WHERE source_plan_item_id IS NOT NULL
-      GROUP BY source_plan_item_id HAVING count(*) > 1''')) {
-      issues.add(SyncReadinessIssue('duplicate-event-plan-item', row.toString()));
+      GROUP BY source_plan_item_id HAVING count(*) > 1''',
+    )) {
+      issues.add(
+        SyncReadinessIssue('duplicate-event-plan-item', row.toString()),
+      );
     }
     for (final row in await db.rawQuery('''SELECT id FROM events
       WHERE source_plan_item_id IS NOT NULL AND category_id IS NOT NULL''')) {
-      issues.add(SyncReadinessIssue('planned-event-direct-category', row['id'].toString()));
+      issues.add(
+        SyncReadinessIssue(
+          'planned-event-direct-category',
+          row['id'].toString(),
+        ),
+      );
     }
 
     final worldCycles = await db.rawQuery(
@@ -115,7 +124,8 @@ class SqliteSyncReadiness {
     }
     final generations = await db.query('dataset_metadata');
     if (generations.length != 1 ||
-        (generations.single['generation'] as String?)?.trim().isEmpty != false) {
+        (generations.single['generation'] as String?)?.trim().isEmpty !=
+            false) {
       issues.add(const SyncReadinessIssue('dataset-generation', '缺少唯一的数据代际'));
     }
 
@@ -154,6 +164,27 @@ class SqliteSyncReadiness {
       issues.add(
         SyncReadinessIssue(
           'executed-plan-item-without-event',
+          row['id'].toString(),
+        ),
+      );
+    }
+    for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
+      JOIN events e ON e.source_plan_item_id = i.id
+      WHERE i.status IN ('draft','next','dropped')''')) {
+      issues.add(
+        SyncReadinessIssue(
+          'unexecuted-plan-item-with-event',
+          row['id'].toString(),
+        ),
+      );
+    }
+    for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
+      JOIN events e ON e.source_plan_item_id = i.id
+      WHERE (i.status = 'done' AND e.status != 'completed')
+         OR (i.status = 'dispatched' AND e.status = 'completed')''')) {
+      issues.add(
+        SyncReadinessIssue(
+          'plan-item-event-status-mismatch',
           row['id'].toString(),
         ),
       );

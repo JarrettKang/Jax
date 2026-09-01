@@ -2,14 +2,18 @@ import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import '../../core/entities/category.dart';
 import '../../core/entities/category_palette.dart';
+import '../../core/entities/event_status.dart';
+import '../../core/entities/jax_event.dart';
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/planning_repository.dart';
+import '../../core/repositories/planning_dispatch_repository.dart';
 import '../../core/repositories/world_node_repository.dart';
 import '../../core/use_cases/create_event.dart' show Clock, IdGenerator;
+import '../../core/use_cases/dispatch_plan_items.dart';
 
 class PlanningController extends ChangeNotifier {
   PlanningController({
@@ -18,19 +22,28 @@ class PlanningController extends ChangeNotifier {
     required this.eventRepository,
     required this.newId,
     required this.now,
-  });
+  }) : _dispatch = planningRepository is PlanningDispatchRepository
+           ? DispatchPlanItems(
+               repository: planningRepository as PlanningDispatchRepository,
+               newId: newId,
+               now: now,
+             )
+           : null;
 
   final PlanningRepository planningRepository;
   final WorldNodeRepository worldNodeRepository;
   final EventRepository eventRepository;
   final IdGenerator newId;
   final Clock now;
+  final DispatchPlanItems? _dispatch;
 
   List<Plan> plans = const [];
   List<WorldNode> worldNodes = const [];
   List<Category> categories = const [];
   final Map<String, List<PlanItem>> _items = {};
+  final Map<String, JaxEvent> _linkedEvents = {};
   bool loading = false;
+  bool dispatching = false;
   Object? error;
 
   Future<void> load() async {
@@ -42,10 +55,21 @@ class PlanningController extends ChangeNotifier {
         planningRepository.getPlans(),
         worldNodeRepository.getWorldNodes(),
         eventRepository.getCategories(),
+        eventRepository.getIncompleteEvents(),
+        eventRepository.getCompletedEvents(),
       ]);
       plans = values[0] as List<Plan>;
       worldNodes = values[1] as List<WorldNode>;
       categories = values[2] as List<Category>;
+      _linkedEvents.clear();
+      for (final event in <JaxEvent>[
+        ...(values[3] as List<JaxEvent>),
+        ...(values[4] as List<JaxEvent>),
+      ]) {
+        if (event.sourcePlanItemId case final String itemId) {
+          _linkedEvents[itemId] = event;
+        }
+      }
       for (final plan in plans) {
         _items[plan.id] = await planningRepository.getPlanItems(plan.id);
       }
@@ -58,6 +82,91 @@ class PlanningController extends ChangeNotifier {
   }
 
   List<PlanItem> itemsFor(String planId) => _items[planId] ?? const [];
+  JaxEvent? linkedEventFor(String planItemId) => _linkedEvents[planItemId];
+
+  List<PlanningRecommendationGroup> get recommendationGroups {
+    final groups = <PlanningRecommendationGroup>[];
+    for (final plan in plans.where(
+      (value) => value.status == PlanStatus.focused,
+    )) {
+      final items =
+          itemsFor(plan.id)
+              .where((item) => item.status == PlanItemStatus.next)
+              .toList()
+            ..sort(_itemOrder);
+      final node = nodeFor(plan.worldNodeId);
+      if (items.isEmpty || node == null) continue;
+      groups.add(
+        PlanningRecommendationGroup(
+          plan: plan,
+          node: node,
+          category: categoryForNode(node),
+          items: items,
+        ),
+      );
+    }
+    groups.sort((a, b) {
+      final category = _categoryIndex(a.category)
+          .compareTo(_categoryIndex(b.category));
+      if (category != 0) return category;
+      final node = _compareNodeDisplayOrder(a.node, b.node);
+      if (node != 0) return node;
+      final round = a.plan.roundNumber.compareTo(b.plan.roundNumber);
+      return round != 0 ? round : a.plan.id.compareTo(b.plan.id);
+    });
+    return groups;
+  }
+
+  Future<void> dispatchRecommendations(Iterable<String> planItemIds) async {
+    if (_dispatch == null) throw const DomainFailure('当前数据库不支持计划派发');
+    if (dispatching) throw const DomainFailure('正在加入今日，请稍候');
+    dispatching = true;
+    notifyListeners();
+    try {
+      await _dispatch(planItemIds);
+      await load();
+    } finally {
+      dispatching = false;
+      notifyListeners();
+    }
+  }
+
+  int _categoryIndex(Category? category) {
+    if (category == null) return categories.length;
+    final index = categories.indexWhere((value) => value.id == category.id);
+    return index < 0 ? categories.length : index;
+  }
+
+  int _compareNodeDisplayOrder(WorldNode left, WorldNode right) {
+    final a = _nodePath(left);
+    final b = _nodePath(right);
+    for (var index = 0; index < a.length && index < b.length; index++) {
+      final order = a[index].sortOrder.compareTo(b[index].sortOrder);
+      if (order != 0) return order;
+      final id = a[index].id.compareTo(b[index].id);
+      if (id != 0) return id;
+    }
+    return a.length.compareTo(b.length);
+  }
+
+  List<WorldNode> _nodePath(WorldNode node) {
+    final path = <WorldNode>[node];
+    var current = node;
+    while (current.parentWorldNodeId != null) {
+      final parentId = current.parentWorldNodeId!;
+      final parent = nodeFor(parentId);
+      if (parent == null) break;
+      path.insert(0, parent);
+      current = parent;
+    }
+    return path;
+  }
+
+  static int _itemOrder(PlanItem a, PlanItem b) {
+    final order = a.sortOrder.compareTo(b.sortOrder);
+    return order != 0 ? order : a.id.compareTo(b.id);
+  }
+
   WorldNode? nodeFor(String id) =>
       worldNodes.where((node) => node.id == id).firstOrNull;
   Category? categoryForNode(WorldNode node) {
@@ -78,7 +187,8 @@ class PlanningController extends ChangeNotifier {
       .firstOrNull;
 
   bool hasEndedPlan(String worldNodeId) => plans.any(
-    (plan) => plan.worldNodeId == worldNodeId && plan.status == PlanStatus.ended,
+    (plan) =>
+        plan.worldNodeId == worldNodeId && plan.status == PlanStatus.ended,
   );
 
   Future<void> createCategory(String rawName) async {
@@ -273,3 +383,25 @@ class PlanningController extends ChangeNotifier {
     await load();
   }
 }
+
+class PlanningRecommendationGroup {
+  const PlanningRecommendationGroup({
+    required this.plan,
+    required this.node,
+    required this.category,
+    required this.items,
+  });
+
+  final Plan plan;
+  final WorldNode node;
+  final Category? category;
+  final List<PlanItem> items;
+}
+
+String planningEventStatusText(EventStatus status) => switch (status) {
+  EventStatus.pending => '待开始',
+  EventStatus.running => '进行中',
+  EventStatus.paused => '暂停',
+  EventStatus.waiting => '等待',
+  EventStatus.completed => '已完成',
+};

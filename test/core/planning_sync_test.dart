@@ -87,28 +87,31 @@ void main() {
     );
   });
 
-  test('deleted unexecuted Plan versus remote edit is delete/modify conflict', () {
-    final baseline = _snapshot([_node(), _plan()]);
-    final deletedPlan = SyncRecord(
-      kind: SyncEntityKind.plan,
-      metadata: SyncMetadata(
-        id: 'plan',
-        createdAtUtc: _time,
-        updatedAtUtc: _time,
-        deletedAtUtc: _time,
-      ),
-      payload: const {},
-    );
-    final preview = compare.compare(
-      baseline: baseline,
-      windows: _snapshot([_node(), deletedPlan]),
-      android: _snapshot([_node(), _plan(title: 'Android edit')]),
-    );
-    expect(
-      preview.manualConflicts.single.conflictType,
-      SyncConflictType.deleteModify,
-    );
-  });
+  test(
+    'deleted unexecuted Plan versus remote edit is delete/modify conflict',
+    () {
+      final baseline = _snapshot([_node(), _plan()]);
+      final deletedPlan = SyncRecord(
+        kind: SyncEntityKind.plan,
+        metadata: SyncMetadata(
+          id: 'plan',
+          createdAtUtc: _time,
+          updatedAtUtc: _time,
+          deletedAtUtc: _time,
+        ),
+        payload: const {},
+      );
+      final preview = compare.compare(
+        baseline: baseline,
+        windows: _snapshot([_node(), deletedPlan]),
+        android: _snapshot([_node(), _plan(title: 'Android edit')]),
+      );
+      expect(
+        preview.manualConflicts.single.conflictType,
+        SyncConflictType.deleteModify,
+      );
+    },
+  );
 
   test('PlanItem full-list order conflicts by Plan scope', () {
     final records = [
@@ -153,14 +156,47 @@ void main() {
       contains('multiple-current-plans:11111111-1111-4111-8111-111111111111'),
     );
 
-    final missingEvent = _snapshot([
-      _node(),
-      _plan(),
-      _item('a', 'A', 'dispatched', 0),
-    ], lists: [_itemList(['a'])]);
+    final missingEvent = _snapshot(
+      [_node(), _plan(), _item('a', 'A', 'dispatched', 0)],
+      lists: [
+        _itemList(['a']),
+      ],
+    );
     expect(
       validator.validate(missingEvent),
       contains('executed-plan-item-without-event:a'),
+    );
+  });
+
+  test('concurrent dispatch of one PlanItem cannot silently merge', () {
+    final common = [_node(), _plan(), _item('a', 'A', 'dispatched', 0)];
+    final windows = _snapshot(
+      [...common, _plannedEvent('windows-event', 'a')],
+      lists: [
+        _itemList(['a']),
+      ],
+    );
+    final android = _snapshot(
+      [...common, _plannedEvent('android-event', 'a')],
+      lists: [
+        _itemList(['a']),
+      ],
+    );
+    final preview = compare.compare(windows: windows, android: android);
+
+    expect(
+      () => compiler.compile(
+        resolved: ResolvedSyncPlan(preview: preview),
+        windows: windows,
+        android: android,
+      ),
+      throwsA(
+        predicate(
+          (error) =>
+              '$error'.startsWith('PLAN_INVALID') &&
+              '$error'.contains('duplicate-event-plan-item:a'),
+        ),
+      ),
     );
   });
 }
@@ -214,6 +250,16 @@ SyncRecord _item(String id, String title, String status, int order) =>
       'note': null,
       'status': status,
       'order': order,
+    });
+
+SyncRecord _plannedEvent(String id, String sourceId) =>
+    _record(SyncEntityKind.event, id, {
+      'name': 'A',
+      'status': 'pending',
+      'sourcePlanItemSyncId': sourceId,
+      'categorySyncId': null,
+      'firstStartedAtUtc': null,
+      'completedAtUtc': null,
     });
 
 SyncList _itemList(List<String> ids) =>

@@ -2,13 +2,109 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
+import '../../core/entities/event_status.dart';
+import '../../core/entities/jax_event.dart';
 import '../../core/errors/domain_failure.dart';
+import '../../core/repositories/planning_dispatch_repository.dart';
 import '../../core/repositories/planning_repository.dart';
 import '../database/app_database.dart';
 
-class SqlitePlanningRepository implements PlanningRepository {
+class SqlitePlanningRepository
+    implements PlanningRepository, PlanningDispatchRepository {
   const SqlitePlanningRepository(this._app);
   final AppDatabase _app;
+
+  @override
+  Future<List<JaxEvent>> dispatchPlanItems({
+    required Map<String, String> eventIdsByPlanItemId,
+    required String dayKey,
+    required DateTime now,
+  }) async {
+    if (eventIdsByPlanItemId.isEmpty) {
+      throw const DomainFailure('请至少选择一个今日建议');
+    }
+    final utc = now.toUtc();
+    try {
+      return await _app.database.transaction((tx) async {
+        final existingToday = await tx.rawQuery(
+          'SELECT COALESCE(MAX(order_index), -1) value '
+          'FROM event_day_plans WHERE day_date = ?',
+          [dayKey],
+        );
+        var nextTodayOrder = (existingToday.single['value'] as num).toInt() + 1;
+        final dispatched = <JaxEvent>[];
+        for (final entry in eventIdsByPlanItemId.entries) {
+          final rows = await tx.rawQuery(
+            '''SELECT item.title, item.status item_status,
+                      plan.status plan_status
+               FROM plan_items item
+               JOIN plans plan ON plan.id = item.plan_id
+               WHERE item.id = ? LIMIT 1''',
+            [entry.key],
+          );
+          if (rows.isEmpty) throw const DomainFailure('计划项不存在');
+          if (rows.single['plan_status'] != 'focused') {
+            throw const DomainFailure('只有已关注计划的下一步可以加入今日');
+          }
+          if (rows.single['item_status'] != PlanItemStatus.next.name) {
+            throw const DomainFailure('计划项已变化，请刷新今日建议');
+          }
+          final linked = await tx.query(
+            'events',
+            columns: ['id'],
+            where: 'source_plan_item_id = ?',
+            whereArgs: [entry.key],
+            limit: 1,
+          );
+          if (linked.isNotEmpty) {
+            throw const DomainFailure('计划项已经派发');
+          }
+          final event = JaxEvent(
+            id: entry.value,
+            name: rows.single['title']! as String,
+            status: EventStatus.pending,
+            sourcePlanItemId: entry.key,
+            createdAt: utc,
+            updatedAt: utc,
+          );
+          await tx.insert('events', {
+            'id': event.id,
+            'name': event.name,
+            'status': event.status.name,
+            'source_plan_item_id': event.sourcePlanItemId,
+            'category_id': null,
+            'first_started_at_utc': null,
+            'completed_at_utc': null,
+            'created_at_utc': utc.millisecondsSinceEpoch,
+            'updated_at_utc': utc.millisecondsSinceEpoch,
+          });
+          final updated = await tx.update(
+            'plan_items',
+            {
+              'status': PlanItemStatus.dispatched.name,
+              'updated_at_utc': utc.millisecondsSinceEpoch,
+            },
+            where: "id = ? AND status = 'next'",
+            whereArgs: [entry.key],
+          );
+          if (updated != 1) {
+            throw const DomainFailure('计划项派发冲突，请刷新后重试');
+          }
+          await tx.insert('event_day_plans', {
+            'event_id': event.id,
+            'day_date': dayKey,
+            'order_index': nextTodayOrder++,
+            'created_at_utc': utc.millisecondsSinceEpoch,
+            'updated_at_utc': utc.millisecondsSinceEpoch,
+          });
+          dispatched.add(event);
+        }
+        return dispatched;
+      });
+    } on DatabaseException catch (_) {
+      throw const DomainFailure('计划项派发冲突，请刷新后重试');
+    }
+  }
 
   @override
   Future<List<Plan>> getPlans() async => (await _app.database.query(
