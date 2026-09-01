@@ -244,3 +244,15 @@
 - rollout 顺序固定为：只读统计 → 每端独立一致性备份 → 副本 migration/report → 自动测试和 Debug build → 每端真实 migration/report。Android 未连接时禁止用旧备份冒充本轮实机结果。
 - P1 保持 World UI、Today/Home、Record 与全部 legacy Event execution truth source 不变，不创建 Plan/PlanItem。后续依次为 P2 Planning Core、P3 Planning → Event → Today，之后才正式切换 World UI。
 - 详细 schema、映射、Sync 与验收契约见 `docs/planning_phase_p1.md`。
+
+## 20. Planning Phase P2：Planning Core
+
+- schema v14→v15 新增 `plans` / `plan_items`；Plan 独立 UUID，强制 WorldNode 1:N、每节点正整数轮次唯一，并以 partial unique index 保证每节点最多一个 focused/waiting current Plan。P2 migration 只建表，不从 Event 生成任何计划数据。
+- Core/Data 实现 Plan focused↔waiting、current→ended 与不可普通 reopen；PlanItem 实现 draft↔next、draft/next→dropped、dropped→draft。用户 API 拒绝 dispatched/done，为 P3 保留存储/同步兼容。
+- PlanItem 是 flat ordered list；append 与串行化上下移在 transaction 内完成，不按状态重排。draft/next 可删除，dropped 保留并可恢复；ended Plan 保留结束瞬间的所有 item 状态。
+- WorldNode repository 在 completed 前查验 current Plan；必须先结束本轮。Plan ended 不修改 WorldNode，Planning 全部操作不读写 Event、EventDayPlan、RunSegment 或 RoutineExecution。
+- 新增“规划”一级导航。overview 是 focused/waiting 紧凑列表与折叠历史；WorldNode selector 保留 Category/hierarchy/order 并禁用 completed/occupied node；detail 提供快速 draft↔next、稳定上下移、More 内 drop/delete/restore/end 与宽窄屏可滚动输入。
+- Sync protocol 2→3 新增 Plan/PlanItem entities、tombstone 和 `planItems:<planId>` scoped list。snapshot/compare/manual conflict/list conflict/compiler/stale protection/mutation apply/rollback/final verification 全部复用现有引擎；protocol 2 baseline 显式升级但不生成 Planning records。
+- readiness/validator 新增 owner/status/endedAt/round/current-plan/completed-node/item title/item order/list scope/dangling relation 检查；P2 中出现 dispatched/done 是非阻塞诊断，保留 P3 forward compatibility。
+- P3：focused Plan 收集 next PlanItem 形成 Today recommendation；用户接受后创建 Event 并设 dispatched，Event completed 驱动 done，restore 驱动回 dispatched。P4：Review Note 与 World second-layer visualization。
+- 详细契约见 `docs/planning_phase_p2.md`。

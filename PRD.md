@@ -365,7 +365,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 
 ## 13. v0.2 今日统一执行入口
 
-- 一级导航固定为“首页 / 今日 / 世界 / 日常 / 记录”：首页回答现在正在做什么，今日回答今天准备做什么，世界管理 Event 长期结构，日常管理 Routine definition，记录复盘过去时间。
+- 一级导航为“首页 / 今日 / 世界 / 规划 / 日常 / 记录”：首页回答现在正在做什么，今日回答今天准备做什么，世界在 P2 过渡期仍管理 legacy Event 长期结构，规划直接使用 WorldNode/Plan/PlanItem，日常管理 Routine definition，记录复盘过去时间。
 - 计划型 Routine 的当天执行由“今日”的“今日日常”承担；按需型 Routine 从“日常”管理行或首页“快捷动作”启动/恢复，不自动成为 Today checklist。Routine 创建/编辑明确选择计划型或按需型，按需型隐藏 recurrence picker。
 - “今日事项”只包含明确加入当前 Jax day 的 Event，不等于全部 unfinished Event；“今日日常”只包含 active 且 recurrence 命中当前 JaxDay 显示日期的计划型 Routine。两个分区分别排序，不建立 Event/Routine 混合顺序。
 - Jax day 使用设备本地时间 23:00 切换。逻辑日期 `YYYY-MM-DD` 表示前一自然日 23:00 至该日 23:00；Today、Routine occurrence/weekday 和 Daily Summary 共用同一个 JaxDay 规则。
@@ -399,3 +399,16 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - P1 是 shadow migration。现有 World、Today、Home、Record 和 legacy Event 工作流继续使用 Event 数据源，unfinished legacy Event 保持可达并自然耗尽；正式 World UI 切换要等 P2 Planning Core 与 P3 Plan → Event → Today 完成。
 - P1 不创建 Plan 或 PlanItem，不推断旧 Event 是计划、步骤还是关键节点，也不改变 Event completion hierarchy、global one-running、Routine 或手工执行记录语义。
 - WorldNode、Legacy link、tombstone 与 Category/parent/scoped-order 进入 Sync protocol 2。旧 protocol 1 baseline 在读取时按同一确定性派生规则显式归一化为 protocol 2，WorldNode order 继续使用完整 scoped list 冲突，不以逐行 `updatedAt` 解决。
+
+## 16. Planning 重构 Phase P2：Planning Core
+
+- Planning 的产品定义是“为了推进某个 WorldNode，这一轮具体准备怎么做”。WorldNode 是长期结构，Plan 是一轮推进方案，PlanItem 是临时、具体、可反复修改的平级步骤。
+- Plan 必须且只能属于一个 WorldNode。同一 WorldNode 最多一个 `focused`/`waiting` current Plan，但可保留多个 `ended` 历史轮次；不同 WorldNode 可同时各有 focused Plan。
+- Plan 状态为 `focused` / `waiting` / `ended`。focused↔waiting 不改 PlanItem；结束必须用户确认，设置 `endedAtUtc`，不自动 dropped 未完成 item，不自动 completed WorldNode，也不普通 reopen。
+- PlanItem 状态为 `draft` / `next` / `dispatched` / `done` / `dropped`。P2 用户只可草稿↔下一步、取消为 dropped、dropped 恢复为 draft；`dispatched`/`done` 只为 P3 模型兼容，不开放手工设置。
+- draft/next 可物理删除，用于误添加；dropped 保留“原先考虑过”的规划历史。PlanItem order 是 Plan scope 内的完整逻辑列表，状态不触发自动排序。
+- 主导航新增“规划”。overview 以低噪音列表分开已关注/等待中，历史轮次折叠；创建时使用保留 Category/层级/顺序的 WorldNode selector，completed 或已有 current Plan 的节点禁用。
+- detail 中 draft↔next 是行内高频操作，上下移仅显示合法方向，edit/drop/delete/restore/end 放 More。有未完成 item 仍可结束，但必须明确确认。
+- WorldNode 存在 current Plan 时不得 completed；需先结束当前 Plan。Plan ended 不会反向完成 WorldNode。
+- Plan/PlanItem 与 tombstone 进入 Sync protocol 3，PlanItem order 使用 `planItems:<planId>` full-list conflict。旧 protocol 2 baseline 读取时升级为 protocol 3，不发明 Plan 数据。
+- P2 不创建 Event/EventDayPlan/RunSegment，不影响 Home/Today/Record，不从 legacy Event 推导 Plan，不正式切换 World UI。P3 再实现 focused Plan 的 next item 推荐、用户接受后派发 Event 以及 Event 完成联动。
