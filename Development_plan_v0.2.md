@@ -286,3 +286,20 @@
   Plan delete/tombstone、WorldNode Planning/picker、full reset、generation stale
   protection、protocol 4 mutation apply/rollback 与全量历史行为。
 - 详细契约见 `docs/planning_phase_p2_5.md`。
+
+## 22. Planning Phase P3：Planning → Event → Today Dispatch
+
+- Core 新增 `DispatchPlanItems`，在提交时解析 23:00 JaxDay；Data 新增原子
+  batch dispatch repository，校验 focused/next/unlinked，创建 planned Event、转换
+  PlanItem 状态并追加 Today，整批 all-or-nothing。
+- PlanningController 从当前 Plan/PlanItem/WorldNode/Category 派生确定顺序的
+  recommendation；Today UI 支持多选，不保存 recommendation，不自动接受。
+- Event completion/restore 与 linked PlanItem done/dispatched 在 repository transaction
+  中原子联动。readiness/snapshot validator 检查缺失、多重来源和状态不匹配。
+- Today removal 不撤回派发；通过固定“已有事项”入口重加。planned Event 普通
+  delete 被拒绝；waiting/ended Plan 不改写已派发 Event/Today/Record。
+- 保持 SQLite schema v16、Sync protocol 4 和 dataset generation 不变。P4 才引入
+  Review/Replan/World second-layer visualization。
+- 自动化覆盖单项/批量/回滚/顺序/JaxDay 边界、completion/restore 原子性、
+  remove/re-add、Plan state/delete、standalone/Routine 回归和跨设备重复派发拒绝。
+- 详细契约见 `docs/planning_phase_p3.md`。

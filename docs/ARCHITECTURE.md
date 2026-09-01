@@ -20,7 +20,7 @@ Jax 遵循 `UI → Core ← Data`。Core 不依赖 Flutter、SQLite 或具体平
 
 强制结束进程、系统崩溃和断电不属于 v0.1 的精确关闭保证。该退出监听只在 Windows 注册；Android 后台、锁屏、返回键和进程回收不映射为自动暂停，具体策略留待 Android v0.1 功能适配阶段确认。
 
-## Planning P2.5 边界
+## Planning P3 边界
 
 当前长期结构由 `WorldNode` tree 承担，规划由 `Plan/PlanItem` 承担，`Event`
 只承担扁平执行。World UI 与 Planning picker 都读取 WorldNode；Today/Home/Record
@@ -34,3 +34,13 @@ descendant switch 和 hierarchical completion。
 Sync protocol 4 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
 读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
 拒绝 legacy Event hierarchy mutation。
+
+Today recommendation 是 `PlanningController` 根据 focused Plan 和 next PlanItem
+即时派生的 presentation，不是数据库实体。用户确认后，
+`DispatchPlanItems → PlanningDispatchRepository` 将 Event insert、PlanItem
+transition 与 EventDayPlan append 组合为一个事务。UI 不分别调用三个写 API。
+
+planned Event 的 completion/restore coupling 放在 SQLite Event Repository 事务边界，
+因此 waiting completion 与 running completion（包括关闭 open segment）都不会留下
+Event/PlanItem 半提交状态。Today relation 仍是独立索引，移除/重加不改变
+dispatch 事实。

@@ -15,7 +15,9 @@ Standalone Event 则不经过 Planning：`Event → EventDayPlan → RunSegment`
 - `plans`：一个 WorldNode 的一轮规划。状态为 `focused/waiting/ended`；同一
   WorldNode 最多一个 current Plan，轮次号唯一。
 - `plan_items`：Plan 内平级、有序步骤。状态为
-  `draft/next/dispatched/done/dropped`。P2.5 不提供 dispatch 操作。
+  `draft/next/dispatched/done/dropped`。P3 仅允许 focused Plan 的 next item
+  通过原子 dispatch 进入 dispatched；Event completion/restore 驱动
+  `dispatched↔done`。
 
 未产生执行事实的 Plan 可连同 draft/next PlanItem 物理删除，并正常产生 Sync
 tombstone。若存在 dispatched/done PlanItem 或 linked Event，Data 层拒绝删除。
@@ -44,8 +46,9 @@ CHECK 约束禁止 planned Event 同时保存 direct Category。来源类型由�
   World Category，也可为 null（未分类）。不会暗中创建 Plan/PlanItem/WorldNode。
 
 UNIQUE + FK 保证一个 PlanItem 最多派发一个 Event，且 planned Event 必须指向
-真实 PlanItem。P3 的 dispatch 将在一个事务内创建 Event、建立关系、更新
-PlanItem 状态并加入 current Today；P2.5 尚不调用该流程。
+真实 PlanItem。P3 dispatch 在一个事务内创建 Event、建立关系、更新
+PlanItem 状态并加入 current Today。跨设备并发产生的双 Event 会在 Sync
+expected snapshot 校验中作为 `duplicate-event-plan-item` 拒绝。
 
 ## Today、执行与 Record
 

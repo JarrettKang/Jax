@@ -443,3 +443,26 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   后旧 baseline/snapshot/resolved plan 因 generation/fingerprint 不匹配而拒绝，
   防止旧数据复活。
 - P2.5 不实现 next 推荐、dispatch、Event 完成联动 PlanItem、Review/Replan 或 AI。
+
+## 18. Planning 重构 Phase P3：Planning → Event → Today Dispatch
+
+- Today 从 `focused Plan + next PlanItem` 派生只读建议；不保存第二份推荐数据，
+  不在 Home 展示，不自动派发或写入 Today。waiting/ended Plan 与非 next item
+  立即从建议中消失。
+- 用户可多选建议并一次“加入今日”。整批在单一 SQLite transaction 中重新
+  验证 Plan/item/link 状态，按可见顺序创建 pending planned Event、写入
+  `sourcePlanItemId`、将 item 改为 dispatched，并追加 current JaxDay Today。
+  任一项 stale/冲突时整批回滚。
+- 一个 PlanItem 最多对应一个 Event。单设备依靠事务及 UNIQUE 约束；两端
+  并发产生两个不同 Event identity 时，snapshot/compiler 将其拒绝为
+  `duplicate-event-plan-item` 不变式冲突，不静默合并。
+- planned Event 完成时，Event 与 PlanItem `dispatched→done` 在同一事务中
+  提交；恢复时 Event `completed→paused` 与 PlanItem `done→dispatched`
+  同样原子。状态不匹配必须回滚并报错。
+- 从 Today 移除只删除 `EventDayPlan`，不撤回派发、不删除 Event；Today
+  始终提供“已有事项”以重加未完成 Event。P3 不提供 withdraw，planned
+  Event 不允许普通物理删除。
+- dispatched/done PlanItem 标题不可编辑；Event 名称是派发时拷贝，后续与
+  PlanItem title 解耦。Planning detail 展示 linked Event 的当前状态。
+- 建议顺序为 Category order → WorldNode hierarchy/display order → Plan round/id
+  → PlanItem order/id。本阶段不新增 schema，仍为 v16；Sync protocol 仍为 4。
