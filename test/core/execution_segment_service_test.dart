@@ -493,4 +493,309 @@ void main() {
       );
     },
   );
+
+  test(
+    'corrects a running planned Event in place and keeps adjacency legal',
+    () async {
+      final current = DateTime.utc(2026, 8, 29, 11);
+      final original = DateTime.utc(2026, 8, 29, 10, 20);
+      final corrected = DateTime.utc(2026, 8, 29, 10, 5);
+      final running = JaxEvent(
+        id: 'running',
+        name: '当前事项',
+        status: EventStatus.running,
+        createdAt: current,
+        updatedAt: current,
+        firstStartedAt: original,
+        sourcePlanItemId: 'plan-item',
+      );
+      final previous = event('previous');
+      final repo = MemoryRepository([previous, running])
+        ..segments.addAll([
+          RunSegment(
+            id: 'previous-segment',
+            eventId: previous.id,
+            startedAt: DateTime.utc(2026, 8, 29, 9, 30),
+            endedAt: corrected,
+            createdAt: current,
+          ),
+          RunSegment(
+            id: 'open',
+            eventId: running.id,
+            startedAt: original,
+            createdAt: original,
+          ),
+        ]);
+
+      await ExecutionSegmentService(
+        repository: repo,
+        now: () => current,
+      ).adjustRunningEventStart(
+        eventId: running.id,
+        segmentId: 'open',
+        expectedStartedAt: original,
+        newStartedAt: corrected,
+      );
+
+      expect(repo.segments, hasLength(2));
+      final open = repo.segments.singleWhere((item) => item.id == 'open');
+      expect(open.startedAt, corrected);
+      expect(open.endedAt, isNull);
+      expect(
+        repo.events.singleWhere((item) => item.id == running.id).status,
+        EventStatus.running,
+      );
+      expect(
+        repo.events
+            .singleWhere((item) => item.id == running.id)
+            .sourcePlanItemId,
+        'plan-item',
+      );
+
+      final standalone = JaxEvent(
+        id: 'standalone',
+        name: '独立事项',
+        status: EventStatus.running,
+        createdAt: original,
+        updatedAt: original,
+      );
+      final standaloneRepo = MemoryRepository([standalone])
+        ..segments.add(
+          RunSegment(
+            id: 'standalone-open',
+            eventId: standalone.id,
+            startedAt: original,
+            createdAt: original,
+          ),
+        );
+      await ExecutionSegmentService(
+        repository: standaloneRepo,
+        now: () => current,
+      ).adjustRunningEventStart(
+        eventId: standalone.id,
+        segmentId: 'standalone-open',
+        expectedStartedAt: original,
+        newStartedAt: corrected,
+      );
+      expect(standaloneRepo.segments, hasLength(1));
+      expect(standaloneRepo.segments.single.startedAt, corrected);
+      expect(standaloneRepo.events.single.sourcePlanItemId, isNull);
+    },
+  );
+
+  test(
+    'running start correction rejects later time and cross-type overlap',
+    () async {
+      final current = DateTime.utc(2026, 8, 29, 11);
+      final original = DateTime.utc(2026, 8, 29, 10, 20);
+      final running = JaxEvent(
+        id: 'running',
+        name: '当前事项',
+        status: EventStatus.running,
+        createdAt: current,
+        updatedAt: current,
+      );
+      final repo = MemoryRepository([running])
+        ..segments.add(
+          RunSegment(
+            id: 'open',
+            eventId: running.id,
+            startedAt: original,
+            createdAt: original,
+          ),
+        )
+        ..routines.add(
+          Routine(
+            id: 'routine',
+            name: '晨间日常',
+            type: RoutineType.onDemand,
+            recurrence: RoutineRecurrence.daily,
+            weekdayMask: 0,
+            isActive: true,
+            sortOrder: 0,
+            createdAt: current,
+            updatedAt: current,
+          ),
+        )
+        ..routineExecutions.add(
+          RoutineExecution(
+            id: 'past-routine',
+            routineId: 'routine',
+            occurrenceDate: '2026-08-29',
+            status: RoutineExecutionStatus.completed,
+            createdAt: current,
+            updatedAt: current,
+          ),
+        )
+        ..routineSegments.add(
+          RoutineRunSegment(
+            id: 'routine-segment',
+            executionId: 'past-routine',
+            startedAt: DateTime.utc(2026, 8, 29, 9, 50),
+            endedAt: DateTime.utc(2026, 8, 29, 10, 10),
+            createdAt: current,
+          ),
+        );
+      final service = ExecutionSegmentService(
+        repository: repo,
+        now: () => current,
+      );
+
+      await expectLater(
+        service.adjustRunningEventStart(
+          eventId: running.id,
+          segmentId: 'open',
+          expectedStartedAt: original,
+          newStartedAt: DateTime.utc(2026, 8, 29, 10, 30),
+        ),
+        throwsA(
+          isA<DomainFailure>().having(
+            (failure) => failure.message,
+            'message',
+            contains('只能向前'),
+          ),
+        ),
+      );
+      await expectLater(
+        service.adjustRunningEventStart(
+          eventId: running.id,
+          segmentId: 'open',
+          expectedStartedAt: original,
+          newStartedAt: current.add(const Duration(minutes: 1)),
+        ),
+        throwsA(
+          isA<DomainFailure>().having(
+            (failure) => failure.message,
+            'message',
+            contains('不能晚于当前时间'),
+          ),
+        ),
+      );
+      await expectLater(
+        service.adjustRunningEventStart(
+          eventId: running.id,
+          segmentId: 'open',
+          expectedStartedAt: original,
+          newStartedAt: DateTime.utc(2026, 8, 29, 10),
+        ),
+        throwsA(
+          isA<DomainFailure>().having(
+            (failure) => failure.message,
+            'message',
+            contains('晨间日常'),
+          ),
+        ),
+      );
+      expect(repo.segments.single.startedAt, original);
+    },
+  );
+
+  test(
+    'corrects a running Routine across a JaxDay boundary in place',
+    () async {
+      final current = DateTime.utc(2026, 8, 29, 0, 30);
+      final original = DateTime.utc(2026, 8, 28, 23, 40);
+      final corrected = DateTime.utc(2026, 8, 28, 22, 50);
+      for (final type in [RoutineType.scheduled, RoutineType.onDemand]) {
+        final repo = MemoryRepository()
+          ..routines.add(
+            Routine(
+              id: 'routine',
+              name: type == RoutineType.scheduled ? '计划日常' : '按需日常',
+              type: type,
+              recurrence: RoutineRecurrence.daily,
+              weekdayMask: 0,
+              isActive: true,
+              sortOrder: 0,
+              createdAt: current,
+              updatedAt: current,
+            ),
+          )
+          ..routineExecutions.add(
+            RoutineExecution(
+              id: 'execution',
+              routineId: 'routine',
+              occurrenceDate: '2026-08-28',
+              status: RoutineExecutionStatus.running,
+              createdAt: original,
+              updatedAt: original,
+            ),
+          )
+          ..routineSegments.add(
+            RoutineRunSegment(
+              id: 'open-routine',
+              executionId: 'execution',
+              startedAt: original,
+              createdAt: original,
+            ),
+          );
+
+        await ExecutionSegmentService(
+          repository: repo,
+          now: () => current,
+        ).adjustRunningRoutineStart(
+          executionId: 'execution',
+          segmentId: 'open-routine',
+          expectedStartedAt: original,
+          newStartedAt: corrected,
+        );
+
+        expect(repo.routineSegments, hasLength(1));
+        expect(repo.routineSegments.single.startedAt, corrected);
+        expect(repo.routineSegments.single.endedAt, isNull);
+        expect(
+          repo.routineExecutions.single.status,
+          RoutineExecutionStatus.running,
+        );
+      }
+    },
+  );
+
+  test('stale running correction cannot reopen a completed segment', () async {
+    final current = DateTime.utc(2026, 8, 29, 11);
+    final original = DateTime.utc(2026, 8, 29, 10, 20);
+    final event = JaxEvent(
+      id: 'running',
+      name: '当前事项',
+      status: EventStatus.running,
+      createdAt: original,
+      updatedAt: original,
+    );
+    final repo = MemoryRepository([event])
+      ..segments.add(
+        RunSegment(
+          id: 'open',
+          eventId: event.id,
+          startedAt: original,
+          createdAt: original,
+        ),
+      );
+    repo.events[0] = event.copyWith(
+      status: EventStatus.completed,
+      updatedAt: current,
+      completedAt: current,
+    );
+    repo.segments[0] = repo.segments[0].copyWith(endedAt: current);
+
+    await expectLater(
+      ExecutionSegmentService(
+        repository: repo,
+        now: () => current,
+      ).adjustRunningEventStart(
+        eventId: event.id,
+        segmentId: 'open',
+        expectedStartedAt: original,
+        newStartedAt: original.subtract(const Duration(minutes: 10)),
+      ),
+      throwsA(
+        isA<DomainFailure>().having(
+          (failure) => failure.message,
+          'message',
+          contains('状态已发生变化'),
+        ),
+      ),
+    );
+    expect(repo.segments.single.startedAt, original);
+    expect(repo.segments.single.endedAt, current);
+  });
 }

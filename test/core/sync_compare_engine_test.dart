@@ -73,6 +73,22 @@ void main() {
     );
   });
 
+  test('concurrent running startedAt corrections remain a field conflict', () {
+    final baseline = snapshot([segment('s', start: 20)]);
+    final plan = engine.compare(
+      baseline: baseline,
+      windows: snapshot([segment('s', start: 10)]),
+      android: snapshot([segment('s', start: 15)]),
+    );
+
+    expect(plan.manualConflicts, hasLength(1));
+    expect(plan.manualConflicts.single.conflictType, SyncConflictType.field);
+    expect(
+      plan.manualConflicts.single.changedFields.single.field,
+      'startedAtUtc',
+    );
+  });
+
   test('different shared order is a list conflict, additions are not', () {
     final reordered = engine.compare(
       windows: snapshot(
@@ -202,11 +218,16 @@ SyncRecord routineExecution(String id, {required String status}) => record(
   id,
   {'routineSyncId': 'routine', 'status': status},
 );
-SyncRecord segment(String id, {String owner = 'event', int? end}) => record(
-  SyncEntityKind.eventRunSegment,
-  id,
-  {'eventSyncId': owner, 'startedAtUtc': 10, 'endedAtUtc': end},
-);
+SyncRecord segment(
+  String id, {
+  String owner = 'event',
+  int start = 10,
+  int? end,
+}) => record(SyncEntityKind.eventRunSegment, id, {
+  'eventSyncId': owner,
+  'startedAtUtc': start,
+  'endedAtUtc': end,
+});
 SyncRecord routineSegment(String id, {required String owner}) => record(
   SyncEntityKind.routineRunSegment,
   id,

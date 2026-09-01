@@ -185,6 +185,83 @@ class SqliteEventRepository
   }
 
   @override
+  Future<void> adjustRunningEventStart({
+    required String eventId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+    required DateTime updatedAt,
+  }) async {
+    await _appDatabase.database.transaction((tx) async {
+      _validateRunningStartTimes(newStartedAt, expectedStartedAt, updatedAt);
+      final runningEvents = await tx.query(
+        'events',
+        columns: ['id'],
+        where: 'status = ?',
+        whereArgs: [EventStatus.running.name],
+      );
+      final runningRoutines = await tx.query(
+        'routine_executions',
+        columns: ['id'],
+        where: 'status = ?',
+        whereArgs: [RoutineExecutionStatus.running.name],
+      );
+      final open = await tx.query(
+        'run_segments',
+        columns: ['id', 'started_at_utc'],
+        where: 'event_id = ? AND ended_at_utc IS NULL',
+        whereArgs: [eventId],
+      );
+      final allOpenEvents = await tx.query(
+        'run_segments',
+        columns: ['id'],
+        where: 'ended_at_utc IS NULL',
+      );
+      final allOpenRoutines = await tx.query(
+        'routine_run_segments',
+        columns: ['id'],
+        where: 'ended_at_utc IS NULL',
+      );
+      if (runningEvents.length != 1 ||
+          runningEvents.single['id'] != eventId ||
+          runningRoutines.isNotEmpty ||
+          open.length != 1 ||
+          allOpenEvents.length != 1 ||
+          allOpenEvents.single['id'] != segmentId ||
+          allOpenRoutines.isNotEmpty ||
+          open.single['id'] != segmentId ||
+          open.single['started_at_utc'] !=
+              expectedStartedAt.toUtc().millisecondsSinceEpoch) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+      await _validateNoSegmentOverlapIn(
+        tx,
+        newStartedAt,
+        updatedAt,
+        exceptId: segmentId,
+        exceptTable: 'run_segments',
+      );
+      if (newStartedAt.toUtc() == expectedStartedAt.toUtc()) return;
+      final changed = await tx.update(
+        'run_segments',
+        {
+          'started_at_utc': newStartedAt.toUtc().millisecondsSinceEpoch,
+          'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ? AND event_id = ? AND ended_at_utc IS NULL AND started_at_utc = ?',
+        whereArgs: [
+          segmentId,
+          eventId,
+          expectedStartedAt.toUtc().millisecondsSinceEpoch,
+        ],
+      );
+      if (changed != 1) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+    });
+  }
+
+  @override
   Future<void> deleteClosedRunSegment(String id) async {
     if (await _appDatabase.database.delete(
           'run_segments',
@@ -859,6 +936,83 @@ class SqliteEventRepository
   }
 
   @override
+  Future<void> adjustRunningRoutineStart({
+    required String executionId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+    required DateTime updatedAt,
+  }) async {
+    await _appDatabase.database.transaction((tx) async {
+      _validateRunningStartTimes(newStartedAt, expectedStartedAt, updatedAt);
+      final runningEvents = await tx.query(
+        'events',
+        columns: ['id'],
+        where: 'status = ?',
+        whereArgs: [EventStatus.running.name],
+      );
+      final runningRoutines = await tx.query(
+        'routine_executions',
+        columns: ['id'],
+        where: 'status = ?',
+        whereArgs: [RoutineExecutionStatus.running.name],
+      );
+      final open = await tx.query(
+        'routine_run_segments',
+        columns: ['id', 'started_at_utc'],
+        where: 'routine_execution_id = ? AND ended_at_utc IS NULL',
+        whereArgs: [executionId],
+      );
+      final allOpenEvents = await tx.query(
+        'run_segments',
+        columns: ['id'],
+        where: 'ended_at_utc IS NULL',
+      );
+      final allOpenRoutines = await tx.query(
+        'routine_run_segments',
+        columns: ['id'],
+        where: 'ended_at_utc IS NULL',
+      );
+      if (runningEvents.isNotEmpty ||
+          runningRoutines.length != 1 ||
+          runningRoutines.single['id'] != executionId ||
+          open.length != 1 ||
+          allOpenEvents.isNotEmpty ||
+          allOpenRoutines.length != 1 ||
+          allOpenRoutines.single['id'] != segmentId ||
+          open.single['id'] != segmentId ||
+          open.single['started_at_utc'] !=
+              expectedStartedAt.toUtc().millisecondsSinceEpoch) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+      await _validateNoSegmentOverlapIn(
+        tx,
+        newStartedAt,
+        updatedAt,
+        exceptId: segmentId,
+        exceptTable: 'routine_run_segments',
+      );
+      if (newStartedAt.toUtc() == expectedStartedAt.toUtc()) return;
+      final changed = await tx.update(
+        'routine_run_segments',
+        {
+          'started_at_utc': newStartedAt.toUtc().millisecondsSinceEpoch,
+          'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
+        },
+        where: 'id = ? AND routine_execution_id = ? AND ended_at_utc IS NULL AND started_at_utc = ?',
+        whereArgs: [
+          segmentId,
+          executionId,
+          expectedStartedAt.toUtc().millisecondsSinceEpoch,
+        ],
+      );
+      if (changed != 1) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+    });
+  }
+
+  @override
   Future<void> deleteClosedRoutineRunSegment(String id) async {
     if (await _appDatabase.database.delete(
           'routine_run_segments',
@@ -1143,4 +1297,76 @@ class SqliteEventRepository
           isUtc: true,
         ),
       );
+
+  void _validateRunningStartTimes(
+    DateTime value,
+    DateTime current,
+    DateTime now,
+  ) {
+    if (value.isAfter(now)) {
+      throw const DomainFailure('开始时间不能晚于当前时间');
+    }
+    if (value.isAfter(current)) {
+      throw const DomainFailure('开始时间只能向前修正。如需修改已记录时间，请在记录中编辑');
+    }
+  }
+
+  Future<void> _validateNoSegmentOverlapIn(
+    DatabaseExecutor db,
+    DateTime start,
+    DateTime end, {
+    required String exceptId,
+    required String exceptTable,
+  }) async {
+    final rows = <Map<String, Object?>>[
+      ...await db
+          .rawQuery('''
+SELECT rs.id, e.name, rs.started_at_utc, rs.ended_at_utc
+FROM run_segments rs
+JOIN events e ON e.id = rs.event_id
+''')
+          .then(
+            (items) => items
+                .map((item) => {...item, 'source_table': 'run_segments'})
+                .toList(),
+          ),
+      ...await db
+          .rawQuery('''
+SELECT rs.id, r.name, rs.started_at_utc, rs.ended_at_utc
+FROM routine_run_segments rs
+JOIN routine_executions re ON re.id = rs.routine_execution_id
+JOIN routines r ON r.id = re.routine_id
+''')
+          .then(
+            (items) => items
+                .map(
+                  (item) => {...item, 'source_table': 'routine_run_segments'},
+                )
+                .toList(),
+          ),
+    ];
+    final startMs = start.toUtc().millisecondsSinceEpoch;
+    final endMs = end.toUtc().millisecondsSinceEpoch;
+    for (final row in rows) {
+      if (row['id'] == exceptId && row['source_table'] == exceptTable) continue;
+      final otherStart = row['started_at_utc']! as int;
+      final otherEnd = (row['ended_at_utc'] as int?) ?? endMs;
+      if (startMs < otherEnd && endMs > otherStart) {
+        final localStart = DateTime.fromMillisecondsSinceEpoch(
+          otherStart,
+          isUtc: true,
+        ).toLocal();
+        final localEnd = DateTime.fromMillisecondsSinceEpoch(
+          otherEnd,
+          isUtc: true,
+        ).toLocal();
+        throw DomainFailure(
+          '无法修改开始时间。${_clock(localStart)}–${_clock(localEnd)} 已有执行记录：${row['name']}。请选择 ${_clock(localEnd)} 之后的时间。',
+        );
+      }
+    }
+  }
+
+  String _clock(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 }

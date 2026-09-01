@@ -288,19 +288,15 @@ class EventController extends ChangeNotifier {
     _scheduleDayBoundaryRefresh();
   }
 
-  Future<String?> create(
-    String name, {
-    String? categoryId,
-  }) => _change(() => _create(name, categoryId: categoryId));
+  Future<String?> create(String name, {String? categoryId}) =>
+      _change(() => _create(name, categoryId: categoryId));
 
-  Future<String?> createStandaloneForToday(
-    String name, {
-    String? categoryId,
-  }) => _change(() async {
-    final event = await _create(name, categoryId: categoryId);
-    await _ensureToday(event.id);
-    return null;
-  });
+  Future<String?> createStandaloneForToday(String name, {String? categoryId}) =>
+      _change(() async {
+        final event = await _create(name, categoryId: categoryId);
+        await _ensureToday(event.id);
+        return null;
+      });
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
   Future<String?> createCategory(String name, {int? colorKey}) =>
@@ -349,6 +345,27 @@ class EventController extends ChangeNotifier {
         endTime,
       );
       await _complete(id, endTime: endTime);
+      return null;
+    }),
+  );
+  Future<String?> adjustRunningEventStart(
+    String id,
+    DateTime expectedStartedAt,
+    DateTime newStartedAt,
+  ) => _enqueueExecution(
+    () => _change(() async {
+      final open = (_segments[id] ?? const <RunSegment>[])
+          .where((segment) => segment.endedAt == null)
+          .toList(growable: false);
+      if (open.length != 1) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+      await _executionSegments.adjustRunningEventStart(
+        eventId: id,
+        segmentId: open.single.id,
+        expectedStartedAt: expectedStartedAt,
+        newStartedAt: newStartedAt,
+      );
       return null;
     }),
   );
@@ -537,6 +554,32 @@ class EventController extends ChangeNotifier {
           return null;
         }),
       );
+  Future<String?> adjustRunningRoutineStart(
+    Routine routine,
+    DateTime expectedStartedAt,
+    DateTime newStartedAt,
+  ) => _enqueueExecution(
+    () => _change(() async {
+      final execution = executionFor(routine);
+      if (execution == null) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+      final open =
+          (_routineSegments[execution.id] ?? const <RoutineRunSegment>[])
+              .where((segment) => segment.endedAt == null)
+              .toList(growable: false);
+      if (open.length != 1) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+      await _executionSegments.adjustRunningRoutineStart(
+        executionId: execution.id,
+        segmentId: open.single.id,
+        expectedStartedAt: expectedStartedAt,
+        newStartedAt: newStartedAt,
+      );
+      return null;
+    }),
+  );
 
   DateTime? runningEventStartedAt(String eventId) =>
       (_segments[eventId] ?? const <RunSegment>[])
@@ -658,11 +701,11 @@ class EventController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<JaxEvent> _sortEvents(Iterable<JaxEvent> source) => source.toList()
-    ..sort((a, b) {
-      final created = a.createdAt.compareTo(b.createdAt);
-      return created != 0 ? created : a.id.compareTo(b.id);
-    });
+  List<JaxEvent> _sortEvents(Iterable<JaxEvent> source) =>
+      source.toList()..sort((a, b) {
+        final created = a.createdAt.compareTo(b.createdAt);
+        return created != 0 ? created : a.id.compareTo(b.id);
+      });
 
   void _syncTicker() {
     final running =

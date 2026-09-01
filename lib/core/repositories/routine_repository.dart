@@ -25,6 +25,13 @@ abstract interface class RoutineRepository {
     RoutineRunSegment segment,
   );
   Future<void> updateClosedRoutineRunSegment(RoutineRunSegment segment);
+  Future<void> adjustRunningRoutineStart({
+    required String executionId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+    required DateTime updatedAt,
+  });
   Future<void> deleteClosedRoutineRunSegment(String id);
   Future<void> startRoutineExecution(
     RoutineExecution execution,

@@ -222,7 +222,7 @@ v0.1 至少需要通过以下行为验证：
 - Jax 在 Windows 和 Android 的导航中均按“首页 / 事件 / 记录”排列，并默认从首页启动；两端共用首页内容和业务规则，仅导航外壳可响应屏幕宽度变化。
 - 首页顶部按设备当前本地时间显示弱化的“早上好”“上午好”“中午好”“下午好”或“晚上好”。时间区间沿用既有规则，问候语在进入、返回首页及跨越区间边界后刷新，不作为业务数据持久化。
 - 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event ancestor breadcrumb 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
-- Running Hero 直接提供“暂停”主操作；More 对 Event 提供“完成 / 完成并修改结束时间… / 等待”，对 Routine 提供“完成 / 完成并修改结束时间…”。普通完成仍以当前时间结束；修正入口只允许 open segment 开始后、当前时间前的真实结束时间，并在同一业务事务内完成对象和直接关闭原 open segment，不新增修正 segment。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
+- Running Hero 直接提供“暂停”主操作；More 对 Event 提供“修改开始时间… / 完成并修改结束时间… / 等待 / 完成”，对 Routine 提供“修改开始时间… / 完成并修改结束时间… / 完成”。普通完成仍以当前时间结束；结束时间修正只允许 open segment 开始后、当前时间前的真实结束时间，并在同一业务事务内完成对象和直接关闭原 open segment，不新增修正 segment。开始时间修正只原位修改当前 open segment，第一版仅允许向前调整，并保持 owner、segment ID、open/running 状态不变。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
 - Event 的当前 parent 上下文可在 Hero 底部以紧凑 direct children 列表和“已完成数 / 总数”呈现；它只辅助理解当前执行位置，不得取代 running 名称或扩展为预测、百分比进度条。
 - Running Hero 之后优先显示 Waiting，然后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始或恢复候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
 - 没有 running 时，首页显示“现在没有正在执行的事项”和“接下来可以做”，仍提供 Today 候选启动入口；无候选时可进入今日页。
@@ -464,5 +464,15 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   Event 不允许普通物理删除。
 - dispatched/done PlanItem 标题不可编辑；Event 名称是派发时拷贝，后续与
   PlanItem title 解耦。Planning detail 展示 linked Event 的当前状态。
+
+## 19. 当前执行开始时间修正
+
+- Home Running Hero 的 More 提供“修改开始时间…”，覆盖 Planned Event、Standalone Event、Scheduled RoutineExecution 与 On-demand RoutineExecution。它只服务于当前仍为 running、且恰有一个 open segment 的对象。
+- 第一版只允许把 `startedAt` 向前修正且不得晚于当前时间。向后移动会删除已经记录的执行事实，属于 Record 历史编辑职责，不在 Home 快捷修正范围内。
+- 保存必须原位更新同一个 open Event RunSegment 或 RoutineRunSegment：segment ID、owner、`endedAt = null` 与 owner running 状态保持不变，不得 delete/recreate、close/reopen、split 或新增 segment。
+- Core/Data 在提交时重新确认全局唯一 running owner、唯一 open segment、segment ID 与打开对话框时的原 startedAt；stale 操作直接拒绝，绝不重新打开已关闭 segment。
+- 新区间按 `[start, end)` 与全部 Event/Routine segment 做统一 overlap 校验，当前被修改 segment 自身除外；邻接合法，冲突时展示对象名称与时间范围。跨 23:00 JaxDay 合法且不物理拆段，Record/统计继续使用既有 overlap clipping。
+- 该修正只推进 segment 的 sync `updatedAt`，使 snapshot/fingerprint 与 3-way field compare 感知 `startedAt` 变化；不修改 EventDayPlan、Today order、Plan/PlanItem、WorldNode 或 owner identity。Planned Event 的 PlanItem 保持 `dispatched`。
+- Home correction 只处理当前 open segment；Record segment editor 继续负责已关闭历史段的完整修正，两者不得合并成 timeline editor。
 - 建议顺序为 Category order → WorldNode hierarchy/display order → Plan round/id
   → PlanItem order/id。本阶段不新增 schema，仍为 v16；Sync protocol 仍为 4。

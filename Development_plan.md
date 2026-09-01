@@ -687,3 +687,22 @@ flutter run -d windows
 8. 将验收结果写入 `docs/ACCEPTANCE.md`。
 9. 确认没有实现 v0.1 明确排除的功能。
 10. 标记 v0.1 完成。
+
+## 12. P3.5：当前 running 开始时间修正
+
+行为变化：用户可从 Home Running Hero 的 More 打开轻量时间对话框，把当前 open segment 的 `startedAt` 向前修正；Event 与 Routine 使用同一交互和 Core overlap 语义。
+
+Core / Data：
+
+- `ExecutionSegmentService.adjustRunningEventStart` 与 `adjustRunningRoutineStart` 校验非未来、只向前、全局唯一 running、唯一 open segment、stale identity 及跨 Event/Routine overlap。
+- EventRepository / RoutineRepository 提供窄的原子更新接口。SQLite 事务在写入前重复校验 owner 状态、segment ID、expected startedAt 和跨表 overlap，仅更新原行的 `started_at_utc` 与 `updated_at_utc`。
+- 不迁移 schema，不创建新 segment，不修改 owner、Today、Planning、WorldNode 或 Record 关系。跨 JaxDay 保留单一真实 segment，由既有统计 clipping 负责归属。
+
+UI：
+
+- Event/Routine 共用 Home 的紧凑 dialog，显示当前开始时间，并提供日期、时间选择与行内业务错误。
+- 成功后 controller 重新加载 segment，Running Hero timer 立即按修正后的 startedAt 计算；保存时 stale 则保留 dialog 并显示“当前执行状态已发生变化”。
+
+测试：
+
+- 覆盖 Event/Routine 原位修改、segment count/identity、向后拒绝、跨类型 overlap、邻接、跨 JaxDay、planned relation 不变、stale completion、SQLite rollback/sync metadata 与手机窄屏 dialog/timer 刷新。

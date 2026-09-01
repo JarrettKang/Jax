@@ -112,6 +112,106 @@ class ExecutionSegmentService {
     await _validateOverlap(start, end, exceptId: openSegmentId);
   }
 
+  Future<void> adjustRunningEventStart({
+    required String eventId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+  }) async {
+    final now = _now().toUtc();
+    _validateRunningStart(newStartedAt, expectedStartedAt, now);
+    final event = await _events.getEvent(eventId);
+    final open = (await _events.getRunSegments(eventId))
+        .where((segment) => segment.endedAt == null)
+        .toList(growable: false);
+    final allOpenEvents = (await _events.getAllRunSegments())
+        .where((segment) => segment.endedAt == null)
+        .toList(growable: false);
+    final allOpenRoutines = _routines == null
+        ? const <RoutineRunSegment>[]
+        : (await _routines.getAllRoutineRunSegments())
+              .where((segment) => segment.endedAt == null)
+              .toList(growable: false);
+    final runningEvents = (await _events.getIncompleteEvents())
+        .where((item) => item.status == EventStatus.running)
+        .toList(growable: false);
+    if (event?.status != EventStatus.running ||
+        runningEvents.length != 1 ||
+        runningEvents.single.id != eventId ||
+        await _routines?.getRunningRoutineExecution() != null ||
+        open.length != 1 ||
+        allOpenEvents.length != 1 ||
+        allOpenEvents.single.id != segmentId ||
+        allOpenRoutines.isNotEmpty ||
+        open.single.id != segmentId ||
+        open.single.startedAt.toUtc() != expectedStartedAt.toUtc()) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    await _validateOverlap(
+      newStartedAt,
+      now,
+      exceptId: segmentId,
+      exceptSource: ExecutionSource.event,
+      runningStartCorrection: true,
+    );
+    await _events.adjustRunningEventStart(
+      eventId: eventId,
+      segmentId: segmentId,
+      expectedStartedAt: expectedStartedAt.toUtc(),
+      newStartedAt: newStartedAt.toUtc(),
+      updatedAt: now,
+    );
+  }
+
+  Future<void> adjustRunningRoutineStart({
+    required String executionId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+  }) async {
+    final repo = _routines;
+    if (repo == null) throw const DomainFailure('日常不可用');
+    final now = _now().toUtc();
+    _validateRunningStart(newStartedAt, expectedStartedAt, now);
+    final running = await repo.getRunningRoutineExecution();
+    final open = (await repo.getRoutineRunSegments(executionId))
+        .where((segment) => segment.endedAt == null)
+        .toList(growable: false);
+    final allOpenEvents = (await _events.getAllRunSegments())
+        .where((segment) => segment.endedAt == null)
+        .toList(growable: false);
+    final allOpenRoutines = (await repo.getAllRoutineRunSegments())
+        .where((segment) => segment.endedAt == null)
+        .toList(growable: false);
+    final runningEvents = (await _events.getIncompleteEvents()).where(
+      (item) => item.status == EventStatus.running,
+    );
+    if (running?.id != executionId ||
+        runningEvents.isNotEmpty ||
+        open.length != 1 ||
+        allOpenEvents.isNotEmpty ||
+        allOpenRoutines.length != 1 ||
+        allOpenRoutines.single.id != segmentId ||
+        open.single.id != segmentId ||
+        open.single.startedAt.toUtc() != expectedStartedAt.toUtc()) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    await _validateOverlap(
+      newStartedAt,
+      now,
+      exceptId: segmentId,
+      exceptSource: ExecutionSource.routine,
+      runningStartCorrection: true,
+    );
+    await repo.adjustRunningRoutineStart(
+      executionId: executionId,
+      segmentId: segmentId,
+      expectedStartedAt: expectedStartedAt.toUtc(),
+      newStartedAt: newStartedAt.toUtc(),
+      updatedAt: now,
+    );
+  }
+
   Future<void> validateNewRange(DateTime start, DateTime end) async {
     _validateClosed(start, end);
     await _validateOverlap(start, end);
@@ -197,18 +297,35 @@ class ExecutionSegmentService {
     }
   }
 
+  void _validateRunningStart(DateTime value, DateTime current, DateTime now) {
+    if (value.isAfter(now)) {
+      throw const DomainFailure('开始时间不能晚于当前时间');
+    }
+    if (value.isAfter(current)) {
+      throw const DomainFailure('开始时间只能向前修正。如需修改已记录时间，请在记录中编辑');
+    }
+  }
+
   Future<void> _validateOverlap(
     DateTime start,
     DateTime end, {
     String? exceptId,
+    ExecutionSource? exceptSource,
+    bool runningStartCorrection = false,
   }) async {
     for (final other in await _all()) {
-      if (other.id == exceptId) {
+      if (other.id == exceptId &&
+          (exceptSource == null || other.source == exceptSource)) {
         continue;
       }
       final otherEnd = other.endedAt ?? _now().toLocal();
       if (start.isBefore(otherEnd.toLocal()) &&
           end.isAfter(other.startedAt.toLocal())) {
+        if (runningStartCorrection) {
+          throw DomainFailure(
+            '无法修改开始时间。${_range(other.startedAt, otherEnd)} 已有执行记录：${other.name}。请选择 ${_clock(otherEnd)} 之后的时间。',
+          );
+        }
         throw DomainFailure(
           '与「${other.name} ${_range(other.startedAt, otherEnd)}」时间重叠',
         );
@@ -297,5 +414,4 @@ class ExecutionSegmentService {
     }
     return result;
   }
-
 }

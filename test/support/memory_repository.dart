@@ -8,6 +8,7 @@ import 'package:jax/core/entities/routine_category.dart';
 import 'package:jax/core/repositories/event_repository.dart';
 import 'package:jax/core/repositories/event_day_plan_repository.dart';
 import 'package:jax/core/repositories/routine_repository.dart';
+import 'package:jax/core/errors/domain_failure.dart';
 
 class MemoryRepository
     implements EventRepository, EventDayPlanRepository, RoutineRepository {
@@ -61,6 +62,55 @@ class MemoryRepository
     );
     if (index < 0) throw StateError('Closed run segment not found');
     segments[index] = segment;
+  }
+
+  @override
+  Future<void> adjustRunningEventStart({
+    required String eventId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+    required DateTime updatedAt,
+  }) async {
+    _validateCorrection(newStartedAt, expectedStartedAt, updatedAt);
+    final runningEvents = events
+        .where((event) => event.status == EventStatus.running)
+        .toList();
+    final runningRoutines = routineExecutions
+        .where(
+          (execution) => execution.status == RoutineExecutionStatus.running,
+        )
+        .toList();
+    final open = segments
+        .where(
+          (segment) => segment.eventId == eventId && segment.endedAt == null,
+        )
+        .toList();
+    final allOpenEvents = segments.where((segment) => segment.endedAt == null);
+    final allOpenRoutines = routineSegments.where(
+      (segment) => segment.endedAt == null,
+    );
+    if (runningEvents.length != 1 ||
+        runningEvents.single.id != eventId ||
+        runningRoutines.isNotEmpty ||
+        open.length != 1 ||
+        allOpenEvents.length != 1 ||
+        allOpenEvents.single.id != segmentId ||
+        allOpenRoutines.isNotEmpty ||
+        open.single.id != segmentId ||
+        open.single.startedAt.toUtc() != expectedStartedAt.toUtc()) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    _validateMemoryOverlap(
+      newStartedAt,
+      updatedAt,
+      exceptEventSegmentId: segmentId,
+    );
+    if (newStartedAt.toUtc() != expectedStartedAt.toUtc()) {
+      segments[segments.indexOf(open.single)] = open.single.copyWith(
+        startedAt: newStartedAt.toUtc(),
+      );
+    }
   }
 
   @override
@@ -360,6 +410,55 @@ class MemoryRepository
   }
 
   @override
+  Future<void> adjustRunningRoutineStart({
+    required String executionId,
+    required String segmentId,
+    required DateTime expectedStartedAt,
+    required DateTime newStartedAt,
+    required DateTime updatedAt,
+  }) async {
+    _validateCorrection(newStartedAt, expectedStartedAt, updatedAt);
+    final runningEvents = events
+        .where((event) => event.status == EventStatus.running)
+        .toList();
+    final runningRoutines = routineExecutions
+        .where(
+          (execution) => execution.status == RoutineExecutionStatus.running,
+        )
+        .toList();
+    final open = routineSegments
+        .where(
+          (segment) =>
+              segment.executionId == executionId && segment.endedAt == null,
+        )
+        .toList();
+    final allOpenEvents = segments.where((segment) => segment.endedAt == null);
+    final allOpenRoutines = routineSegments.where(
+      (segment) => segment.endedAt == null,
+    );
+    if (runningEvents.isNotEmpty ||
+        runningRoutines.length != 1 ||
+        runningRoutines.single.id != executionId ||
+        open.length != 1 ||
+        allOpenEvents.isNotEmpty ||
+        allOpenRoutines.length != 1 ||
+        allOpenRoutines.single.id != segmentId ||
+        open.single.id != segmentId ||
+        open.single.startedAt.toUtc() != expectedStartedAt.toUtc()) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    _validateMemoryOverlap(
+      newStartedAt,
+      updatedAt,
+      exceptRoutineSegmentId: segmentId,
+    );
+    if (newStartedAt.toUtc() != expectedStartedAt.toUtc()) {
+      routineSegments[routineSegments.indexOf(open.single)] = open.single
+          .copyWith(startedAt: newStartedAt.toUtc());
+    }
+  }
+
+  @override
   Future<void> deleteClosedRoutineRunSegment(String id) async {
     final index = routineSegments.indexWhere(
       (item) => item.id == id && item.endedAt != null,
@@ -429,6 +528,49 @@ class MemoryRepository
     );
     if (s != null) {
       routineSegments[routineSegments.indexOf(s)] = s.copyWith(endedAt: now);
+    }
+  }
+
+  void _validateCorrection(DateTime value, DateTime current, DateTime now) {
+    if (value.isAfter(now)) {
+      throw const DomainFailure('开始时间不能晚于当前时间');
+    }
+    if (value.isAfter(current)) {
+      throw const DomainFailure('开始时间只能向前修正。如需修改已记录时间，请在记录中编辑');
+    }
+  }
+
+  void _validateMemoryOverlap(
+    DateTime start,
+    DateTime end, {
+    String? exceptEventSegmentId,
+    String? exceptRoutineSegmentId,
+  }) {
+    final ranges = <({String id, bool routine, DateTime start, DateTime? end})>[
+      for (final segment in segments)
+        (
+          id: segment.id,
+          routine: false,
+          start: segment.startedAt,
+          end: segment.endedAt,
+        ),
+      for (final segment in routineSegments)
+        (
+          id: segment.id,
+          routine: true,
+          start: segment.startedAt,
+          end: segment.endedAt,
+        ),
+    ];
+    for (final range in ranges) {
+      if ((!range.routine && range.id == exceptEventSegmentId) ||
+          (range.routine && range.id == exceptRoutineSegmentId)) {
+        continue;
+      }
+      final otherEnd = range.end ?? end;
+      if (start.isBefore(otherEnd) && end.isAfter(range.start)) {
+        throw const DomainFailure('执行时间与已有记录重叠');
+      }
     }
   }
 }
