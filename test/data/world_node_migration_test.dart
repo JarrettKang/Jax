@@ -22,7 +22,7 @@ void main() {
       expect(
         (await app.database.rawQuery('PRAGMA user_version'))
             .single['user_version'],
-        14,
+        15,
       );
       final report = await WorldNodeMigrationReporter(app.database).inspect();
       expect(report.toJson(), containsPair('legacyEvents', 5));
@@ -55,6 +55,8 @@ void main() {
         isNull,
       );
       expect(await app.database.query('event_day_plans'), hasLength(4));
+      expect(await app.database.query('plans'), isEmpty);
+      expect(await app.database.query('plan_items'), isEmpty);
     },
   );
 
