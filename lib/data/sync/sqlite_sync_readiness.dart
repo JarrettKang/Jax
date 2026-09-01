@@ -41,6 +41,8 @@ class SqliteSyncReadiness {
       'routine_run_segments',
       'world_nodes',
       'legacy_event_world_node_links',
+      'plans',
+      'plan_items',
     ];
     for (final table in identityTables) {
       final invalid = await db.rawQuery(
@@ -147,6 +149,47 @@ class SqliteSyncReadiness {
           ),
         );
       }
+    }
+
+    for (final row in await db.rawQuery('''SELECT p.id FROM plans p
+      LEFT JOIN world_nodes w ON w.id = p.world_node_id
+      WHERE w.id IS NULL''')) {
+      issues.add(SyncReadinessIssue('plan-world-node', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
+      LEFT JOIN plans p ON p.id = i.plan_id WHERE p.id IS NULL''')) {
+      issues.add(SyncReadinessIssue('plan-item-plan', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM plans WHERE
+      (status = 'ended' AND ended_at_utc IS NULL) OR
+      (status != 'ended' AND ended_at_utc IS NOT NULL)''')) {
+      issues.add(SyncReadinessIssue('plan-ended-at', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT world_node_id, count(*) count
+      FROM plans WHERE status IN ('focused','waiting')
+      GROUP BY world_node_id HAVING count(*) > 1''')) {
+      issues.add(SyncReadinessIssue('multiple-current-plans', row.toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT p.id FROM plans p
+      JOIN world_nodes w ON w.id = p.world_node_id
+      WHERE p.status IN ('focused','waiting') AND w.status = 'completed' ''')) {
+      issues.add(
+        SyncReadinessIssue(
+          'completed-world-node-current-plan',
+          row['id'].toString(),
+        ),
+      );
+    }
+    for (final row in await db.rawQuery(
+      "SELECT id FROM plan_items WHERE status IN ('dispatched','done')",
+    )) {
+      issues.add(
+        SyncReadinessIssue(
+          'p2-execution-state-plan-item',
+          row['id'].toString(),
+          isBlocking: false,
+        ),
+      );
     }
 
     final running = SqfliteCount.value(
@@ -268,6 +311,19 @@ class SqliteSyncReadiness {
       HAVING count(*) > 1''');
     for (final row in worldOrderDuplicates) {
       issues.add(SyncReadinessIssue('world-node-scoped-order', row.toString()));
+    }
+    for (final row in await db.rawQuery(
+      '''SELECT plan_id, sort_order, count(*) count
+      FROM plan_items GROUP BY plan_id, sort_order HAVING count(*) > 1''',
+    )) {
+      issues.add(SyncReadinessIssue('plan-item-scoped-order', row.toString()));
+    }
+    for (final row in await db.rawQuery(
+      'SELECT id FROM plan_items WHERE sort_order < 0',
+    )) {
+      issues.add(
+        SyncReadinessIssue('plan-item-negative-order', row['id'].toString()),
+      );
     }
   }
 }

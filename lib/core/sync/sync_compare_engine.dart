@@ -789,5 +789,6 @@ class SyncCompareEngine {
     SyncListKind.routines => 'Routine ${list.scopeId} 分类内顺序',
     SyncListKind.eventDayPlans => '${list.scopeId} Today 顺序',
     SyncListKind.worldNodeSiblings => 'WorldNode ${list.scopeId} 顺序',
+    SyncListKind.planItems => '计划 ${list.scopeId} 的步骤顺序',
   };
 }

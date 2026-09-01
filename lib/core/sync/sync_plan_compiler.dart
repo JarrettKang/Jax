@@ -225,6 +225,7 @@ class SyncPlanCompiler {
             )
             .firstOrNull,
       SyncListKind.worldNodeSiblings => find(SyncEntityKind.worldNode),
+      SyncListKind.planItems => find(SyncEntityKind.planItem),
     };
     if (record == null || record.isDeleted) return false;
     return switch (list.kind) {
@@ -238,6 +239,7 @@ class SyncPlanCompiler {
                 ? 'category:${record.payload['categorySyncId'] ?? 'uncategorized'}'
                 : 'parent:${record.payload['parentWorldNodeSyncId']}') ==
             list.scopeId,
+      SyncListKind.planItems => record.payload['planSyncId'] == list.scopeId,
       _ => true,
     };
   }

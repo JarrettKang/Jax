@@ -126,6 +126,7 @@ class SqliteSyncMutationExecutor {
       case SyncEntityKind.routineCategory:
       case SyncEntityKind.routine:
       case SyncEntityKind.worldNode:
+      case SyncEntityKind.planItem:
         row.remove('sort_order');
         break;
       case SyncEntityKind.eventDayPlan:
@@ -135,6 +136,7 @@ class SqliteSyncMutationExecutor {
       case SyncEntityKind.routineExecution:
       case SyncEntityKind.routineRunSegment:
       case SyncEntityKind.legacyEventWorldNodeLink:
+      case SyncEntityKind.plan:
         break;
     }
     final oldUpdated = (existing.single['updated_at_utc'] as num).toInt();
@@ -208,6 +210,9 @@ class SqliteSyncMutationExecutor {
       column: 'order_index',
     ),
     SyncListKind.worldNodeSiblings => _setOrder(db, 'world_nodes', 'id = ?', [
+      id,
+    ], index),
+    SyncListKind.planItems => _setOrder(db, 'plan_items', 'id = ?', [
       id,
     ], index),
   };
@@ -294,6 +299,13 @@ class SqliteSyncMutationExecutor {
                 'parent_world_node_id IS NULL AND category_id = ?',
                 <Object?>[list.scopeId.substring('category:'.length)],
               ),
+      SyncListKind.planItems => (
+        'plan_items',
+        'id',
+        'sort_order',
+        'plan_id = ?',
+        <Object?>[list.scopeId],
+      ),
     };
     final rows = await db.query(
       table,
@@ -440,6 +452,24 @@ class SqliteSyncMutationExecutor {
         'world_node_id': p['worldNodeSyncId'],
         ...metadata,
       },
+      SyncEntityKind.plan => {
+        'id': record.metadata.id,
+        'world_node_id': p['worldNodeSyncId'],
+        'title': p['title'],
+        'status': p['status'],
+        'round_number': p['roundNumber'],
+        'ended_at_utc': p['endedAtUtc'],
+        ...metadata,
+      },
+      SyncEntityKind.planItem => {
+        'id': record.metadata.id,
+        'plan_id': p['planSyncId'],
+        'title': p['title'],
+        'note': p['note'],
+        'status': p['status'],
+        'sort_order': p['order'],
+        ...metadata,
+      },
     };
   }
 
@@ -484,12 +514,18 @@ class SqliteSyncMutationExecutor {
       'id = ?',
       [record.metadata.id],
     ),
+    SyncEntityKind.plan => _SqlTarget('plans', 'id = ?', [record.metadata.id]),
+    SyncEntityKind.planItem => _SqlTarget('plan_items', 'id = ?', [
+      record.metadata.id,
+    ]),
   };
 
   int _deleteRank(SyncEntityKind kind) => switch (kind) {
-    SyncEntityKind.eventDayPlan || SyncEntityKind.legacyEventWorldNodeLink => 0,
+    SyncEntityKind.eventDayPlan ||
+    SyncEntityKind.legacyEventWorldNodeLink ||
+    SyncEntityKind.planItem => 0,
     SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 1,
-    SyncEntityKind.routineExecution => 2,
+    SyncEntityKind.routineExecution || SyncEntityKind.plan => 2,
     SyncEntityKind.routine ||
     SyncEntityKind.event ||
     SyncEntityKind.worldNode => 3,
@@ -503,6 +539,8 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 4,
     SyncEntityKind.eventDayPlan => 5,
     SyncEntityKind.worldNode => 1,
+    SyncEntityKind.plan => 2,
+    SyncEntityKind.planItem => 3,
     SyncEntityKind.legacyEventWorldNodeLink => 6,
   };
   String _tombstoneType(SyncEntityKind kind) => switch (kind) {
@@ -516,6 +554,8 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.routineRunSegment => 'routineRunSegment',
     SyncEntityKind.worldNode => 'worldNode',
     SyncEntityKind.legacyEventWorldNodeLink => 'legacyEventWorldNodeLink',
+    SyncEntityKind.plan => 'plan',
+    SyncEntityKind.planItem => 'planItem',
   };
 }
 

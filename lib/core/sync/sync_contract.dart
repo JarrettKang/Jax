@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 2;
+const syncProtocolVersion = 3;
 
 enum SyncEntityKind {
   eventCategory,
@@ -17,6 +17,8 @@ enum SyncEntityKind {
   routineRunSegment,
   worldNode,
   legacyEventWorldNodeLink,
+  plan,
+  planItem,
 }
 
 enum SyncListKind {
@@ -26,6 +28,7 @@ enum SyncListKind {
   routines,
   eventDayPlans,
   worldNodeSiblings,
+  planItems,
 }
 
 class SyncMetadata {
@@ -171,9 +174,12 @@ class SyncSnapshot {
       ),
       warnings: (json['warnings'] as List? ?? const []).cast<String>(),
     );
-    return snapshot.protocolVersion == 1
+    final withWorldNodes = snapshot.protocolVersion == 1
         ? _upgradeProtocol1Baseline(snapshot)
         : snapshot;
+    return withWorldNodes.protocolVersion == 2
+        ? _upgradeProtocol2Baseline(withWorldNodes)
+        : withWorldNodes;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -288,7 +294,7 @@ SyncSnapshot _upgradeProtocol1Baseline(SyncSnapshot source) {
     }
   }
   return SyncSnapshot(
-    protocolVersion: syncProtocolVersion,
+    protocolVersion: 2,
     schemaVersion: source.schemaVersion,
     exportedAtUtc: source.exportedAtUtc,
     records: [...source.records, ...additions],
@@ -308,6 +314,18 @@ SyncSnapshot _upgradeProtocol1Baseline(SyncSnapshot source) {
     ],
   );
 }
+
+SyncSnapshot _upgradeProtocol2Baseline(SyncSnapshot source) => SyncSnapshot(
+  protocolVersion: syncProtocolVersion,
+  schemaVersion: source.schemaVersion,
+  exportedAtUtc: source.exportedAtUtc,
+  records: source.records,
+  lists: source.lists,
+  warnings: [
+    ...source.warnings,
+    'baseline-upgraded: sync protocol 2 normalized to protocol 3 Planning',
+  ],
+);
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   final result = <String, Object?>{};

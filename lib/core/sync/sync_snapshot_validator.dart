@@ -108,6 +108,38 @@ class SyncSnapshotValidator {
               p['worldNodeSyncId'] != WorldNodeIds.fromLegacyEvent(legacyId)) {
             issues.add('legacy-link-deterministic:${record.metadata.id}');
           }
+        case SyncEntityKind.plan:
+          if (!has(SyncEntityKind.worldNode, p['worldNodeSyncId'])) {
+            issues.add('plan-world-node:${record.metadata.id}');
+          }
+          if (!{'focused', 'waiting', 'ended'}.contains(p['status'])) {
+            issues.add('plan-status:${record.metadata.id}');
+          }
+          if ((p['status'] == 'ended') != (p['endedAtUtc'] != null)) {
+            issues.add('plan-ended-at:${record.metadata.id}');
+          }
+          if (p['roundNumber'] is! int || (p['roundNumber'] as int) < 1) {
+            issues.add('plan-round:${record.metadata.id}');
+          }
+        case SyncEntityKind.planItem:
+          if (!has(SyncEntityKind.plan, p['planSyncId'])) {
+            issues.add('plan-item-plan:${record.metadata.id}');
+          }
+          if (!{
+            'draft',
+            'next',
+            'dispatched',
+            'done',
+            'dropped',
+          }.contains(p['status'])) {
+            issues.add('plan-item-status:${record.metadata.id}');
+          }
+          if (p['title'] is! String || (p['title'] as String).trim().isEmpty) {
+            issues.add('plan-item-title:${record.metadata.id}');
+          }
+          if (p['order'] is! int || (p['order'] as int) < 0) {
+            issues.add('plan-item-order:${record.metadata.id}');
+          }
         case SyncEntityKind.eventCategory || SyncEntityKind.routineCategory:
           break;
       }
@@ -116,8 +148,44 @@ class SyncSnapshotValidator {
     _routineRules(live, issues);
     _executionRules(live, issues);
     _worldNodeRules(live, issues);
+    _planningRules(live, issues);
     _listRules(snapshot, live, issues);
     return issues;
+  }
+
+  void _planningRules(Map<String, SyncRecord> live, List<String> issues) {
+    final nodes = {
+      for (final record in live.values.where(
+        (record) => record.kind == SyncEntityKind.worldNode,
+      ))
+        record.metadata.id: record,
+    };
+    final plans = live.values.where(
+      (record) => record.kind == SyncEntityKind.plan,
+    );
+    final activeByNode = <String, int>{};
+    final rounds = <String>{};
+    for (final plan in plans) {
+      final nodeId = plan.payload['worldNodeSyncId'] as String?;
+      final round = plan.payload['roundNumber'];
+      if (nodeId != null && !rounds.add('$nodeId:$round')) {
+        issues.add('duplicate-plan-round:$nodeId:$round');
+      }
+      if (plan.payload['status'] == 'focused' ||
+          plan.payload['status'] == 'waiting') {
+        if (nodeId != null) {
+          activeByNode[nodeId] = (activeByNode[nodeId] ?? 0) + 1;
+          if (nodes[nodeId]?.payload['status'] == 'completed') {
+            issues.add('completed-world-node-current-plan:$nodeId');
+          }
+        }
+      }
+    }
+    for (final entry in activeByNode.entries.where(
+      (entry) => entry.value > 1,
+    )) {
+      issues.add('multiple-current-plans:${entry.key}');
+    }
   }
 
   void _worldNodeRules(Map<String, SyncRecord> live, List<String> issues) {
@@ -280,6 +348,7 @@ class SyncSnapshotValidator {
           SyncListKind.routines => SyncEntityKind.routine,
           SyncListKind.eventDayPlans => SyncEntityKind.event,
           SyncListKind.worldNodeSiblings => SyncEntityKind.worldNode,
+          SyncListKind.planItems => SyncEntityKind.planItem,
         };
         if (!live.containsKey('${kind.name}:$id')) {
           issues.add('list-owner:${list.key}:$id');
@@ -315,6 +384,12 @@ class SyncSnapshotValidator {
           if (expectedScope != list.scopeId) {
             issues.add('list-scope:${list.key}:$id');
           }
+        }
+        if (list.kind == SyncListKind.planItems &&
+            live['${SyncEntityKind.planItem.name}:$id']
+                    ?.payload['planSyncId'] !=
+                list.scopeId) {
+          issues.add('list-scope:${list.key}:$id');
         }
       }
     }
@@ -355,6 +430,13 @@ class SyncSnapshotValidator {
           );
         case SyncEntityKind.legacyEventWorldNodeLink:
           break;
+        case SyncEntityKind.plan:
+          break;
+        case SyncEntityKind.planItem:
+          addExpected(
+            '${SyncListKind.planItems.name}:${record.payload['planSyncId']}',
+            id,
+          );
         case SyncEntityKind.eventRunSegment ||
             SyncEntityKind.routineExecution ||
             SyncEntityKind.routineRunSegment:
