@@ -8,6 +8,8 @@ import 'dart:ui' show AppExitResponse;
 import 'package:uuid/uuid.dart';
 
 import 'core/repositories/event_repository.dart';
+import 'core/repositories/planning_repository.dart';
+import 'core/repositories/world_node_repository.dart';
 import 'core/preferences/world_category_collapse_store.dart';
 import 'core/preferences/routine_category_collapse_store.dart';
 import 'core/services/save_service.dart';
@@ -23,6 +25,8 @@ import 'core/repositories/routine_repository.dart';
 import 'core/sync/sync_compare_engine.dart';
 import 'core/sync/sync_contract.dart';
 import 'ui/pages/sync_preview_page.dart';
+import 'ui/controllers/planning_controller.dart';
+import 'ui/pages/planning_page.dart';
 
 ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
@@ -45,6 +49,8 @@ class JaxApp extends StatefulWidget {
     this.debugSyncBaseline,
     this.onConfirmedSyncApply,
     this.onOpenDebugSync,
+    this.planningRepository,
+    this.worldNodeRepository,
     super.key,
   }) : saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
@@ -67,6 +73,8 @@ class JaxApp extends StatefulWidget {
   final SyncSnapshot? debugSyncBaseline;
   final ConfirmedSyncApply? onConfirmedSyncApply;
   final Future<void> Function()? onOpenDebugSync;
+  final PlanningRepository? planningRepository;
+  final WorldNodeRepository? worldNodeRepository;
 
   @override
   State<JaxApp> createState() => _JaxAppState();
@@ -75,6 +83,7 @@ class JaxApp extends StatefulWidget {
 class _JaxAppState extends State<JaxApp> {
   late final EventController _controller;
   late final PrepareForShutdown _prepareForShutdown;
+  PlanningController? _planningController;
   AppLifecycleListener? _lifecycleListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   var _selectedIndex = 0;
@@ -93,6 +102,16 @@ class _JaxAppState extends State<JaxApp> {
       saveService: widget.saveService,
       now: widget.now,
     );
+    if (widget.planningRepository != null &&
+        widget.worldNodeRepository != null) {
+      _planningController = PlanningController(
+        planningRepository: widget.planningRepository!,
+        worldNodeRepository: widget.worldNodeRepository!,
+        eventRepository: widget.repository,
+        newId: widget.newId,
+        now: widget.now,
+      );
+    }
     if (Platform.isWindows) {
       _lifecycleListener = AppLifecycleListener(
         onExitRequested: _handleExitRequest,
@@ -180,6 +199,7 @@ class _JaxAppState extends State<JaxApp> {
   void dispose() {
     _lifecycleListener?.dispose();
     _controller.dispose();
+    _planningController?.dispose();
     super.dispose();
   }
 
@@ -199,6 +219,9 @@ class _JaxAppState extends State<JaxApp> {
         controller: _controller,
         worldCategoryCollapseStore: widget.worldCategoryCollapseStore,
       ),
+      _planningController == null
+          ? const Center(child: Text('规划数据库不可用'))
+          : PlanningPage(controller: _planningController!),
       RoutinePage(
         controller: _controller,
         collapseStore: widget.routineCategoryCollapseStore,
@@ -297,6 +320,11 @@ class _JaxAppState extends State<JaxApp> {
                             label: Text('世界'),
                           ),
                           NavigationRailDestination(
+                            icon: Icon(Icons.route_outlined),
+                            selectedIcon: Icon(Icons.route),
+                            label: Text('规划'),
+                          ),
+                          NavigationRailDestination(
                             icon: Icon(Icons.repeat),
                             selectedIcon: Icon(Icons.repeat_on),
                             label: Text('日常'),
@@ -334,6 +362,11 @@ class _JaxAppState extends State<JaxApp> {
                         icon: Icon(Icons.account_tree_outlined),
                         selectedIcon: Icon(Icons.account_tree),
                         label: '世界',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.route_outlined),
+                        selectedIcon: Icon(Icons.route),
+                        label: '规划',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.repeat),
