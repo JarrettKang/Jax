@@ -51,6 +51,10 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
   @override
   Future<void> updateWorldNode(WorldNode node) async {
     await _database.database.transaction((transaction) async {
+      if (node.status == WorldNodeStatus.completed &&
+          await _hasCurrentPlan(transaction, node.id)) {
+        throw StateError('End the current Plan before completing WorldNode');
+      }
       await _validatePlacement(
         transaction,
         node.id,
@@ -67,6 +71,20 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
         throw StateError('WorldNode not found: ${node.id}');
       }
     });
+  }
+
+  Future<bool> _hasCurrentPlan(DatabaseExecutor db, String worldNodeId) async {
+    final tables = await db.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'plans'",
+    );
+    if (tables.isEmpty) return false;
+    return (await db.query(
+      'plans',
+      columns: ['id'],
+      where: "world_node_id = ? AND status IN ('focused','waiting')",
+      whereArgs: [worldNodeId],
+      limit: 1,
+    )).isNotEmpty;
   }
 
   @override

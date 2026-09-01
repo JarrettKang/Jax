@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 14;
+  static const schemaVersion = 15;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -60,6 +60,7 @@ class AppDatabase {
     await _createWorldCategoryCollapsePreferences(database);
     await _createSyncMetadata(database);
     await WorldNodeShadowMigration.createTables(database);
+    await _createPlanningTables(database);
     await _createSyncTriggers(database);
   }
 
@@ -111,6 +112,39 @@ class AppDatabase {
       await WorldNodeShadowMigration.backfill(database);
       await _createSyncTriggers(database);
     }
+    if (oldVersion < 15) {
+      await _createPlanningTables(database);
+      await _createSyncTriggers(database);
+    }
+  }
+
+  static Future<void> _createPlanningTables(Database database) async {
+    await database.execute('''CREATE TABLE IF NOT EXISTS plans (
+      id TEXT PRIMARY KEY,
+      world_node_id TEXT NOT NULL REFERENCES world_nodes(id) ON DELETE RESTRICT,
+      title TEXT,
+      status TEXT NOT NULL CHECK(status IN ('focused','waiting','ended')),
+      round_number INTEGER NOT NULL CHECK(round_number > 0),
+      ended_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL,
+      UNIQUE(world_node_id, round_number),
+      CHECK((status = 'ended' AND ended_at_utc IS NOT NULL) OR
+            (status != 'ended' AND ended_at_utc IS NULL))
+    )''');
+    await database.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
+      plans_one_current_per_world_node
+      ON plans(world_node_id) WHERE status IN ('focused','waiting')''');
+    await database.execute('''CREATE TABLE IF NOT EXISTS plan_items (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+      title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+      note TEXT,
+      status TEXT NOT NULL CHECK(status IN ('draft','next','dispatched','done','dropped')),
+      sort_order INTEGER NOT NULL,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL
+    )''');
   }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
@@ -314,6 +348,8 @@ class AppDatabase {
       'routine_run_segments': 'routineRunSegment',
       'world_nodes': 'worldNode',
       'legacy_event_world_node_links': 'legacyEventWorldNodeLink',
+      'plans': 'plan',
+      'plan_items': 'planItem',
     };
     for (final entry in entities.entries) {
       if (!await _tableExists(database, entry.key)) continue;
@@ -371,6 +407,8 @@ class AppDatabase {
       'event_day_plans',
       'world_nodes',
       'legacy_event_world_node_links',
+      'plans',
+      'plan_items',
     ];
     for (final table in timestampTables) {
       final columns = await database.rawQuery('PRAGMA table_info($table)');
