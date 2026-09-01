@@ -256,3 +256,33 @@
 - readiness/validator 新增 owner/status/endedAt/round/current-plan/completed-node/item title/item order/list scope/dangling relation 检查；P2 中出现 dispatched/done 是非阻塞诊断，保留 P3 forward compatibility。
 - P3：focused Plan 收集 next PlanItem 形成 Today recommendation；用户接受后创建 Event 并设 dispatched，Event completed 驱动 done，restore 驱动回 dispatched。P4：Review Note 与 World second-layer visualization。
 - 详细契约见 `docs/planning_phase_p2.md`。
+
+## 21. Planning Phase P2.5：Flat Event / WorldNode cutover / Data Reset
+
+- schema v15→v16 重建 `events` 为 flat execution table，移除 parent/sibling order，
+  新增 nullable unique FK `source_plan_item_id`。planned Event 不保存 direct
+  Category；standalone Event 允许 nullable direct World Category。
+- Core、Repository、SQLite、Today/Home/Record context、World UI 与当前 Sync
+  contract 全面移除 Event hierarchy。旧 protocol 1–3 的 parent/list/link 仅在
+  baseline 读取兼容转换中存在，转换结果在 protocol 4 中立即扁平化。
+- World 正式切换为 Category + WorldNode tree；Planning picker 使用同一认知结构，
+  支持 Category/branch session collapse、真实 hierarchy/order 与 disabled reason。
+  WorldNode More 增加创建本轮、查看 current、创建下一轮与历史导航。
+- Today 增加 `+ 临时事项`，原子创建 pending standalone Event 并加入 current
+  JaxDay。P2.5 不实现 recommendation/dispatch/done linkage。
+- 未执行 Plan 可物理删除 Plan/PlanItems 并产生 tombstone；存在 dispatched/done
+  或 linked Event 时 Repository transaction 拒绝。Sync 保持 delete/modify conflict。
+- Sync protocol 3→4，snapshot 与 fingerprint 增加 dataset generation。Compare
+  拒绝不同 generation；readiness/validator 要求 executed PlanItem 存在唯一 linked
+  Event；current apply 拒绝 legacy hierarchy mutation。
+- 显式 Development Data Reset 清空 World/Planning/Event/Today/Record/Routine 业务
+  表、tombstone 与 entity-bound collapse preference，保留外部 SyncStorageRoot、
+  Appearance/Accent 与其它 device-local settings。双端必须先独立备份并验证，
+  然后使用同一 generation 分别 reset，绝不通过普通 Sync 传播清空。
+- Reset 后两端 business snapshot 必须等价、FK/integrity/readiness 通过，随后从
+  clean protocol 4 snapshot 建立新的 Last Successful Sync Baseline。旧 baseline
+  仅备份留存，不与新 generation compare/apply。
+- 自动化覆盖 flat schema/source uniqueness/dynamic Category、standalone lifecycle、
+  Plan delete/tombstone、WorldNode Planning/picker、full reset、generation stale
+  protection、protocol 4 mutation apply/rollback 与全量历史行为。
+- 详细契约见 `docs/planning_phase_p2_5.md`。

@@ -19,3 +19,18 @@ Jax 遵循 `UI → Core ← Data`。Core 不依赖 Flutter、SQLite 或具体平
 应用通过 `AppLifecycleListener.onExitRequested` 处理 Windows 可取消退出请求。`PrepareForShutdown` 查找唯一的 running 事件，复用标准 `PauseEvent` 结束开放执行片段，然后调用 `SaveService.flush()`。操作成功才允许退出；失败则取消退出并提示重试。并发关闭回调共享同一个进行中的操作。
 
 强制结束进程、系统崩溃和断电不属于 v0.1 的精确关闭保证。该退出监听只在 Windows 注册；Android 后台、锁屏、返回键和进程回收不映射为自动暂停，具体策略留待 Android v0.1 功能适配阶段确认。
+
+## Planning P2.5 边界
+
+当前长期结构由 `WorldNode` tree 承担，规划由 `Plan/PlanItem` 承担，`Event`
+只承担扁平执行。World UI 与 Planning picker 都读取 WorldNode；Today/Home/Record
+读取 Event 及 RunSegment，不再解释 Event parent/child。
+
+Planned Event 只保存唯一 `sourcePlanItemId`，effective Category 在 Repository
+查询时沿 Planning/WorldNode 关系动态推导；Standalone Event 保存 nullable direct
+Category。Core Repository API 已移除 Event hierarchy、reparent、sibling reorder、
+descendant switch 和 hierarchical completion。
+
+Sync protocol 4 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
+读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
+拒绝 legacy Event hierarchy mutation。

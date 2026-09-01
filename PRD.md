@@ -412,3 +412,34 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - WorldNode 存在 current Plan 时不得 completed；需先结束当前 Plan。Plan ended 不会反向完成 WorldNode。
 - Plan/PlanItem 与 tombstone 进入 Sync protocol 3，PlanItem order 使用 `planItems:<planId>` full-list conflict。旧 protocol 2 baseline 读取时升级为 protocol 3，不发明 Plan 数据。
 - P2 不创建 Event/EventDayPlan/RunSegment，不影响 Home/Today/Record，不从 legacy Event 推导 Plan，不正式切换 World UI。P3 再实现 focused Plan 的 next item 推荐、用户接受后派发 Event 以及 Event 完成联动。
+
+## 17. Planning 重构 Phase P2.5：Flat Event 与正式 WorldNode
+
+本节取代此前所有把 Event 定义为长期 tree、parent/child、breadcrumb、sibling
+hierarchy order、descendant switch 或 hierarchical completion 的产品规则。
+
+- `WorldNode` 是长期关键节点且继续保留任意深度 tree；`Plan` 是一轮规划；
+  `PlanItem` 是平级规划步骤；`Event` 只是一项有限、具体、可计时的 flat
+  execution object。
+- Event 有 planned 与 standalone 两种来源。planned Event 通过 nullable unique
+  `sourcePlanItemId` 精确关联一个 PlanItem；standalone Event 的该字段为 null，
+  不创建隐藏 Plan/PlanItem/WorldNode。
+- planned Event 的 Category 动态沿 PlanItem→Plan→WorldNode root 推导且不重复存储；
+  standalone Event 可直接选择 nullable World Category。
+- Event 继续支持 pending/running/paused/waiting/completed、Today 独立顺序、Home、
+  RunSegment、Record、restore 与全局 one-running。完成 Event 不再检查 child，
+  因为 Event child 已退出产品模型。
+- Today 提供“+ 临时事项”，只要求名称与可选 Category，并直接创建 pending
+  standalone Event 加入 current JaxDay。
+- 从未产生 dispatched/done/linked Event 的 Plan 可物理删除并产生正常 tombstone；
+  一旦产生执行历史只能结束该轮，不能把 delete 偷换成 ended。
+- World 正式管理 Category 与 WorldNode tree。WorldNode More 按状态提供“添加计划”、
+  “查看当前计划”、“添加新一轮计划”和“查看历史计划”；completed 节点必须先恢复，
+  不能因创建计划自动恢复。
+- Planning picker 按 Category（含虚拟未分类）分区，各分区及 WorldNode branch 可
+  折叠，并保留 hierarchy/sibling order。completed 与已有 current Plan 的节点可见
+  但禁用并解释原因。
+- Schema v16 与 Sync protocol 4 引入 dataset generation。Development Data Reset
+  后旧 baseline/snapshot/resolved plan 因 generation/fingerprint 不匹配而拒绝，
+  防止旧数据复活。
+- P2.5 不实现 next 推荐、dispatch、Event 完成联动 PlanItem、Review/Replan 或 AI。
