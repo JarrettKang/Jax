@@ -89,7 +89,7 @@ void main() {
       expect(
         (await app.database.rawQuery('PRAGMA user_version'))
             .single['user_version'],
-        15,
+        AppDatabase.schemaVersion,
       );
       await app.close();
       await directory.delete(recursive: true);

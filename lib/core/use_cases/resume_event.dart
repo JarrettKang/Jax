@@ -2,7 +2,7 @@ import '../entities/event_status.dart';
 import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
-import '../services/descendant_switch_service.dart';
+import '../services/running_event_switch_service.dart';
 import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
@@ -23,7 +23,7 @@ class ResumeEvent {
       throw const DomainFailure('只有已暂停或等待中事件可以恢复');
     }
     final timestamp = now().toUtc();
-    if (await DescendantSwitchService(repository)
+    if (await RunningEventSwitchService(repository)
             .switchIfNeeded(current, timestamp, newId) !=
         null) {
       return;

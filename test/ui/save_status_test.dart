@@ -141,9 +141,12 @@ void main() {
 
 Future<void> _createEvent(WidgetTester tester, String name) async {
   await openEventsPage(tester);
-  await tester.tap(find.text('新建事件'));
+  await tester.tap(find.byKey(const ValueKey('add-standalone-event')));
   await tester.pumpAndSettle();
-  await tester.enterText(find.byType(TextField), name);
-  await tester.tap(find.widgetWithText(FilledButton, '创建'));
+  await tester.enterText(
+    find.byKey(const ValueKey('standalone-event-name')),
+    name,
+  );
+  await tester.tap(find.byKey(const ValueKey('save-standalone-event')));
   await tester.pumpAndSettle();
 }

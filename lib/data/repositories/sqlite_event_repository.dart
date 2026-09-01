@@ -19,13 +19,7 @@ class SqliteEventRepository
 
   @override
   Future<void> insertEvent(JaxEvent event) async {
-    await _appDatabase.database.transaction((transaction) async {
-      final row = _toRow(event);
-      row['sort_order'] =
-          event.sortOrder ??
-          await _nextSortOrder(transaction, event.parentEventId);
-      await transaction.insert('events', row);
-    });
+    await _appDatabase.database.insert('events', _toRow(event));
   }
 
   @override
@@ -225,192 +219,56 @@ class SqliteEventRepository
   }
 
   @override
-  Future<JaxEvent?> getParent(String eventId) async {
+  Future<String?> getEffectiveCategoryId(String eventId) async {
+    final eventRows = await _appDatabase.database.query(
+      'events',
+      columns: ['source_plan_item_id', 'category_id'],
+      where: 'id = ?',
+      whereArgs: [eventId],
+      limit: 1,
+    );
+    if (eventRows.isEmpty) throw StateError('Event not found: $eventId');
+    if (eventRows.single['source_plan_item_id'] == null) {
+      return eventRows.single['category_id'] as String?;
+    }
     final rows = await _appDatabase.database.rawQuery(
-      '''SELECT parent.* FROM events child
-         JOIN events parent ON parent.id = child.parent_event_id
-         WHERE child.id = ? LIMIT 1''',
-      [eventId],
+      '''WITH RECURSIVE lineage(id, parent_world_node_id, category_id) AS (
+           SELECT world.id, world.parent_world_node_id, world.category_id
+           FROM events event
+           JOIN plan_items item ON item.id = event.source_plan_item_id
+           JOIN plans plan ON plan.id = item.plan_id
+           JOIN world_nodes world ON world.id = plan.world_node_id
+           WHERE event.id = ?
+           UNION ALL
+           SELECT parent.id, parent.parent_world_node_id, parent.category_id
+           FROM world_nodes parent
+           JOIN lineage child ON parent.id = child.parent_world_node_id
+         )
+         SELECT CASE
+           WHEN event.source_plan_item_id IS NULL THEN event.category_id
+           ELSE (SELECT category_id FROM lineage
+                 WHERE parent_world_node_id IS NULL LIMIT 1)
+         END AS category_id
+         FROM events event WHERE event.id = ? LIMIT 1''',
+      [eventId, eventId],
     );
-    return rows.isEmpty ? null : _fromRow(rows.single);
+    return rows.single['category_id'] as String?;
   }
 
   @override
-  Future<List<JaxEvent>> getDirectChildren(String parentEventId) async {
-    final rows = await _appDatabase.database.query(
-      'events',
-      where: 'parent_event_id = ?',
-      whereArgs: [parentEventId],
-      orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
-    );
-    return rows.map(_fromRow).toList(growable: false);
-  }
-
-  @override
-  Future<List<JaxEvent>> getOrderedSiblings(String eventId) async {
-    final event = await getEvent(eventId);
-    if (event == null) throw StateError('Event not found: $eventId');
-    return _querySiblings(event.parentEventId);
-  }
-
-  @override
-  Future<List<JaxEvent>> getOrderedTopLevelEvents() => _querySiblings(null);
-
-  Future<List<JaxEvent>> _querySiblings(String? parentEventId) async {
-    final rows = await _appDatabase.database.query(
-      'events',
-      where: parentEventId == null
-          ? 'parent_event_id IS NULL'
-          : 'parent_event_id = ?',
-      whereArgs: parentEventId == null ? null : [parentEventId],
-      orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
-    );
-    return rows.map(_fromRow).toList(growable: false);
-  }
-
-  Future<int> _nextSortOrder(dynamic executor, String? parentEventId) async {
-    final rows = await executor.rawQuery(
-      parentEventId == null
-          ? 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM events WHERE parent_event_id IS NULL'
-          : 'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM events WHERE parent_event_id = ?',
-      parentEventId == null ? null : [parentEventId],
-    );
-    return rows.single['next_order']! as int;
-  }
-
-  @override
-  Future<void> reorderSibling(String eventId, int targetIndex) async {
-    await _appDatabase.database.transaction((transaction) async {
-      final eventRows = await transaction.query(
-        'events',
-        columns: ['parent_event_id'],
-        where: 'id = ?',
-        whereArgs: [eventId],
-        limit: 1,
-      );
-      if (eventRows.isEmpty) throw StateError('Event not found: $eventId');
-      final parent = eventRows.single['parent_event_id'] as String?;
-      final siblings = await transaction.query(
-        'events',
-        columns: ['id'],
-        where: parent == null
-            ? 'parent_event_id IS NULL'
-            : 'parent_event_id = ?',
-        whereArgs: parent == null ? null : [parent],
-        orderBy: 'sort_order ASC, created_at_utc ASC, id ASC',
-      );
-      if (targetIndex < 0 || targetIndex >= siblings.length) {
-        throw StateError('Invalid target index');
-      }
-      final ids = siblings.map((row) => row['id']! as String).toList();
-      final current = ids.indexOf(eventId);
-      final moved = ids.removeAt(current);
-      ids.insert(targetIndex, moved);
-      for (var index = 0; index < ids.length; index++) {
-        final count = await transaction.update(
-          'events',
-          {'sort_order': index},
-          where: 'id = ?',
-          whereArgs: [ids[index]],
-        );
-        if (count != 1) throw StateError('Event not found: ${ids[index]}');
-      }
-    });
-  }
-
-  @override
-  Future<void> updateParent(
+  Future<void> setStandaloneCategory(
     String eventId,
-    String? parentEventId,
-    DateTime updatedAt,
+    String? categoryId,
   ) async {
-    await _appDatabase.database.transaction((transaction) async {
-      final childRows = await transaction.query(
-        'events',
-        columns: ['status', 'category_id'],
-        where: 'id = ?',
-        whereArgs: [eventId],
-        limit: 1,
-      );
-      if (childRows.isEmpty) throw StateError('Event not found: $eventId');
-      if (parentEventId != null) {
-        final parentRows = await transaction.query(
-          'events',
-          columns: ['status'],
-          where: 'id = ?',
-          whereArgs: [parentEventId],
-          limit: 1,
-        );
-        if (parentRows.isEmpty) {
-          throw StateError('Parent event not found: $parentEventId');
-        }
-        if (childRows.single['status'] != EventStatus.completed.name &&
-            parentRows.single['status'] == EventStatus.completed.name) {
-          throw StateError('Incomplete event cannot have completed parent');
-        }
-        final cycle = await transaction.rawQuery(
-          '''WITH RECURSIVE ancestors(id, parent_event_id) AS (
-               SELECT id, parent_event_id FROM events WHERE id = ?
-               UNION ALL
-               SELECT event.id, event.parent_event_id FROM events event
-               JOIN ancestors ON event.id = ancestors.parent_event_id
-             ) SELECT 1 FROM ancestors WHERE id = ? LIMIT 1''',
-          [parentEventId, eventId],
-        );
-        if (cycle.isNotEmpty) throw StateError('Hierarchy cycle detected');
-        final childRootCategory = await _effectiveCategoryId(
-          transaction,
-          eventId,
-        );
-        final parentRootCategory = await _effectiveCategoryId(
-          transaction,
-          parentEventId,
-        );
-        if (childRootCategory != parentRootCategory) {
-          throw StateError('Hierarchy cannot cross categories');
-        }
-      }
-      String? categoryId;
-      if (parentEventId == null) {
-        final root = await transaction.rawQuery(
-          '''WITH RECURSIVE ancestors(id, parent_event_id, category_id) AS (
-          SELECT id, parent_event_id, category_id FROM events WHERE id = ?
-          UNION ALL
-          SELECT e.id, e.parent_event_id, e.category_id FROM events e
-          JOIN ancestors a ON e.id = a.parent_event_id
-        ) SELECT category_id FROM ancestors WHERE parent_event_id IS NULL LIMIT 1''',
-          [eventId],
-        );
-        categoryId = root.isEmpty
-            ? null
-            : root.single['category_id'] as String?;
-      }
-      final count = await transaction.update(
-        'events',
-        {
-          'parent_event_id': parentEventId,
-          'sort_order': await _nextSortOrder(transaction, parentEventId),
-          'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
-          'category_id': categoryId,
-        },
-        where: 'id = ?',
-        whereArgs: [eventId],
-      );
-      if (count != 1) throw StateError('Event not found: $eventId');
-    });
-  }
-
-  Future<String?> _effectiveCategoryId(dynamic executor, String eventId) async {
-    final root = await executor.rawQuery(
-      '''WITH RECURSIVE ancestors(id, parent_event_id, category_id) AS (
-        SELECT id, parent_event_id, category_id FROM events WHERE id = ?
-        UNION ALL
-        SELECT e.id, e.parent_event_id, e.category_id FROM events e
-        JOIN ancestors a ON e.id = a.parent_event_id
-      ) SELECT category_id FROM ancestors WHERE parent_event_id IS NULL LIMIT 1''',
-      [eventId],
+    final count = await _appDatabase.database.update(
+      'events',
+      {'category_id': categoryId},
+      where: 'id = ? AND source_plan_item_id IS NULL',
+      whereArgs: [eventId],
     );
-    return root.isEmpty ? null : root.single['category_id'] as String?;
+    if (count != 1) {
+      throw StateError('Standalone Event not found: $eventId');
+    }
   }
 
   @override
@@ -419,7 +277,6 @@ class SqliteEventRepository
     required RunSegment closedSegment,
     required JaxEvent runningTarget,
     required RunSegment newSegment,
-    required List<JaxEvent> pausedAncestors,
   }) async {
     await _appDatabase.database.transaction((transaction) async {
       final paused = await transaction.update(
@@ -436,15 +293,6 @@ class SqliteEventRepository
         whereArgs: [closedSegment.id],
       );
       if (closed != 1) throw StateError('Open run segment not found');
-      for (final ancestor in pausedAncestors) {
-        final updated = await transaction.update(
-          'events',
-          _toRow(ancestor),
-          where: 'id = ?',
-          whereArgs: [ancestor.id],
-        );
-        if (updated != 1) throw StateError('Ancestor event not found');
-      }
       final started = await transaction.update(
         'events',
         _toRow(runningTarget),
@@ -489,8 +337,7 @@ class SqliteEventRepository
     'id': event.id,
     'name': event.name,
     'status': event.status.name,
-    'parent_event_id': event.parentEventId,
-    'sort_order': event.sortOrder,
+    'source_plan_item_id': event.sourcePlanItemId,
     'category_id': event.categoryId,
     'first_started_at_utc': event.firstStartedAt?.millisecondsSinceEpoch,
     'completed_at_utc': event.completedAt?.millisecondsSinceEpoch,
@@ -510,9 +357,8 @@ class SqliteEventRepository
       id: row['id']! as String,
       name: row['name']! as String,
       status: EventStatus.fromStorage(row['status']! as String),
-      parentEventId: row['parent_event_id'] as String?,
+      sourcePlanItemId: row['source_plan_item_id'] as String?,
       categoryId: row['category_id'] as String?,
-      sortOrder: row['sort_order'] as int?,
       firstStartedAt: optional('first_started_at_utc'),
       completedAt: optional('completed_at_utc'),
       createdAt: DateTime.fromMillisecondsSinceEpoch(
@@ -582,42 +428,6 @@ class SqliteEventRepository
           whereArgs: [ids[i]],
         );
       }
-    });
-  }
-
-  @override
-  Future<void> setRootCategory(String eventId, String? categoryId) async {
-    await _appDatabase.database.transaction((transaction) async {
-      final event = await transaction.query(
-        'events',
-        columns: ['parent_event_id'],
-        where: 'id = ?',
-        whereArgs: [eventId],
-        limit: 1,
-      );
-      if (event.isEmpty) {
-        throw StateError('Event not found: $eventId');
-      }
-      if (event.single['parent_event_id'] != null) {
-        throw StateError('Only root events can have a category');
-      }
-      if (categoryId != null) {
-        final category = await transaction.query(
-          'categories',
-          where: 'id = ?',
-          whereArgs: [categoryId],
-          limit: 1,
-        );
-        if (category.isEmpty) {
-          throw StateError('Category not found: $categoryId');
-        }
-      }
-      await transaction.update(
-        'events',
-        {'category_id': categoryId},
-        where: 'id = ?',
-        whereArgs: [eventId],
-      );
     });
   }
 

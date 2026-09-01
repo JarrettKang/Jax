@@ -59,11 +59,10 @@ void main() {
     },
   );
   final base = DateTime(2026, 8, 27);
-  JaxEvent event(String id, {String? parent, String? category}) => JaxEvent(
+  JaxEvent event(String id, {String? category}) => JaxEvent(
     id: id,
     name: id,
     status: EventStatus.paused,
-    parentEventId: parent,
     categoryId: category,
     createdAt: base,
     updatedAt: base,
@@ -81,7 +80,7 @@ void main() {
     'splits segments at the local 23:00 boundary and includes open time once',
     () async {
       final repo =
-          MemoryRepository([event('root'), event('child', parent: 'root')])
+          MemoryRepository([event('root'), event('child')])
             ..segments.add(
               segment(
                 's',
@@ -108,8 +107,8 @@ void main() {
       final repo =
           MemoryRepository([
               event('jax', category: 'dev'),
-              event('a', parent: 'jax'),
-              event('b', parent: 'jax'),
+              event('a', category: 'dev'),
+              event('b', category: 'dev'),
               event('research', category: 'science'),
               event('uncategorized'),
             ])

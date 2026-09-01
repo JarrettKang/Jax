@@ -8,7 +8,7 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('starts pending event and hides edit/delete actions', (
+  testWidgets('starts a pending flat Event from Today', (
     tester,
   ) async {
     final time = DateTime.utc(2026);
@@ -30,7 +30,6 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('start-one')));
     await tester.pumpAndSettle();
     expect(find.textContaining('正在执行'), findsOneWidget);
-    expect(find.byKey(const ValueKey('edit-one')), findsNothing);
-    expect(find.byKey(const ValueKey('delete-one')), findsNothing);
+    expect(repository.events.single.status, EventStatus.running);
   });
 }

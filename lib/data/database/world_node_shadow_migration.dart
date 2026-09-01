@@ -6,6 +6,11 @@ class WorldNodeShadowMigration {
   const WorldNodeShadowMigration._();
 
   static Future<void> createTables(DatabaseExecutor db) async {
+    await createWorldNodeTable(db);
+    await createLegacyLinkTable(db);
+  }
+
+  static Future<void> createWorldNodeTable(DatabaseExecutor db) async {
     await db.execute('''CREATE TABLE IF NOT EXISTS world_nodes (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
@@ -16,6 +21,9 @@ class WorldNodeShadowMigration {
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL
     )''');
+  }
+
+  static Future<void> createLegacyLinkTable(DatabaseExecutor db) async {
     await db.execute(
       '''CREATE TABLE IF NOT EXISTS legacy_event_world_node_links (
       id TEXT PRIMARY KEY,

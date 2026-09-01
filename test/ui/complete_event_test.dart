@@ -9,7 +9,7 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('completed Event remains in World with completed state', (
+  testWidgets('completed flat Event remains in Today with completed state', (
     tester,
   ) async {
     final start = DateTime.utc(2026);

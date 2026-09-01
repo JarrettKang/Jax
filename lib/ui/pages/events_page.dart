@@ -39,7 +39,16 @@ class EventsPage extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 22),
-              _SectionHeader(title: '今日事项', count: events.length),
+              _SectionHeader(
+                title: '今日事项',
+                count: events.length,
+                action: TextButton.icon(
+                  key: const ValueKey('add-standalone-event'),
+                  onPressed: () => _createStandalone(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('临时事项'),
+                ),
+              ),
               if (events.isEmpty)
                 _EventEmptyState(onOpenWorld: onOpenWorld)
               else
@@ -71,12 +80,75 @@ class EventsPage extends StatelessWidget {
       );
     },
   );
+
+  Future<void> _createStandalone(BuildContext context) async {
+    var name = '';
+    String? categoryId;
+    final result = await showDialog<(String, String?)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('添加临时事项'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const ValueKey('standalone-event-name'),
+                autofocus: true,
+                onChanged: (value) => name = value,
+                decoration: const InputDecoration(labelText: '名称'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: const ValueKey('standalone-event-category'),
+                initialValue: categoryId,
+                decoration: const InputDecoration(labelText: '分类（可选）'),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('未分类'),
+                  ),
+                  for (final category in controller.categories)
+                    DropdownMenuItem<String?>(
+                      value: category.id,
+                      child: Text(category.name),
+                    ),
+                ],
+                onChanged: (value) => setState(() => categoryId = value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const ValueKey('save-standalone-event'),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, (name, categoryId)),
+              child: const Text('添加到今日'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    final error = await controller.createStandaloneForToday(
+      result.$1,
+      categoryId: result.$2,
+    );
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.count});
+  const _SectionHeader({required this.title, required this.count, this.action});
   final String title;
   final int count;
+  final Widget? action;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
@@ -85,6 +157,7 @@ class _SectionHeader extends StatelessWidget {
         Text(title, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(width: 8),
         Text('$count', style: Theme.of(context).textTheme.labelSmall),
+        if (action != null) ...[const Spacer(), action!],
       ],
     ),
   );
@@ -159,16 +232,11 @@ class _EventRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final breadcrumb = controller.eventBreadcrumb(event);
     final category = _category();
-    final secondary = [
-      if (category != null) category.name,
-      if (breadcrumb.isNotEmpty) breadcrumb,
-    ].join(' · ');
     return _TodayExecutionRow(
       key: ValueKey('today-event-${event.id}'),
       name: event.name,
-      secondary: secondary.isEmpty ? '未分类' : secondary,
+      secondary: category?.name ?? '未分类',
       status: _status(event),
       statusKind: switch (event.status) {
         EventStatus.pending => _TodayStatusKind.unstarted,
@@ -207,16 +275,8 @@ class _EventRow extends StatelessWidget {
   }
 
   Category? _category() {
-    final byId = {for (final item in controller.worldEvents) item.id: item};
-    var root = event;
-    final seen = <String>{};
-    while (root.parentEventId != null && seen.add(root.id)) {
-      final parent = byId[root.parentEventId];
-      if (parent == null) break;
-      root = parent;
-    }
     return controller.categories
-        .where((c) => c.id == root.categoryId)
+        .where((c) => c.id == controller.effectiveCategoryIdFor(event.id))
         .firstOrNull;
   }
 

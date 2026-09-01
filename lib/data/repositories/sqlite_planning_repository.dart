@@ -118,6 +118,38 @@ class SqlitePlanningRepository implements PlanningRepository {
   }
 
   @override
+  Future<void> deletePlan(String id) => _app.database.transaction((tx) async {
+    final plan = await tx.query(
+      'plans',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (plan.isEmpty) throw const DomainFailure('计划不存在');
+    final executed = await tx.rawQuery(
+      '''SELECT 1 FROM plan_items
+         WHERE plan_id = ? AND status IN ('dispatched','done') LIMIT 1''',
+      [id],
+    );
+    if (executed.isNotEmpty) {
+      throw const DomainFailure('已有派发或完成记录的计划不能删除');
+    }
+    final linked = await tx.rawQuery(
+      '''SELECT 1 FROM events event JOIN plan_items item
+         ON item.id = event.source_plan_item_id
+         WHERE item.plan_id = ? LIMIT 1''',
+      [id],
+    );
+    if (linked.isNotEmpty) {
+      throw const DomainFailure('已有执行事项的计划不能删除');
+    }
+    await tx.delete('plan_items', where: 'plan_id = ?', whereArgs: [id]);
+    final deleted = await tx.delete('plans', where: 'id = ?', whereArgs: [id]);
+    if (deleted != 1) throw const DomainFailure('计划删除冲突');
+  });
+
+  @override
   Future<PlanItem> createPlanItem({
     required String id,
     required String planId,

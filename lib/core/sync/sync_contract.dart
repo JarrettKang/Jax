@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 3;
+const syncProtocolVersion = 4;
 
 enum SyncEntityKind {
   eventCategory,
@@ -137,12 +137,14 @@ class SyncSnapshot {
     required this.exportedAtUtc,
     required Iterable<SyncRecord> records,
     required Iterable<SyncList> lists,
+    this.datasetGeneration = 'legacy',
     this.protocolVersion = syncProtocolVersion,
     this.warnings = const [],
   }) : records = [...records]..sort((a, b) => a.key.compareTo(b.key)),
        lists = [...lists]..sort((a, b) => a.key.compareTo(b.key));
   final int protocolVersion;
   final int schemaVersion;
+  final String datasetGeneration;
   final DateTime exportedAtUtc;
   final List<SyncRecord> records;
   final List<SyncList> lists;
@@ -150,6 +152,7 @@ class SyncSnapshot {
   Map<String, Object?> toJson() => {
     'syncProtocolVersion': protocolVersion,
     'schemaVersion': schemaVersion,
+    'datasetGeneration': datasetGeneration,
     'exportedAtUtc': exportedAtUtc.millisecondsSinceEpoch,
     'records': records.map((record) => record.toJson()).toList(),
     'lists': lists.map((list) => list.toJson()).toList(),
@@ -162,6 +165,7 @@ class SyncSnapshot {
     final snapshot = SyncSnapshot(
       protocolVersion: json['syncProtocolVersion']! as int,
       schemaVersion: json['schemaVersion']! as int,
+      datasetGeneration: json['datasetGeneration'] as String? ?? 'legacy',
       exportedAtUtc: DateTime.fromMillisecondsSinceEpoch(
         json['exportedAtUtc']! as int,
         isUtc: true,
@@ -177,15 +181,19 @@ class SyncSnapshot {
     final withWorldNodes = snapshot.protocolVersion == 1
         ? _upgradeProtocol1Baseline(snapshot)
         : snapshot;
-    return withWorldNodes.protocolVersion == 2
+    final withPlanning = withWorldNodes.protocolVersion == 2
         ? _upgradeProtocol2Baseline(withWorldNodes)
         : withWorldNodes;
+    return withPlanning.protocolVersion == 3
+        ? _upgradeProtocol3Baseline(withPlanning)
+        : withPlanning;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
   );
   String get businessFingerprint => jsonEncode({
     'syncProtocolVersion': protocolVersion,
+    'datasetGeneration': datasetGeneration,
     // Raw integer order is storage, while [lists] is the canonical business
     // order. Created/updated metadata is comparison evidence, not user state.
     'records': records.map((record) => record.entityFingerprint).toList(),
@@ -316,8 +324,9 @@ SyncSnapshot _upgradeProtocol1Baseline(SyncSnapshot source) {
 }
 
 SyncSnapshot _upgradeProtocol2Baseline(SyncSnapshot source) => SyncSnapshot(
-  protocolVersion: syncProtocolVersion,
+  protocolVersion: 3,
   schemaVersion: source.schemaVersion,
+  datasetGeneration: source.datasetGeneration,
   exportedAtUtc: source.exportedAtUtc,
   records: source.records,
   lists: source.lists,
@@ -326,6 +335,58 @@ SyncSnapshot _upgradeProtocol2Baseline(SyncSnapshot source) => SyncSnapshot(
     'baseline-upgraded: sync protocol 2 normalized to protocol 3 Planning',
   ],
 );
+
+SyncSnapshot _upgradeProtocol3Baseline(SyncSnapshot source) {
+  final events = {
+    for (final record in source.records.where(
+      (record) => record.kind == SyncEntityKind.event && !record.isDeleted,
+    ))
+      record.metadata.id: record,
+  };
+  String? effectiveCategory(SyncRecord event) {
+    var current = event;
+    final seen = <String>{};
+    while (seen.add(current.metadata.id)) {
+      final parentId = current.payload['parentSyncId'] as String?;
+      if (parentId == null) return current.payload['categorySyncId'] as String?;
+      final parent = events[parentId];
+      if (parent == null) return event.payload['categorySyncId'] as String?;
+      current = parent;
+    }
+    return event.payload['categorySyncId'] as String?;
+  }
+
+  final records = <SyncRecord>[];
+  for (final record in source.records) {
+    if (record.kind == SyncEntityKind.legacyEventWorldNodeLink) continue;
+    if (record.kind != SyncEntityKind.event || record.isDeleted) {
+      records.add(record);
+      continue;
+    }
+    final payload = Map<String, Object?>.from(record.payload)
+      ..remove('parentSyncId')
+      ..remove('order')
+      ..['sourcePlanItemSyncId'] = null
+      ..['categorySyncId'] = effectiveCategory(record);
+    records.add(
+      SyncRecord(kind: record.kind, metadata: record.metadata, payload: payload),
+    );
+  }
+  return SyncSnapshot(
+    protocolVersion: syncProtocolVersion,
+    schemaVersion: source.schemaVersion,
+    datasetGeneration: 'legacy',
+    exportedAtUtc: source.exportedAtUtc,
+    records: records,
+    lists: source.lists
+        .where((list) => list.kind != SyncListKind.eventSiblings)
+        .toList(growable: false),
+    warnings: [
+      ...source.warnings,
+      'baseline-upgraded: sync protocol 3 normalized to protocol 4 flat Events',
+    ],
+  );
+}
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   final result = <String, Object?>{};

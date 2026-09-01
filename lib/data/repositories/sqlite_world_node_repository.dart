@@ -29,13 +29,6 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
   }
 
   @override
-  Future<List<LegacyEventWorldNodeLink>> getLegacyLinks() async =>
-      (await _database.database.query(
-        'legacy_event_world_node_links',
-        orderBy: 'legacy_event_id',
-      )).map(_linkFromRow).toList(growable: false);
-
-  @override
   Future<void> insertWorldNode(WorldNode node) async {
     await _database.database.transaction((transaction) async {
       await _validatePlacement(
@@ -217,14 +210,6 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
     createdAt: _date(row['created_at_utc']),
     updatedAt: _date(row['updated_at_utc']),
   );
-
-  LegacyEventWorldNodeLink _linkFromRow(Map<String, Object?> row) =>
-      LegacyEventWorldNodeLink(
-        legacyEventId: row['legacy_event_id']! as String,
-        worldNodeId: row['world_node_id']! as String,
-        createdAt: _date(row['created_at_utc']),
-        updatedAt: _date(row['updated_at_utc']),
-      );
 
   DateTime _date(Object? value) =>
       DateTime.fromMillisecondsSinceEpoch((value! as num).toInt(), isUtc: true);

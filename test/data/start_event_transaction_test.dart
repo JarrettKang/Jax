@@ -119,7 +119,6 @@ void main() {
       id: 'leaf',
       name: 'leaf',
       status: EventStatus.pending,
-      parentEventId: root.id,
       createdAt: start,
       updatedAt: start,
     );
@@ -156,7 +155,6 @@ void main() {
         startedAt: switchedAt,
         createdAt: switchedAt,
       ),
-      pausedAncestors: const [],
     );
 
     expect((await repository.getEvent(root.id))?.status, EventStatus.paused);

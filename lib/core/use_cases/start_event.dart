@@ -3,7 +3,7 @@ import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/event_repository.dart';
-import '../services/descendant_switch_service.dart';
+import '../services/running_event_switch_service.dart';
 import '../services/segment_lifecycle_log.dart';
 import 'create_event.dart';
 
@@ -29,7 +29,7 @@ class StartEvent {
       throw const DomainFailure('只有未开始事件可以开始');
     }
     final timestamp = now().toUtc();
-    final switched = await DescendantSwitchService(repository)
+    final switched = await RunningEventSwitchService(repository)
         .switchIfNeeded(current, timestamp, newId);
     if (switched != null) {
       return StartResult(switched.event, switched.segment);

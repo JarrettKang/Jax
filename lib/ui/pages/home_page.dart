@@ -160,10 +160,9 @@ class _HomePageState extends State<HomePage> {
 
   Widget _eventHero(JaxEvent event) {
     final category = _eventCategory(widget.controller, event);
-    final breadcrumb = widget.controller.eventBreadcrumb(event);
     return _RunningHero(
       name: event.name,
-      contextLabel: breadcrumb.isEmpty ? category?.name ?? '未分类' : breadcrumb,
+      contextLabel: category?.name ?? '未分类',
       elapsed: widget.controller.elapsedFor(event),
       colorKey: category?.colorKey,
       onPause: () => _act(() => widget.controller.pause(event.id)),
@@ -241,11 +240,10 @@ class _HomePageState extends State<HomePage> {
         continue;
       }
       final category = _eventCategory(widget.controller, event);
-      final path = widget.controller.eventBreadcrumb(event);
       result.add(
         _NextItem.event(
           event,
-          category?.name ?? (path.isEmpty ? '未分类' : path),
+          category?.name ?? '未分类',
           category?.colorKey,
         ),
       );
@@ -788,16 +786,8 @@ class _NextItem {
 enum _HeroAction { complete, completeCorrected, wait }
 
 Category? _eventCategory(EventController controller, JaxEvent event) {
-  final byId = {for (final e in controller.worldEvents) e.id: e};
-  var root = event;
-  final seen = <String>{};
-  while (root.parentEventId != null && seen.add(root.id)) {
-    final parent = byId[root.parentEventId];
-    if (parent == null) break;
-    root = parent;
-  }
   return controller.categories
-      .where((c) => c.id == root.categoryId)
+      .where((c) => c.id == controller.effectiveCategoryIdFor(event.id))
       .firstOrNull;
 }
 

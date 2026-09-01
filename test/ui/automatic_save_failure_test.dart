@@ -26,14 +26,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     await openEventsPage(tester);
-    await tester.tap(find.text('新建事件'));
+    await tester.tap(find.byKey(const ValueKey('add-standalone-event')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '无法保存');
-    await tester.tap(find.text('创建'));
+    await tester.enterText(
+      find.byKey(const ValueKey('standalone-event-name')),
+      '无法保存',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-standalone-event')));
     await tester.pumpAndSettle();
 
     expect(find.text('保存失败，请重试'), findsOneWidget);
-    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(repository.events, isEmpty);
   });
 }

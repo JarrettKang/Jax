@@ -12,9 +12,6 @@ import '../../core/entities/run_segment.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/event_day_plan_repository.dart';
-import '../../core/services/event_hierarchy_service.dart';
-import '../../core/services/hierarchy_duration_service.dart';
-import '../../core/services/world_display_state_service.dart';
 import '../../core/services/time_summary_service.dart';
 import '../../core/entities/time_summary.dart';
 import '../../core/entities/daily_execution_segment.dart';
@@ -26,7 +23,6 @@ import '../../core/repositories/routine_repository.dart';
 import '../../core/services/routine_service.dart';
 import '../../core/services/routine_category_service.dart';
 import '../../core/services/category_service.dart';
-import '../../core/entities/world_display_state.dart';
 import '../../core/use_cases/complete_event.dart';
 import '../../core/use_cases/create_event.dart';
 import '../../core/use_cases/delete_event.dart';
@@ -36,8 +32,6 @@ import '../../core/use_cases/pause_event.dart';
 import '../../core/use_cases/resume_event.dart';
 import '../../core/use_cases/restore_event.dart';
 import '../../core/use_cases/start_event.dart';
-import '../../core/use_cases/update_event_parent.dart';
-import '../../core/use_cases/reorder_sibling.dart';
 import '../../core/use_cases/wait_event.dart';
 
 class EventController extends ChangeNotifier {
@@ -57,9 +51,6 @@ class EventController extends ChangeNotifier {
        _restore = RestoreEvent(repository: repository, now: now),
        _start = StartEvent(repository: repository, newId: newId, now: now),
        _wait = WaitEvent(repository: repository, now: now),
-       _hierarchy = EventHierarchyService(repository),
-       _durations = HierarchyDurationService(repository, now: now),
-       _worldDisplayStates = const WorldDisplayStateService(),
        _summaries = TimeSummaryService(repository, now),
        _executionSegments = ExecutionSegmentService(
          repository: repository,
@@ -90,9 +81,7 @@ class EventController extends ChangeNotifier {
          repository: repository,
          newId: newId,
          now: now,
-       ),
-       _updateParent = UpdateEventParent(repository: repository, now: now),
-       _reorder = ReorderSibling(repository);
+       );
   final EventRepository _repository;
   final Clock _now;
   final CompleteEvent _complete;
@@ -105,9 +94,6 @@ class EventController extends ChangeNotifier {
   final RestoreEvent _restore;
   final StartEvent _start;
   final WaitEvent _wait;
-  final EventHierarchyService _hierarchy;
-  final HierarchyDurationService _durations;
-  final WorldDisplayStateService _worldDisplayStates;
   final TimeSummaryService _summaries;
   final ExecutionSegmentService _executionSegments;
   final IdGenerator _newId;
@@ -116,38 +102,30 @@ class EventController extends ChangeNotifier {
   final RoutineService? _routineService;
   final RoutineCategoryService? _routineCategoryService;
   final CategoryService _categories;
-  final UpdateEventParent _updateParent;
-  final ReorderSibling _reorder;
   final Map<String, List<RunSegment>> _segments = {};
-  final Map<String, bool> _hasDirectChildren = {};
+  final Map<String, String?> _effectiveCategoryIds = {};
   List<JaxEvent> _events = const [];
   List<JaxEvent> _history = const [];
   List<JaxEvent> _historyRoots = const [];
   List<JaxEvent> _worldEvents = const [];
-  Map<String, WorldDisplayState> _worldStates = const {};
   List<Category> _categoryItems = const [];
   List<Routine> _routines = const [];
   List<RoutineCategory> _routineCategories = const [];
   final Map<String, RoutineExecution?> _todayExecutions = {};
   final Map<String, List<RoutineRunSegment>> _routineSegments = {};
   List<EventDayPlan> _todayPlans = const [];
-  JaxEvent? _runningParent;
-  List<JaxEvent> _runningSiblings = const [];
   HomeRunningContext? _homeRunningContext;
   List<HomeWaitingItem> _homeWaitingItems = const [];
   bool _loading = true;
   DateTime? _lastSavedAt;
   Timer? _ticker;
   Timer? _dayBoundaryTimer;
-  Future<void> _reorderTail = Future.value();
   Future<void> _routineReorderTail = Future.value();
   Future<void> _executionTail = Future.value();
   List<JaxEvent> get events => List.unmodifiable(_events);
   List<JaxEvent> get history => List.unmodifiable(_history);
   List<JaxEvent> get historyRoots => List.unmodifiable(_historyRoots);
   List<JaxEvent> get worldEvents => List.unmodifiable(_worldEvents);
-  WorldDisplayState worldDisplayStateFor(String eventId) =>
-      _worldStates[eventId] ?? WorldDisplayState.pending;
   List<Category> get categories => List.unmodifiable(_categoryItems);
   List<Routine> get routines => List.unmodifiable(_routines);
   List<RoutineCategory> get routineCategories =>
@@ -220,45 +198,11 @@ class EventController extends ChangeNotifier {
   DateTime? get lastSavedAt => _lastSavedAt;
   JaxEvent? get runningEvent =>
       _events.where((event) => event.status == EventStatus.running).firstOrNull;
-  JaxEvent? get runningParent => _runningParent;
-  List<JaxEvent> get runningSiblings => List.unmodifiable(_runningSiblings);
   HomeRunningContext? get homeRunningContext => _homeRunningContext;
   List<HomeWaitingItem> get homeWaitingItems =>
       List.unmodifiable(_homeWaitingItems);
-  int siblingIndexFor(String eventId) {
-    final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
-    if (event == null) return -1;
-    return _worldEvents
-        .where((item) => item.parentEventId == event.parentEventId)
-        .toList()
-        .indexWhere((item) => item.id == eventId);
-  }
-
-  int siblingCountFor(String eventId) {
-    final event = _worldEvents.where((item) => item.id == eventId).firstOrNull;
-    return event == null
-        ? 0
-        : _worldEvents
-              .where((item) => item.parentEventId == event.parentEventId)
-              .length;
-  }
-
-  bool hasDirectChildren(String eventId) =>
-      _hasDirectChildren[eventId] ?? false;
-
-  int hierarchyDepthFor(String eventId) {
-    final byId = {for (final event in _worldEvents) event.id: event};
-    var depth = 0;
-    var current = byId[eventId];
-    final visited = <String>{};
-    while (current?.parentEventId != null &&
-        visited.add(current!.id) &&
-        byId.containsKey(current.parentEventId)) {
-      depth++;
-      current = byId[current.parentEventId];
-    }
-    return depth;
-  }
+  String? effectiveCategoryIdFor(String eventId) =>
+      _effectiveCategoryIds[eventId];
 
   Future<void> load() async {
     _loading = true;
@@ -269,19 +213,16 @@ class EventController extends ChangeNotifier {
   }
 
   Future<void> _reload() async {
-    _events = _orderTree(await _repository.getIncompleteEvents());
+    _events = _sortEvents(await _repository.getIncompleteEvents());
     _history = await _repository.getCompletedEvents();
-    final roots = <JaxEvent>[];
-    for (final event in _history) {
-      final parent = await _repository.getParent(event.id);
-      if (parent == null || parent.status != EventStatus.completed) {
-        roots.add(event);
-      }
-    }
-    _historyRoots = _sortByOrder(roots);
-    _worldEvents = _orderTree([..._events, ..._history]);
-    _worldStates = _worldDisplayStates.derive(_worldEvents);
+    _historyRoots = _sortEvents(_history);
+    _worldEvents = _sortEvents([..._events, ..._history]);
     _categoryItems = await _repository.getCategories();
+    _effectiveCategoryIds.clear();
+    for (final event in _worldEvents) {
+      _effectiveCategoryIds[event.id] = await _repository
+          .getEffectiveCategoryId(event.id);
+    }
     final dayKey = currentJaxDay.key;
     final runningEventNow = _worldEvents
         .where((event) => event.status == EventStatus.running)
@@ -328,87 +269,38 @@ class EventController extends ChangeNotifier {
     }
     for (final event in [..._events, ..._history]) {
       _segments[event.id] = await _repository.getRunSegments(event.id);
-      _hasDirectChildren[event.id] = (await _repository.getDirectChildren(
-        event.id,
-      )).isNotEmpty;
     }
     final running = runningEvent;
-    _runningParent = running == null
-        ? null
-        : await _repository.getParent(running.id);
-    _runningSiblings = _runningParent == null || running == null
-        ? const []
-        : (await _repository.getDirectChildren(_runningParent!.id))
-              .where((event) => event.id != running.id)
-              .toList(growable: false);
     _homeRunningContext = running == null
         ? null
-        : await _buildHomeRunningContext(running, _runningParent);
-    final waitingItems = <HomeWaitingItem>[];
-    for (final event in _events.where(
-      (event) => event.status == EventStatus.waiting,
-    )) {
-      final ancestors = <JaxEvent>[];
-      var parent = await _repository.getParent(event.id);
-      final visited = <String>{event.id};
-      while (parent != null && visited.add(parent.id)) {
-        ancestors.add(parent);
-        parent = await _repository.getParent(parent.id);
-      }
-      waitingItems.add(
-        HomeWaitingItem(event: event, ancestors: ancestors.reversed.toList()),
-      );
-    }
-    _homeWaitingItems = waitingItems;
+        : HomeRunningContext(
+            subject: running,
+            ancestors: const [],
+            visibleSteps: [running],
+          );
+    _homeWaitingItems = [
+      for (final event in _events.where(
+        (event) => event.status == EventStatus.waiting,
+      ))
+        HomeWaitingItem(event: event, ancestors: const []),
+    ];
     _syncTicker();
     _scheduleDayBoundaryRefresh();
   }
 
-  Future<HomeRunningContext> _buildHomeRunningContext(
-    JaxEvent running,
-    JaxEvent? parent,
-  ) async {
-    final subject = parent ?? running;
-    final ancestors = <JaxEvent>[];
-    final visited = <String>{subject.id};
-    var ancestor = await _repository.getParent(subject.id);
-    while (ancestor != null && visited.add(ancestor.id)) {
-      ancestors.add(ancestor);
-      ancestor = await _repository.getParent(ancestor.id);
-    }
-    final orderedAncestors = ancestors.reversed.toList(growable: false);
-    final steps = parent == null
-        ? <JaxEvent>[running]
-        : await _repository.getDirectChildren(parent.id);
-    const windowSize = 7;
-    if (steps.length <= windowSize) {
-      return HomeRunningContext(
-        subject: subject,
-        ancestors: orderedAncestors,
-        visibleSteps: steps,
-      );
-    }
-    final runningIndex = steps.indexWhere((event) => event.id == running.id);
-    var start = runningIndex - 3;
-    if (start < 0) start = 0;
-    if (start > steps.length - windowSize) start = steps.length - windowSize;
-    final end = start + windowSize;
-    return HomeRunningContext(
-      subject: subject,
-      ancestors: orderedAncestors,
-      visibleSteps: steps.sublist(start, end),
-      omittedBefore: start > 0,
-      omittedAfter: end < steps.length,
-    );
-  }
-
   Future<String?> create(
     String name, {
-    String? parentEventId,
     String? categoryId,
-  }) => _change(
-    () => _create(name, parentEventId: parentEventId, categoryId: categoryId),
-  );
+  }) => _change(() => _create(name, categoryId: categoryId));
+
+  Future<String?> createStandaloneForToday(
+    String name, {
+    String? categoryId,
+  }) => _change(() async {
+    final event = await _create(name, categoryId: categoryId);
+    await _ensureToday(event.id);
+    return null;
+  });
   Future<String?> edit(String id, String name) =>
       _change(() => _edit(id, name));
   Future<String?> createCategory(String name, {int? colorKey}) =>
@@ -524,20 +416,6 @@ class EventController extends ChangeNotifier {
         createdAt: _now().toUtc(),
       ),
     );
-  }
-
-  String eventBreadcrumb(JaxEvent event) {
-    final byId = {for (final item in _worldEvents) item.id: item};
-    final names = <String>[];
-    var parentId = event.parentEventId;
-    final seen = <String>{event.id};
-    while (parentId != null && seen.add(parentId)) {
-      final parent = byId[parentId];
-      if (parent == null) break;
-      names.add(parent.name);
-      parentId = parent.parentEventId;
-    }
-    return names.reversed.join(' › ');
   }
 
   Future<String?> createRoutine(
@@ -678,22 +556,10 @@ class EventController extends ChangeNotifier {
   }
 
   String historicalEventContext(JaxEvent event) {
-    final byId = {for (final item in _worldEvents) item.id: item};
-    var root = event;
-    final seen = <String>{};
-    while (root.parentEventId != null && seen.add(root.id)) {
-      final parent = byId[root.parentEventId];
-      if (parent == null) break;
-      root = parent;
-    }
     final category = _categoryItems
-        .where((item) => item.id == root.categoryId)
+        .where((item) => item.id == _effectiveCategoryIds[event.id])
         .firstOrNull;
-    final breadcrumb = eventBreadcrumb(event);
-    return [
-      category?.name ?? '未分类',
-      if (breadcrumb.isNotEmpty) breadcrumb,
-    ].join(' · ');
+    return category?.name ?? '未分类';
   }
 
   String historicalRoutineContext(Routine routine) {
@@ -715,39 +581,11 @@ class EventController extends ChangeNotifier {
         Duration.zero,
         (a, s) => a + s.durationAt(_now()),
       );
-  Future<JaxEvent?> parentOf(String id) => _repository.getParent(id);
-  Future<List<JaxEvent>> childrenOf(String id) =>
-      _repository.getDirectChildren(id);
-  Future<List<JaxEvent>> parentCandidates(String id) =>
-      _hierarchy.parentCandidates(id);
-  Future<List<JaxEvent>> childCandidates(String id) =>
-      _hierarchy.childCandidates(id);
-  Future<String?> setParent(String id, String? parentId) =>
-      _change(() => _updateParent(id, parentId));
-  Future<String?> reorder(String id, int targetIndex) =>
-      _change(() => _reorder(id, targetIndex));
-  Future<String?> moveUp(String id) => _enqueueReorder(() async {
-    final siblings = await _repository.getOrderedSiblings(id);
-    final index = siblings.indexWhere((event) => event.id == id);
-    return index <= 0 ? null : reorder(id, index - 1);
-  });
-
-  Future<String?> moveDown(String id) => _enqueueReorder(() async {
-    final siblings = await _repository.getOrderedSiblings(id);
-    final index = siblings.indexWhere((event) => event.id == id);
-    return index < 0 || index >= siblings.length - 1
-        ? null
-        : reorder(id, index + 1);
-  });
-
-  Future<String?> _enqueueReorder(Future<String?> Function() action) {
-    final queued = _reorderTail.then((_) => action());
-    _reorderTail = queued.then<void>((_) {}, onError: (_, _) {});
-    return queued;
-  }
-
-  Future<Duration> directDuration(String id) => _durations.directDuration(id);
-  Future<Duration> totalDuration(String id) => _durations.totalDuration(id);
+  Future<Duration> directDuration(String id) async =>
+      (await _repository.getRunSegments(id)).fold<Duration>(
+        Duration.zero,
+        (total, segment) => total + segment.durationAt(_now()),
+      );
   Future<TimeSummary> dailySummary(DateTime date) => _summaries.day(date);
   Future<WeeklyTimeSummary> weeklySummary(DateTime date) =>
       _summaries.week(date);
@@ -820,31 +658,8 @@ class EventController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<JaxEvent> _orderTree(List<JaxEvent> source) {
-    final byParent = <String?, List<JaxEvent>>{};
-    final ids = source.map((event) => event.id).toSet();
-    for (final event in source) {
-      final parent = ids.contains(event.parentEventId)
-          ? event.parentEventId
-          : null;
-      byParent.putIfAbsent(parent, () => []).add(event);
-    }
-    final result = <JaxEvent>[];
-    void visit(String? parent) {
-      for (final event in _sortByOrder(byParent[parent] ?? const [])) {
-        result.add(event);
-        visit(event.id);
-      }
-    }
-
-    visit(null);
-    return result;
-  }
-
-  List<JaxEvent> _sortByOrder(Iterable<JaxEvent> source) => source.toList()
+  List<JaxEvent> _sortEvents(Iterable<JaxEvent> source) => source.toList()
     ..sort((a, b) {
-      final order = (a.sortOrder ?? 1 << 30).compareTo(b.sortOrder ?? 1 << 30);
-      if (order != 0) return order;
       final created = a.createdAt.compareTo(b.createdAt);
       return created != 0 ? created : a.id.compareTo(b.id);
     });

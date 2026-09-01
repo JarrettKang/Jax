@@ -12,16 +12,9 @@ class CompleteEvent {
   Future<CompletedRecord> call(String id, {DateTime? endTime}) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
-    final children = await repository.getDirectChildren(id);
-    if (children.any((child) => child.status != EventStatus.completed)) {
-      throw const DomainFailure('仍存在未完成的下层事件');
-    }
-    final canCompleteFromChildren =
-        children.isNotEmpty ||
-        current.status == EventStatus.paused ||
-        current.status == EventStatus.waiting;
-    if (current.status != EventStatus.running && !canCompleteFromChildren) {
-      throw const DomainFailure('只有正在进行的事件可以完成');
+    if (current.status != EventStatus.running &&
+        current.status != EventStatus.waiting) {
+      throw const DomainFailure('只有正在进行或等待中的事件可以完成');
     }
     if (current.status == EventStatus.completed) {
       throw const DomainFailure('事件已经完成');

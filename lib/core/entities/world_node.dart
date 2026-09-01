@@ -46,17 +46,3 @@ class WorldNode {
     updatedAt: updatedAt ?? this.updatedAt,
   );
 }
-
-class LegacyEventWorldNodeLink {
-  const LegacyEventWorldNodeLink({
-    required this.legacyEventId,
-    required this.worldNodeId,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-
-  final String legacyEventId;
-  final String worldNodeId;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-}

@@ -87,24 +87,17 @@ void main() {
       payload: {
         'name': name,
         'status': 'paused',
-        'parentSyncId': null,
+        'sourcePlanItemSyncId': null,
         'categorySyncId': null,
-        'order': 0,
         'firstStartedAtUtc': null,
         'completedAtUtc': null,
       },
     );
     SyncSnapshot snapshot(String name) => SyncSnapshot(
-      schemaVersion: 13,
+      schemaVersion: 16,
       exportedAtUtc: instant,
       records: [event(name)],
-      lists: const [
-        SyncList(
-          kind: SyncListKind.eventSiblings,
-          scopeId: 'root',
-          itemIds: ['event'],
-        ),
-      ],
+      lists: const [],
     );
     final windows = snapshot('电脑名称');
     final android = snapshot('手机名称');

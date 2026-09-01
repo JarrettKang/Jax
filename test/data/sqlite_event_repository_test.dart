@@ -101,7 +101,7 @@ void main() {
   });
 
   test(
-    'persists root Category and child relationship at Event creation',
+    'persists direct Category for standalone Events',
     () async {
       final createdAt = DateTime.utc(2026, 8, 24, 12);
       await repository.insertCategory(
@@ -122,17 +122,13 @@ void main() {
       );
 
       final root = await create('测试 Yukawa', categoryId: 'research');
-      final child = await create(
-        '测试截断距离',
-        parentEventId: root.id,
-        categoryId: 'research',
-      );
+      final second = await create('测试截断距离', categoryId: 'research');
 
       expect((await repository.getEvent(root.id))!.categoryId, 'research');
       expect((await repository.getCategories()).single.colorKey, 5);
-      final storedChild = (await repository.getEvent(child.id))!;
-      expect(storedChild.parentEventId, root.id);
-      expect(storedChild.categoryId, isNull);
+      final storedSecond = (await repository.getEvent(second.id))!;
+      expect(storedSecond.sourcePlanItemId, isNull);
+      expect(storedSecond.categoryId, 'research');
     },
   );
 }

@@ -12,7 +12,7 @@ void main() {
   const compiler = SyncPlanCompiler();
   const validator = SyncSnapshotValidator();
 
-  test('protocol 2 baseline upgrades to protocol 3 with no invented Plans', () {
+  test('protocol 2 baseline upgrades to protocol 4 with no invented Plans', () {
     final old = _snapshot([_node()], protocol: 2);
     final upgraded = SyncSnapshot.fromJson(
       (jsonDecode(old.toJsonString()) as Map).cast<String, Object?>(),
@@ -87,6 +87,29 @@ void main() {
     );
   });
 
+  test('deleted unexecuted Plan versus remote edit is delete/modify conflict', () {
+    final baseline = _snapshot([_node(), _plan()]);
+    final deletedPlan = SyncRecord(
+      kind: SyncEntityKind.plan,
+      metadata: SyncMetadata(
+        id: 'plan',
+        createdAtUtc: _time,
+        updatedAtUtc: _time,
+        deletedAtUtc: _time,
+      ),
+      payload: const {},
+    );
+    final preview = compare.compare(
+      baseline: baseline,
+      windows: _snapshot([_node(), deletedPlan]),
+      android: _snapshot([_node(), _plan(title: 'Android edit')]),
+    );
+    expect(
+      preview.manualConflicts.single.conflictType,
+      SyncConflictType.deleteModify,
+    );
+  });
+
   test('PlanItem full-list order conflicts by Plan scope', () {
     final records = [
       _node(),
@@ -129,6 +152,16 @@ void main() {
       validator.validate(duplicate),
       contains('multiple-current-plans:11111111-1111-4111-8111-111111111111'),
     );
+
+    final missingEvent = _snapshot([
+      _node(),
+      _plan(),
+      _item('a', 'A', 'dispatched', 0),
+    ], lists: [_itemList(['a'])]);
+    expect(
+      validator.validate(missingEvent),
+      contains('executed-plan-item-without-event:a'),
+    );
   });
 }
 
@@ -140,7 +173,7 @@ SyncSnapshot _snapshot(
   int protocol = syncProtocolVersion,
 }) => SyncSnapshot(
   protocolVersion: protocol,
-  schemaVersion: 15,
+  schemaVersion: 16,
   exportedAtUtc: _time,
   records: records,
   lists: lists,

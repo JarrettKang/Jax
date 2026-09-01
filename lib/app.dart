@@ -215,10 +215,12 @@ class _JaxAppState extends State<JaxApp> {
         controller: _controller,
         onOpenWorld: () => setState(() => _selectedIndex = 2),
       ),
-      WorldPage(
-        controller: _controller,
-        worldCategoryCollapseStore: widget.worldCategoryCollapseStore,
-      ),
+      _planningController == null
+          ? const Center(child: Text('世界数据库不可用'))
+          : WorldPage(
+              controller: _planningController!,
+              worldCategoryCollapseStore: widget.worldCategoryCollapseStore,
+            ),
       _planningController == null
           ? const Center(child: Text('规划数据库不可用'))
           : PlanningPage(controller: _planningController!),

@@ -6,7 +6,6 @@ import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/run_segment.dart';
 
 import '../support/memory_repository.dart';
-import '../support/ui_navigation.dart';
 
 void main() {
   testWidgets('all event actions remain usable on a narrow phone', (
@@ -67,21 +66,13 @@ void main() {
       await tester.scrollUntilVisible(action, 100);
       expect(action, findsOneWidget);
     }
-    await openEventsPage(tester);
-    final newEvent = find.byKey(const ValueKey('world-new-event'));
+    final newEvent = find.byKey(const ValueKey('add-standalone-event'));
     await tester.tap(newEvent);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
-
-    await openEventMenu(tester, 'pending');
-    expect(find.byKey(const ValueKey('edit-pending')), findsOneWidget);
-    expect(find.byKey(const ValueKey('delete-pending')), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
 
     expect(tester.takeException(), isNull);
   });

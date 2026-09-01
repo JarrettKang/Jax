@@ -55,31 +55,23 @@ void main() {
     },
   );
 
-  test('root category follows detach and clears on root to child', () async {
-    final root = JaxEvent(
+  test('category assignment is limited to standalone Events', () async {
+    final standalone = JaxEvent(
       id: 'a',
       name: 'A',
       status: EventStatus.paused,
-      categoryId: 'c',
       createdAt: now,
       updatedAt: now,
     );
-    final child = JaxEvent(
+    final planned = JaxEvent(
       id: 'b',
       name: 'B',
       status: EventStatus.paused,
-      parentEventId: 'a',
+      sourcePlanItemId: 'item',
       createdAt: now,
       updatedAt: now,
     );
-    final other = JaxEvent(
-      id: 'x',
-      name: 'X',
-      status: EventStatus.paused,
-      createdAt: now,
-      updatedAt: now,
-    );
-    final repo = MemoryRepository([root, child, other])
+    final repo = MemoryRepository([standalone, planned])
       ..categories.add(
         Category(
           id: 'c',
@@ -89,9 +81,13 @@ void main() {
           updatedAt: now,
         ),
       );
-    await repo.updateParent('b', null, now);
-    expect((await repo.getEvent('b'))!.categoryId, 'c');
-    await repo.updateParent('b', 'x', now);
-    expect((await repo.getEvent('b'))!.categoryId, isNull);
+    final service = CategoryService(
+      repository: repo,
+      newId: () => 'unused',
+      now: () => now,
+    );
+    await service.assign('a', 'c');
+    expect((await repo.getEvent('a'))!.categoryId, 'c');
+    await expectLater(service.assign('b', 'c'), throwsStateError);
   });
 }

@@ -25,14 +25,15 @@ class SyncSnapshotValidator {
           }.contains(p['status'])) {
             issues.add('event-status:${record.metadata.id}');
           }
-          if (!has(SyncEntityKind.event, p['parentSyncId'])) {
-            issues.add('event-parent:${record.metadata.id}');
+          if (!has(SyncEntityKind.planItem, p['sourcePlanItemSyncId'])) {
+            issues.add('event-plan-item:${record.metadata.id}');
           }
           if (!has(SyncEntityKind.eventCategory, p['categorySyncId'])) {
             issues.add('event-category:${record.metadata.id}');
           }
-          if (p['parentSyncId'] != null && p['categorySyncId'] != null) {
-            issues.add('child-direct-category:${record.metadata.id}');
+          if (p['sourcePlanItemSyncId'] != null &&
+              p['categorySyncId'] != null) {
+            issues.add('planned-event-direct-category:${record.metadata.id}');
           }
         case SyncEntityKind.eventRunSegment:
           if (!has(SyncEntityKind.event, p['eventSyncId'])) {
@@ -96,6 +97,9 @@ class SyncSnapshotValidator {
             );
           }
         case SyncEntityKind.legacyEventWorldNodeLink:
+          issues.add(
+            'unsupported-legacy-event-world-node-link:${record.metadata.id}',
+          );
           if (!has(SyncEntityKind.event, p['legacyEventSyncId'])) {
             issues.add('legacy-link-event:${record.metadata.id}');
           }
@@ -163,6 +167,21 @@ class SyncSnapshotValidator {
     final plans = live.values.where(
       (record) => record.kind == SyncEntityKind.plan,
     );
+    final eventBySource = <String, SyncRecord>{
+      for (final event in live.values.where(
+        (record) => record.kind == SyncEntityKind.event,
+      ))
+        if (event.payload['sourcePlanItemSyncId'] case final String sourceId)
+          sourceId: event,
+    };
+    for (final item in live.values.where(
+      (record) => record.kind == SyncEntityKind.planItem,
+    )) {
+      if ({'dispatched', 'done'}.contains(item.payload['status']) &&
+          !eventBySource.containsKey(item.metadata.id)) {
+        issues.add('executed-plan-item-without-event:${item.metadata.id}');
+      }
+    }
     final activeByNode = <String, int>{};
     final rounds = <String>{};
     for (final plan in plans) {
@@ -236,23 +255,11 @@ class SyncSnapshotValidator {
       for (final r in live.values.where((r) => r.kind == SyncEntityKind.event))
         r.metadata.id: r,
     };
+    final sourceIds = <String>{};
     for (final event in events.values) {
-      final seen = <String>{event.metadata.id};
-      var parent = event.payload['parentSyncId'] as String?;
-      while (parent != null) {
-        if (!seen.add(parent)) {
-          issues.add('event-cycle:${event.metadata.id}');
-          break;
-        }
-        parent = events[parent]?.payload['parentSyncId'] as String?;
-      }
-      if (event.payload['status'] == 'completed') {
-        final unfinished = events.values.any(
-          (candidate) =>
-              candidate.payload['parentSyncId'] == event.metadata.id &&
-              candidate.payload['status'] != 'completed',
-        );
-        if (unfinished) issues.add('completed-parent:${event.metadata.id}');
+      final sourceId = event.payload['sourcePlanItemSyncId'] as String?;
+      if (sourceId != null && !sourceIds.add(sourceId)) {
+        issues.add('duplicate-event-plan-item:$sourceId');
       }
     }
   }
@@ -335,6 +342,10 @@ class SyncSnapshotValidator {
     final keys = <String>{};
     final actual = <String, Set<String>>{};
     for (final list in snapshot.lists) {
+      if (list.kind == SyncListKind.eventSiblings) {
+        issues.add('unsupported-event-hierarchy-list:${list.key}');
+        continue;
+      }
       if (!keys.add(list.key)) issues.add('duplicate-list:${list.key}');
       if (list.itemIds.toSet().length != list.itemIds.length) {
         issues.add('duplicate-list-item:${list.key}');
@@ -352,13 +363,6 @@ class SyncSnapshotValidator {
         };
         if (!live.containsKey('${kind.name}:$id')) {
           issues.add('list-owner:${list.key}:$id');
-        }
-        if (list.kind == SyncListKind.eventSiblings &&
-            (live['${SyncEntityKind.event.name}:$id']
-                        ?.payload['parentSyncId'] ??
-                    'root') !=
-                list.scopeId) {
-          issues.add('list-scope:${list.key}:$id');
         }
         if (list.kind == SyncListKind.routines &&
             (live['${SyncEntityKind.routine.name}:$id']
@@ -403,11 +407,7 @@ class SyncSnapshotValidator {
         case SyncEntityKind.eventCategory:
           addExpected('${SyncListKind.eventCategories.name}:all', id);
         case SyncEntityKind.event:
-          addExpected(
-            '${SyncListKind.eventSiblings.name}:'
-            '${record.payload['parentSyncId'] ?? 'root'}',
-            id,
-          );
+          break;
         case SyncEntityKind.routineCategory:
           addExpected('${SyncListKind.routineCategories.name}:all', id);
         case SyncEntityKind.routine:

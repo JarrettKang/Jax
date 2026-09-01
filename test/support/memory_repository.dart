@@ -25,18 +25,7 @@ class MemoryRepository
   final List<RoutineRunSegment> routineSegments = [];
   final List<EventDayPlan> eventDayPlans = [];
   @override
-  Future<void> insertEvent(JaxEvent event) async {
-    final siblings = events.where(
-      (item) => item.parentEventId == event.parentEventId,
-    );
-    final next =
-        siblings.fold<int>(-1, (max, item) {
-          final order = item.sortOrder ?? -1;
-          return order > max ? order : max;
-        }) +
-        1;
-    events.add(event.copyWith(sortOrder: event.sortOrder ?? next));
-  }
+  Future<void> insertEvent(JaxEvent event) async => events.add(event);
 
   @override
   Future<List<JaxEvent>> getIncompleteEvents() async =>
@@ -101,101 +90,15 @@ class MemoryRepository
   }
 
   @override
-  Future<JaxEvent?> getParent(String eventId) async {
-    final event = await getEvent(eventId);
-    return event?.parentEventId == null
-        ? null
-        : getEvent(event!.parentEventId!);
-  }
-
-  @override
-  Future<List<JaxEvent>> getDirectChildren(String parentEventId) async =>
-      _ordered(events.where((event) => event.parentEventId == parentEventId));
-
-  @override
-  Future<List<JaxEvent>> getOrderedSiblings(String eventId) async {
-    final event = await getEvent(eventId);
-    if (event == null) throw StateError('Event not found: $eventId');
-    return _ordered(
-      events.where((item) => item.parentEventId == event.parentEventId),
-    );
-  }
-
-  @override
-  Future<List<JaxEvent>> getOrderedTopLevelEvents() async =>
-      _ordered(events.where((event) => event.parentEventId == null));
-
-  @override
-  Future<void> reorderSibling(String eventId, int targetIndex) async {
-    final siblings = await getOrderedSiblings(eventId);
-    final current = siblings.indexWhere((event) => event.id == eventId);
-    if (targetIndex < 0 || targetIndex >= siblings.length) {
-      throw StateError('Invalid target index');
-    }
-    final moved = siblings.removeAt(current);
-    siblings.insert(targetIndex, moved);
-    for (var index = 0; index < siblings.length; index++) {
-      await updateEvent(siblings[index].copyWith(sortOrder: index));
-    }
-  }
-
-  List<JaxEvent> _ordered(Iterable<JaxEvent> source) => source.toList()
-    ..sort((a, b) {
-      final order = (a.sortOrder ?? 1 << 30).compareTo(b.sortOrder ?? 1 << 30);
-      if (order != 0) return order;
-      final created = a.createdAt.compareTo(b.createdAt);
-      return created != 0 ? created : a.id.compareTo(b.id);
-    });
-
-  @override
-  Future<void> updateParent(
-    String eventId,
-    String? parentEventId,
-    DateTime updatedAt,
-  ) async {
-    final event = await getEvent(eventId);
-    if (event == null) throw StateError('Event not found: $eventId');
-    final siblings = events.where(
-      (item) => item.parentEventId == parentEventId,
-    );
-    final next =
-        siblings.fold<int>(-1, (max, item) {
-          final order = item.sortOrder ?? -1;
-          return order > max ? order : max;
-        }) +
-        1;
-    String? categoryId;
-    if (parentEventId == null) {
-      var root = event;
-      while (root.parentEventId != null) {
-        root = (await getEvent(root.parentEventId!))!;
-      }
-      categoryId = root.categoryId;
-    }
-    await updateEvent(
-      event.copyWith(
-        parentEventId: parentEventId,
-        sortOrder: next,
-        updatedAt: updatedAt,
-        categoryId: categoryId,
-      ),
-    );
-  }
-
-  @override
   Future<void> switchRunningEvent({
     required JaxEvent pausedRunning,
     required RunSegment closedSegment,
     required JaxEvent runningTarget,
     required RunSegment newSegment,
-    required List<JaxEvent> pausedAncestors,
   }) async {
     await updateEvent(pausedRunning);
     segments[segments.indexWhere((item) => item.id == closedSegment.id)] =
         closedSegment;
-    for (final ancestor in pausedAncestors) {
-      await updateEvent(ancestor);
-    }
     await updateEvent(runningTarget);
     segments.add(newSegment);
   }
@@ -247,17 +150,24 @@ class MemoryRepository
   }
 
   @override
-  Future<void> setRootCategory(String eventId, String? categoryId) async {
+  Future<void> setStandaloneCategory(String eventId, String? categoryId) async {
     final event = await getEvent(eventId);
     if (event == null) throw StateError('Event not found: $eventId');
-    if (event.parentEventId != null) {
-      throw StateError('Only root events can have a category');
+    if (event.sourcePlanItemId != null) {
+      throw StateError('Planned Event cannot own a direct Category');
     }
     if (categoryId != null &&
         !categories.any((item) => item.id == categoryId)) {
       throw StateError('Category not found');
     }
     await updateEvent(event.copyWith(categoryId: categoryId));
+  }
+
+  @override
+  Future<String?> getEffectiveCategoryId(String eventId) async {
+    final event = await getEvent(eventId);
+    if (event == null) throw StateError('Event not found: $eventId');
+    return event.categoryId;
   }
 
   @override

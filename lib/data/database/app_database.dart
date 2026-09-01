@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 15;
+  static const schemaVersion = 16;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -41,26 +41,16 @@ class AppDatabase {
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL
     )''');
-    await database.execute('''CREATE TABLE events (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL CHECK(length(trim(name)) > 0),
-      status TEXT NOT NULL CHECK(status IN ('pending','running','paused','waiting','completed')),
-      parent_event_id TEXT REFERENCES events(id) ON DELETE RESTRICT,
-      sort_order INTEGER,
-      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
-      first_started_at_utc INTEGER,
-      completed_at_utc INTEGER,
-      created_at_utc INTEGER NOT NULL,
-      updated_at_utc INTEGER NOT NULL
-    )''');
+    await WorldNodeShadowMigration.createWorldNodeTable(database);
+    await _createPlanningTables(database);
+    await _createFlatEventTable(database, 'events');
     await _createRunSegments(database);
     await _createRoutineCategoryTables(database);
     await _createRoutineTables(database);
     await _createEventDayPlans(database);
     await _createWorldCategoryCollapsePreferences(database);
     await _createSyncMetadata(database);
-    await WorldNodeShadowMigration.createTables(database);
-    await _createPlanningTables(database);
+    await _createDatasetMetadata(database);
     await _createSyncTriggers(database);
   }
 
@@ -116,6 +106,126 @@ class AppDatabase {
       await _createPlanningTables(database);
       await _createSyncTriggers(database);
     }
+    if (oldVersion < 16) await _migrateToFlatEvents(database);
+  }
+
+  static Future<void> _createFlatEventTable(
+    DatabaseExecutor database,
+    String table,
+  ) => database.execute('''CREATE TABLE $table (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+      status TEXT NOT NULL CHECK(status IN ('pending','running','paused','waiting','completed')),
+      source_plan_item_id TEXT UNIQUE REFERENCES plan_items(id) ON DELETE RESTRICT,
+      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+      first_started_at_utc INTEGER,
+      completed_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL,
+      CHECK(source_plan_item_id IS NULL OR category_id IS NULL)
+    )''');
+
+  static Future<void> _migrateToFlatEvents(Database database) async {
+    if (!await _tableExists(database, 'events')) {
+      await _createDatasetMetadata(database);
+      return;
+    }
+    if (!await _tableExists(database, 'categories')) {
+      await database.execute('''CREATE TABLE categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0),
+        sort_order INTEGER NOT NULL,
+        color_key INTEGER NOT NULL CHECK(color_key BETWEEN 0 AND 7),
+        created_at_utc INTEGER NOT NULL,
+        updated_at_utc INTEGER NOT NULL
+      )''');
+    }
+    await database.execute('PRAGMA defer_foreign_keys = ON');
+    await _createFlatEventTable(database, 'events_v16');
+    await database.execute('''WITH RECURSIVE roots(
+        id, parent_event_id, root_category_id
+      ) AS (
+        SELECT id, parent_event_id, category_id FROM events
+        WHERE parent_event_id IS NULL
+        UNION ALL
+        SELECT child.id, child.parent_event_id, roots.root_category_id
+        FROM events child JOIN roots ON child.parent_event_id = roots.id
+      )
+      INSERT INTO events_v16(
+        id, name, status, source_plan_item_id, category_id,
+        first_started_at_utc, completed_at_utc, created_at_utc, updated_at_utc
+      )
+      SELECT event.id, event.name, event.status, NULL,
+        COALESCE(roots.root_category_id, event.category_id),
+        event.first_started_at_utc, event.completed_at_utc,
+        event.created_at_utc, event.updated_at_utc
+      FROM events event LEFT JOIN roots ON roots.id = event.id''');
+    final hasSegments = await _tableExists(database, 'run_segments');
+    if (hasSegments) {
+      await database.execute('''CREATE TABLE run_segments_v16 (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES events_v16(id) ON DELETE CASCADE,
+      started_at_utc INTEGER NOT NULL,
+      ended_at_utc INTEGER,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL DEFAULT 0
+    )''');
+      await database.execute(
+        'INSERT INTO run_segments_v16 SELECT * FROM run_segments',
+      );
+    }
+    final hasDayPlans = await _tableExists(database, 'event_day_plans');
+    if (hasDayPlans) {
+      await database.execute('''CREATE TABLE event_day_plans_v16 (
+      event_id TEXT NOT NULL REFERENCES events_v16(id) ON DELETE CASCADE,
+      day_date TEXT NOT NULL,
+      order_index INTEGER NOT NULL,
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(event_id, day_date)
+    )''');
+      await database.execute(
+        'INSERT INTO event_day_plans_v16 SELECT * FROM event_day_plans',
+      );
+    }
+    if (await _tableExists(database, 'legacy_event_world_node_links')) {
+      await database.execute('DROP TABLE legacy_event_world_node_links');
+    }
+    if (await _tableExists(database, 'sync_tombstones')) {
+      await database.delete(
+        'sync_tombstones',
+        where: 'entity_type = ?',
+        whereArgs: ['legacyEventWorldNodeLink'],
+      );
+    }
+    if (hasSegments) await database.execute('DROP TABLE run_segments');
+    if (hasDayPlans) await database.execute('DROP TABLE event_day_plans');
+    await database.execute('DROP TABLE events');
+    await database.execute('ALTER TABLE events_v16 RENAME TO events');
+    if (hasSegments) {
+      await database.execute(
+        'ALTER TABLE run_segments_v16 RENAME TO run_segments',
+      );
+    }
+    if (hasDayPlans) {
+      await database.execute(
+        'ALTER TABLE event_day_plans_v16 RENAME TO event_day_plans',
+      );
+    }
+    await _createDatasetMetadata(database);
+    await _createSyncTriggers(database);
+  }
+
+  static Future<void> _createDatasetMetadata(Database database) async {
+    await database.execute('''CREATE TABLE IF NOT EXISTS dataset_metadata (
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+        generation TEXT NOT NULL CHECK(length(trim(generation)) > 0),
+        created_at_utc INTEGER NOT NULL
+      )''');
+    await database.execute('''INSERT OR IGNORE INTO dataset_metadata(
+        singleton, generation, created_at_utc)
+      VALUES(1, lower(hex(randomblob(16))),
+        CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))''');
   }
 
   static Future<void> _createPlanningTables(Database database) async {

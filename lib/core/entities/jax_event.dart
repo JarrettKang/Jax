@@ -1,10 +1,12 @@
 import 'event_status.dart';
 
-const _unchangedParent = Object();
-const _unchangedSortOrder = Object();
-const _unchangedCategory = Object();
 const _unchangedCompletedAt = Object();
+const _unchangedCategory = Object();
 
+/// A finite, flat execution object.
+///
+/// Planned Events are identified by [sourcePlanItemId]. Standalone Events
+/// leave it null and may own a direct [categoryId].
 class JaxEvent {
   const JaxEvent({
     required this.id,
@@ -12,10 +14,9 @@ class JaxEvent {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
-    this.parentEventId,
+    this.sourcePlanItemId,
     this.firstStartedAt,
     this.completedAt,
-    this.sortOrder,
     this.categoryId,
   });
 
@@ -24,11 +25,13 @@ class JaxEvent {
   final EventStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? parentEventId;
+  final String? sourcePlanItemId;
   final DateTime? firstStartedAt;
   final DateTime? completedAt;
-  final int? sortOrder;
   final String? categoryId;
+
+  bool get isPlanned => sourcePlanItemId != null;
+  bool get isStandalone => sourcePlanItemId == null;
 
   JaxEvent copyWith({
     String? name,
@@ -36,45 +39,35 @@ class JaxEvent {
     DateTime? updatedAt,
     DateTime? firstStartedAt,
     Object? completedAt = _unchangedCompletedAt,
-    Object? parentEventId = _unchangedParent,
-    Object? sortOrder = _unchangedSortOrder,
     Object? categoryId = _unchangedCategory,
-  }) {
-    return JaxEvent(
-      id: id,
-      name: name ?? this.name,
-      status: status ?? this.status,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      parentEventId: identical(parentEventId, _unchangedParent)
-          ? this.parentEventId
-          : parentEventId as String?,
-      firstStartedAt: firstStartedAt ?? this.firstStartedAt,
-      completedAt: identical(completedAt, _unchangedCompletedAt)
-          ? this.completedAt
-          : completedAt as DateTime?,
-      sortOrder: identical(sortOrder, _unchangedSortOrder)
-          ? this.sortOrder
-          : sortOrder as int?,
-      categoryId: identical(categoryId, _unchangedCategory)
-          ? this.categoryId
-          : categoryId as String?,
-    );
-  }
+  }) => JaxEvent(
+    id: id,
+    name: name ?? this.name,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    sourcePlanItemId: sourcePlanItemId,
+    firstStartedAt: firstStartedAt ?? this.firstStartedAt,
+    completedAt: identical(completedAt, _unchangedCompletedAt)
+        ? this.completedAt
+        : completedAt as DateTime?,
+    categoryId: identical(categoryId, _unchangedCategory)
+        ? this.categoryId
+        : categoryId as String?,
+  );
 
   @override
-  bool operator ==(Object other) {
-    return other is JaxEvent &&
-        other.id == id &&
-        other.name == name &&
-        other.status == status &&
-        other.createdAt == createdAt &&
-        other.updatedAt == updatedAt &&
-        other.parentEventId == parentEventId &&
-        other.firstStartedAt == firstStartedAt &&
-        other.completedAt == completedAt &&
-        other.categoryId == categoryId;
-  }
+  bool operator ==(Object other) =>
+      other is JaxEvent &&
+      other.id == id &&
+      other.name == name &&
+      other.status == status &&
+      other.createdAt == createdAt &&
+      other.updatedAt == updatedAt &&
+      other.sourcePlanItemId == sourcePlanItemId &&
+      other.firstStartedAt == firstStartedAt &&
+      other.completedAt == completedAt &&
+      other.categoryId == categoryId;
 
   @override
   int get hashCode => Object.hash(
@@ -83,7 +76,7 @@ class JaxEvent {
     status,
     createdAt,
     updatedAt,
-    parentEventId,
+    sourcePlanItemId,
     firstStartedAt,
     completedAt,
     categoryId,

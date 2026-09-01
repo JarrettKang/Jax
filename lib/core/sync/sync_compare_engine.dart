@@ -406,6 +406,16 @@ class SyncCompareEngine {
     if (versions.length != 1 || versions.single != syncProtocolVersion) {
       throw StateError('Incompatible sync protocol versions: $versions');
     }
+    final generations = {
+      windows.datasetGeneration,
+      android.datasetGeneration,
+      if (baseline != null) baseline.datasetGeneration,
+    };
+    if (generations.length != 1) {
+      throw StateError(
+        'Incompatible dataset generations: ${generations.join(', ')}',
+      );
+    }
   }
 
   SyncPlanItem _compareRecord(
@@ -761,6 +771,7 @@ class SyncCompareEngine {
   ) {
     const relations = {
       'parentSyncId',
+      'sourcePlanItemSyncId',
       'parentWorldNodeSyncId',
       'categorySyncId',
       'routineCategorySyncId',
@@ -783,8 +794,7 @@ class SyncCompareEngine {
 
   String _listTitle(SyncList list) => switch (list.kind) {
     SyncListKind.eventCategories => '世界分类顺序',
-    SyncListKind.eventSiblings =>
-      list.scopeId == 'root' ? '根 Event 顺序' : 'Event ${list.scopeId} 下层顺序',
+    SyncListKind.eventSiblings => '已废弃 Event 层级顺序',
     SyncListKind.routineCategories => 'Routine 分类顺序',
     SyncListKind.routines => 'Routine ${list.scopeId} 分类内顺序',
     SyncListKind.eventDayPlans => '${list.scopeId} Today 顺序',

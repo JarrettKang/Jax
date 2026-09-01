@@ -40,7 +40,6 @@ class SqliteSyncReadiness {
       'routine_executions',
       'routine_run_segments',
       'world_nodes',
-      'legacy_event_world_node_links',
       'plans',
       'plan_items',
     ];
@@ -67,29 +66,19 @@ class SqliteSyncReadiness {
       );
     }
 
-    final cycles = await db.rawQuery(
-      '''WITH RECURSIVE ancestry(origin, id, path, cycle) AS (
-      SELECT id, parent_event_id, '|' || id || '|', 0
-      FROM events WHERE parent_event_id IS NOT NULL
-      UNION ALL
-      SELECT ancestry.origin, events.parent_event_id,
-        ancestry.path || events.id || '|',
-        instr(ancestry.path, '|' || events.id || '|') > 0
-      FROM ancestry JOIN events ON events.id = ancestry.id
-      WHERE events.parent_event_id IS NOT NULL AND ancestry.cycle = 0
-    ) SELECT DISTINCT origin FROM ancestry WHERE cycle = 1''',
-    );
-    for (final row in cycles) {
-      issues.add(SyncReadinessIssue('event-cycle', row['origin'].toString()));
+    for (final row in await db.rawQuery('''SELECT event.id FROM events event
+      LEFT JOIN plan_items item ON item.id = event.source_plan_item_id
+      WHERE event.source_plan_item_id IS NOT NULL AND item.id IS NULL''')) {
+      issues.add(SyncReadinessIssue('event-plan-item', row['id'].toString()));
     }
-
-    final categorizedChildren = await db.rawQuery(
-      'SELECT id FROM events WHERE parent_event_id IS NOT NULL AND category_id IS NOT NULL',
-    );
-    for (final row in categorizedChildren) {
-      issues.add(
-        SyncReadinessIssue('child-direct-category', row['id'].toString()),
-      );
+    for (final row in await db.rawQuery('''SELECT source_plan_item_id, count(*) count
+      FROM events WHERE source_plan_item_id IS NOT NULL
+      GROUP BY source_plan_item_id HAVING count(*) > 1''')) {
+      issues.add(SyncReadinessIssue('duplicate-event-plan-item', row.toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM events
+      WHERE source_plan_item_id IS NOT NULL AND category_id IS NOT NULL''')) {
+      issues.add(SyncReadinessIssue('planned-event-direct-category', row['id'].toString()));
     }
 
     final worldCycles = await db.rawQuery(
@@ -124,31 +113,10 @@ class SqliteSyncReadiness {
         issues.add(SyncReadinessIssue('world-node-invalid-uuid', id));
       }
     }
-    for (final row in await db.query('legacy_event_world_node_links')) {
-      final legacyId = row['legacy_event_id']! as String;
-      final expected = WorldNodeIds.fromLegacyEvent(legacyId);
-      if (row['id'] != legacyId || row['world_node_id'] != expected) {
-        issues.add(
-          SyncReadinessIssue(
-            'world-node-invalid-migration-mapping',
-            '$legacyId -> ${row['world_node_id']} (expected $expected)',
-          ),
-        );
-      }
-    }
-    for (final column in ['legacy_event_id', 'world_node_id']) {
-      for (final row in await db.rawQuery(
-        '''SELECT $column identity, count(*) count
-        FROM legacy_event_world_node_links
-        GROUP BY $column HAVING count(*) > 1''',
-      )) {
-        issues.add(
-          SyncReadinessIssue(
-            'world-node-duplicate-migration-mapping',
-            row.toString(),
-          ),
-        );
-      }
+    final generations = await db.query('dataset_metadata');
+    if (generations.length != 1 ||
+        (generations.single['generation'] as String?)?.trim().isEmpty != false) {
+      issues.add(const SyncReadinessIssue('dataset-generation', '缺少唯一的数据代际'));
     }
 
     for (final row in await db.rawQuery('''SELECT p.id FROM plans p
@@ -180,14 +148,13 @@ class SqliteSyncReadiness {
         ),
       );
     }
-    for (final row in await db.rawQuery(
-      "SELECT id FROM plan_items WHERE status IN ('dispatched','done')",
-    )) {
+    for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
+      LEFT JOIN events e ON e.source_plan_item_id = i.id
+      WHERE i.status IN ('dispatched','done') AND e.id IS NULL''')) {
       issues.add(
         SyncReadinessIssue(
-          'p2-execution-state-plan-item',
+          'executed-plan-item-without-event',
           row['id'].toString(),
-          isBlocking: false,
         ),
       );
     }
@@ -288,9 +255,6 @@ class SqliteSyncReadiness {
       'routine-category-order':
           '''SELECT sort_order value FROM routine_categories
         GROUP BY sort_order HAVING count(*) > 1''',
-      'event-sibling-order':
-          '''SELECT parent_event_id, sort_order value FROM events
-        GROUP BY parent_event_id, sort_order HAVING count(*) > 1''',
       'routine-order':
           '''SELECT routine_category_id, sort_order value FROM routines
         GROUP BY routine_category_id, sort_order HAVING count(*) > 1''',

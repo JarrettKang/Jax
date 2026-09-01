@@ -11,9 +11,6 @@ class DeleteHistoryRecord {
     if (event.status != EventStatus.completed) {
       throw const DomainFailure('只能删除已完成记录');
     }
-    if ((await repository.getDirectChildren(id)).isNotEmpty) {
-      throw const DomainFailure('该事件仍包含下层事件，请先解除或调整层级关系');
-    }
     await repository.deleteEvent(id);
   }
 }

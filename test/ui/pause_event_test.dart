@@ -9,7 +9,7 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('pauses running event and restores edit/delete', (tester) async {
+  testWidgets('pauses a running flat Event and exposes resume', (tester) async {
     final start = DateTime.utc(2026);
     final end = start.add(const Duration(minutes: 3));
     final repository =
@@ -38,10 +38,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('pause-one')));
     await tester.pumpAndSettle();
     expect(find.textContaining('已暂停'), findsOneWidget);
-    expect(find.byKey(const ValueKey('edit-one')), findsNothing);
-    expect(find.byKey(const ValueKey('delete-one')), findsNothing);
-    await openEventMenu(tester, 'one');
-    expect(find.byKey(const ValueKey('edit-one')), findsOneWidget);
-    expect(find.byKey(const ValueKey('delete-one')), findsOneWidget);
+    expect(repository.events.single.status, EventStatus.paused);
+    expect(repository.segments.single.endedAt, end);
+    expect(find.byKey(const ValueKey('resume-one')), findsOneWidget);
   });
 }

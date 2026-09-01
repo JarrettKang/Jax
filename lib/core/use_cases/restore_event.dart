@@ -18,23 +18,12 @@ class RestoreEvent {
     }
 
     final timestamp = now().toUtc();
-    final restored = <JaxEvent>[];
-    final visited = <String>{};
-    JaxEvent? candidate = current;
-    while (candidate != null &&
-        candidate.status == EventStatus.completed &&
-        visited.add(candidate.id)) {
-      restored.add(
-        candidate.copyWith(
-          status: EventStatus.paused,
-          completedAt: null,
-          updatedAt: timestamp,
-        ),
-      );
-      candidate = await repository.getParent(candidate.id);
-    }
-
-    await repository.restoreCompletedEvents(restored);
-    return restored.first;
+    final restored = current.copyWith(
+      status: EventStatus.paused,
+      completedAt: null,
+      updatedAt: timestamp,
+    );
+    await repository.restoreCompletedEvents([restored]);
+    return restored;
   }
 }

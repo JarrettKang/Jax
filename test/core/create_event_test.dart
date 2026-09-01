@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/category.dart';
-import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/use_cases/create_event.dart';
 
@@ -43,7 +42,7 @@ void main() {
   });
 
   test(
-    'creates a root Event with its selected Category in one insert',
+    'creates a standalone Event with its direct Category in one insert',
     () async {
       repository.categories.add(
         Category(
@@ -57,30 +56,19 @@ void main() {
 
       final event = await createEvent('测试 Yukawa', categoryId: 'research');
 
-      expect(event.parentEventId, isNull);
+      expect(event.sourcePlanItemId, isNull);
       expect(event.categoryId, 'research');
       expect(repository.events.single.categoryId, 'research');
     },
   );
 
-  test('creates a child without a direct Category', () async {
-    final parent = JaxEvent(
-      id: 'parent',
-      name: '测试 Yukawa',
-      status: EventStatus.pending,
-      createdAt: DateTime.utc(2026, 8, 24),
-      updatedAt: DateTime.utc(2026, 8, 24),
-      categoryId: 'research',
-    );
-    repository.events.add(parent);
-
-    final child = await createEvent(
+  test('planned Event records only its exact PlanItem source', () async {
+    final event = await createEvent(
       '测试截断距离',
-      parentEventId: parent.id,
-      categoryId: 'other-category',
+      sourcePlanItemId: 'plan-item',
+      categoryId: 'ignored-direct-category',
     );
-
-    expect(child.parentEventId, parent.id);
-    expect(child.categoryId, isNull);
+    expect(event.sourcePlanItemId, 'plan-item');
+    expect(event.categoryId, isNull);
   });
 }

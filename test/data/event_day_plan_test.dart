@@ -21,7 +21,6 @@ void main() {
             id: 'e$i',
             name: 'E$i',
             status: EventStatus.pending,
-            sortOrder: i,
             createdAt: now.add(Duration(seconds: i)),
             updatedAt: now,
           ),
@@ -74,7 +73,7 @@ void main() {
         (await repository.getEventDayPlans('2026-08-27')).map((p) => p.eventId),
         ['e0', 'e2', 'e1'],
       );
-      expect((await repository.getOrderedTopLevelEvents()).map((e) => e.id), [
+      expect((await repository.getIncompleteEvents()).map((e) => e.id), [
         'e0',
         'e1',
         'e2',

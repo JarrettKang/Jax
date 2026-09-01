@@ -119,14 +119,14 @@ try {
   $testFailure = $null
 
   try {
-    & $FlutterPath test integration_test/v01_workflow_test.dart -d windows
+    & $FlutterPath test integration_test/world_category_collapse_preference_test.dart -d windows
     if ($LASTEXITCODE -ne 0) {
-      throw "Windows v0.1 integration test failed with exit code $LASTEXITCODE."
+      throw "Windows WorldNode integration test failed with exit code $LASTEXITCODE."
     }
 
-    & $FlutterPath test integration_test/v02_hierarchy_workflow_test.dart -d windows
+    & $FlutterPath test test/ui/world_planning_workflow_test.dart
     if ($LASTEXITCODE -ne 0) {
-      throw "Windows v0.2 integration test failed with exit code $LASTEXITCODE."
+      throw "Windows Planning workflow test failed with exit code $LASTEXITCODE."
     }
   } catch {
     $testFailure = $_

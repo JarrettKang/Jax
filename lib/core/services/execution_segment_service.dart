@@ -2,7 +2,6 @@ import '../entities/daily_execution_segment.dart';
 import '../entities/available_time_gap.dart';
 import '../entities/event_status.dart';
 import '../entities/jax_day.dart';
-import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
 import '../entities/routine.dart';
 import '../errors/domain_failure.dart';
@@ -235,10 +234,10 @@ class ExecutionSegmentService {
     for (final s in await _events.getAllRunSegments()) {
       final e = eventById[s.eventId];
       if (e != null) {
-        final root = _rootEvent(e, eventById);
-        final category = root.categoryId == null
+        final categoryId = await _events.getEffectiveCategoryId(e.id);
+        final category = categoryId == null
             ? null
-            : eventCategoryById[root.categoryId];
+            : eventCategoryById[categoryId];
         result.add(
           DailyExecutionSegment(
             id: s.id,
@@ -299,16 +298,4 @@ class ExecutionSegmentService {
     return result;
   }
 
-  JaxEvent _rootEvent(JaxEvent event, Map<String, JaxEvent> byId) {
-    var current = event;
-    final seen = <String>{};
-    while (current.parentEventId != null && seen.add(current.id)) {
-      final parent = byId[current.parentEventId];
-      if (parent == null) {
-        break;
-      }
-      current = parent;
-    }
-    return current;
-  }
 }

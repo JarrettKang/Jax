@@ -49,18 +49,18 @@ void main() {
     expect(plan.manualConflicts.single.detail, contains('电脑：已删除'));
   });
 
-  test('hierarchy and segment field conflicts expose changed fields', () {
-    final hierarchy = engine.compare(
-      windows: snapshot([event('child', parent: 'a')]),
-      android: snapshot([event('child', parent: 'b')]),
+  test('relation and segment field conflicts expose changed fields', () {
+    final relation = engine.compare(
+      windows: snapshot([event('child', sourcePlanItem: 'a')]),
+      android: snapshot([event('child', sourcePlanItem: 'b')]),
     );
     expect(
-      hierarchy.manualConflicts.single.conflictType,
-      SyncConflictType.hierarchy,
+      relation.manualConflicts.single.conflictType,
+      SyncConflictType.field,
     );
     expect(
-      hierarchy.manualConflicts.single.changedFields.single.field,
-      'parentSyncId',
+      relation.manualConflicts.single.changedFields.single.field,
+      'sourcePlanItemSyncId',
     );
 
     final segmentPlan = engine.compare(
@@ -106,10 +106,10 @@ void main() {
     expect(additions.listConflicts, isEmpty);
     final integerOnly = engine.compare(
       windows: snapshot([
-        record(SyncEntityKind.event, 'a', {'name': 'A', 'order': 0}),
+        record(SyncEntityKind.worldNode, 'a', {'name': 'A', 'order': 0}),
       ]),
       android: snapshot([
-        record(SyncEntityKind.event, 'a', {'name': 'A', 'order': 9}),
+        record(SyncEntityKind.worldNode, 'a', {'name': 'A', 'order': 9}),
       ]),
     );
     expect(integerOnly.manualConflicts, isEmpty);
@@ -178,7 +178,7 @@ SyncSnapshot snapshot(
   int protocol = syncProtocolVersion,
 }) => SyncSnapshot(
   protocolVersion: protocol,
-  schemaVersion: 13,
+  schemaVersion: 16,
   exportedAtUtc: instant,
   records: records,
   lists: lists,
@@ -188,12 +188,14 @@ SyncRecord event(
   String id, {
   String name = 'Event',
   String status = 'paused',
-  String? parent,
+  String? sourcePlanItem,
 }) => record(SyncEntityKind.event, id, {
   'name': name,
   'status': status,
-  'parentSyncId': parent,
+  'sourcePlanItemSyncId': sourcePlanItem,
   'categorySyncId': null,
+  'firstStartedAtUtc': null,
+  'completedAtUtc': null,
 });
 SyncRecord routineExecution(String id, {required String status}) => record(
   SyncEntityKind.routineExecution,
@@ -230,4 +232,4 @@ SyncRecord deleted(SyncEntityKind kind, String id) => SyncRecord(
   payload: const {},
 );
 SyncList list(List<String> ids) =>
-    SyncList(kind: SyncListKind.eventSiblings, scopeId: 'root', itemIds: ids);
+    SyncList(kind: SyncListKind.eventCategories, scopeId: 'all', itemIds: ids);

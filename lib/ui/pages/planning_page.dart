@@ -181,89 +181,128 @@ class _PlanSection extends StatelessWidget {
   );
 }
 
-class _WorldNodeSelector extends StatelessWidget {
+class _WorldNodeSelector extends StatefulWidget {
   const _WorldNodeSelector({required this.controller});
   final PlanningController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final rows = <({WorldNode node, int depth})>[];
-    void addChildren(String? parent, int depth) {
-      final children =
-          controller.worldNodes
-              .where((node) => node.parentWorldNodeId == parent)
-              .toList()
-            ..sort((a, b) {
-              if (parent == null) {
-                int categoryIndex(WorldNode node) {
-                  final id = controller.categoryForNode(node)?.id;
-                  final index = controller.categories.indexWhere(
-                    (c) => c.id == id,
-                  );
-                  return index < 0 ? controller.categories.length : index;
-                }
+  State<_WorldNodeSelector> createState() => _WorldNodeSelectorState();
+}
 
-                final category = categoryIndex(a).compareTo(categoryIndex(b));
-                if (category != 0) return category;
-              }
-              return a.sortOrder != b.sortOrder
-                  ? a.sortOrder.compareTo(b.sortOrder)
-                  : a.id.compareTo(b.id);
-            });
-      for (final node in children) {
-        rows.add((node: node, depth: depth));
-        addChildren(node.id, depth + 1);
-      }
-    }
+class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
+  final Set<String> _collapsedCategories = {};
+  final Set<String> _collapsedBranches = {};
 
-    addChildren(null, 0);
-    return AlertDialog(
-      title: const Text('选择世界节点'),
-      content: SizedBox(
-        width: 480,
-        height: 520,
-        child: rows.isEmpty
-            ? const Center(child: Text('暂无世界节点'))
-            : ListView.builder(
-                itemCount: rows.length,
-                itemBuilder: (context, index) {
-                  final row = rows[index];
-                  final completed =
-                      row.node.status == WorldNodeStatus.completed;
-                  final occupied = controller.hasCurrentPlan(row.node.id);
-                  return ListTile(
-                    key: ValueKey('select-world-node-${row.node.id}'),
-                    contentPadding: EdgeInsets.only(
-                      left: 12.0 + row.depth * 22,
-                      right: 8,
-                    ),
-                    dense: true,
-                    enabled: !completed && !occupied,
-                    leading: Icon(
-                      row.depth == 0
-                          ? Icons.account_tree_outlined
-                          : Icons.subdirectory_arrow_right,
-                    ),
-                    title: Text(row.node.name),
-                    subtitle: completed
-                        ? const Text('已完成，恢复后可创建计划')
-                        : occupied
-                        ? const Text('已有当前计划')
-                        : null,
-                    onTap: completed || occupied
-                        ? null
-                        : () => Navigator.pop(context, row.node),
-                  );
-                },
-              ),
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('选择世界节点'),
+    content: SizedBox(
+      width: 520,
+      height: 540,
+      child: widget.controller.worldNodes.isEmpty
+          ? const Center(child: Text('暂无世界节点'))
+          : ListView(
+              key: const ValueKey('planning-world-node-selector'),
+              children: [
+                for (final category in [
+                  ...widget.controller.categories.map(
+                    (value) => (id: value.id, name: value.name),
+                  ),
+                  (id: null, name: '未分类'),
+                ])
+                  _section(category.id, category.name),
+              ],
+            ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('取消'),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+    ],
+  );
+
+  Widget _section(String? categoryId, String name) {
+    final key = categoryId ?? 'unclassified';
+    final roots = widget.controller.worldNodes
+        .where(
+          (node) =>
+              node.parentWorldNodeId == null && node.categoryId == categoryId,
+        )
+        .toList()
+      ..sort(_sort);
+    final collapsed = _collapsedCategories.contains(key);
+    return Column(
+      children: [
+        ListTile(
+          key: ValueKey('planning-selector-category-$key'),
+          dense: true,
+          leading: Icon(collapsed ? Icons.chevron_right : Icons.expand_more),
+          title: Text(name),
+          subtitle: Text('${roots.length} 个根节点'),
+          onTap: () => setState(() {
+            collapsed
+                ? _collapsedCategories.remove(key)
+                : _collapsedCategories.add(key);
+          }),
         ),
+        if (!collapsed)
+          for (final root in roots) _node(root, 0),
       ],
     );
+  }
+
+  Widget _node(WorldNode node, int depth) {
+    final children = widget.controller.worldNodes
+        .where((value) => value.parentWorldNodeId == node.id)
+        .toList()
+      ..sort(_sort);
+    final collapsed = _collapsedBranches.contains(node.id);
+    final completed = node.status == WorldNodeStatus.completed;
+    final occupied = widget.controller.hasCurrentPlan(node.id);
+    return Column(
+      children: [
+        ListTile(
+          key: ValueKey('select-world-node-${node.id}'),
+          contentPadding: EdgeInsets.only(left: 20.0 + depth * 22, right: 8),
+          dense: true,
+          enabled: !completed && !occupied,
+          leading: children.isEmpty
+              ? const Icon(Icons.subdirectory_arrow_right)
+              : IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                  onPressed: () => setState(() {
+                    collapsed
+                        ? _collapsedBranches.remove(node.id)
+                        : _collapsedBranches.add(node.id);
+                  }),
+                  icon: Icon(
+                    collapsed ? Icons.chevron_right : Icons.expand_more,
+                  ),
+                ),
+          title: Text(node.name),
+          subtitle: completed
+              ? const Text('已完成：只能查看历史，不能创建计划')
+              : occupied
+              ? const Text('已有当前计划：请先查看或结束该轮')
+              : null,
+          onTap: completed || occupied
+              ? null
+              : () => Navigator.pop(context, node),
+        ),
+        if (!collapsed)
+          for (final child in children) _node(child, depth + 1),
+      ],
+    );
+  }
+
+  static int _sort(WorldNode a, WorldNode b) {
+    final order = a.sortOrder.compareTo(b.sortOrder);
+    return order != 0 ? order : a.id.compareTo(b.id);
   }
 }
 
@@ -316,12 +355,15 @@ class PlanDetailPage extends StatelessWidget {
               onSelected: (value) {
                 if (value == 'rename') _renamePlan(context, plan);
                 if (value == 'end') _endPlan(context, plan, items);
+                if (value == 'delete') _deletePlan(context, plan);
               },
               itemBuilder: (_) => [
                 if (plan.isCurrent)
                   const PopupMenuItem(value: 'rename', child: Text('修改计划名称')),
                 if (plan.isCurrent)
                   const PopupMenuItem(value: 'end', child: Text('本轮计划结束')),
+                if (controller.canDeletePlan(plan))
+                  const PopupMenuItem(value: 'delete', child: Text('删除整个计划')),
               ],
             ),
           ],
@@ -431,6 +473,30 @@ class PlanDetailPage extends StatelessWidget {
       context,
       () => controller.setPlanStatus(plan, PlanStatus.ended),
     );
+    if (context.mounted) Navigator.pop(context);
+  }
+
+  Future<void> _deletePlan(BuildContext context, Plan plan) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('删除整个计划？'),
+        content: const Text('未进入执行的计划项会一并删除。世界节点会保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-plan'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除计划'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    await _guard(context, () => controller.deletePlan(plan));
     if (context.mounted) Navigator.pop(context);
   }
 

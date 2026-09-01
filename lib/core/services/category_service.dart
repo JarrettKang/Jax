@@ -64,7 +64,7 @@ class CategoryService {
   Future<void> reorder(String id, int index) =>
       repository.reorderCategory(id, index);
   Future<void> assign(String eventId, String? categoryId) =>
-      repository.setRootCategory(eventId, categoryId);
+      repository.setStandaloneCategory(eventId, categoryId);
 
   String _validate(String rawName) {
     final name = rawName.trim();

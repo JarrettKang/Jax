@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jax/core/entities/world_node_ids.dart';
 import 'package:jax/core/sync/resolved_sync_plan.dart';
 import 'package:jax/core/sync/sync_compare_engine.dart';
 import 'package:jax/core/sync/sync_contract.dart';
@@ -22,21 +21,29 @@ void main() {
     final upgraded = SyncSnapshot.fromJson(
       (jsonDecode(old.toJsonString()) as Map).cast<String, Object?>(),
     );
-    final nodeId = WorldNodeIds.fromLegacyEvent('legacy-a');
-    final current = _snapshot(
-      [_event('legacy-a', '检查超算'), _node(nodeId, '检查超算'), _link('legacy-a')],
-      lists: [
-        _eventList(['legacy-a']),
-        _worldList([nodeId]),
-      ],
-    );
-
     expect(upgraded.protocolVersion, syncProtocolVersion);
-    expect(upgraded.businessFingerprint, current.businessFingerprint);
+    expect(
+      upgraded.records.where(
+        (record) => record.kind == SyncEntityKind.legacyEventWorldNodeLink,
+      ),
+      isEmpty,
+    );
+    expect(
+      upgraded.records
+          .singleWhere((record) => record.kind == SyncEntityKind.event)
+          .payload['sourcePlanItemSyncId'],
+      isNull,
+    );
+    expect(
+      upgraded.lists.where(
+        (list) => list.kind == SyncListKind.eventSiblings,
+      ),
+      isEmpty,
+    );
     final preview = compare.compare(
       baseline: upgraded,
-      windows: current,
-      android: current,
+      windows: upgraded,
+      android: upgraded,
     );
     expect(preview.count(SyncComparisonKind.onlyWindows), 0);
     expect(preview.count(SyncComparisonKind.onlyAndroid), 0);
@@ -131,7 +138,7 @@ SyncSnapshot _snapshot(
   int protocol = syncProtocolVersion,
 }) => SyncSnapshot(
   protocolVersion: protocol,
-  schemaVersion: 14,
+  schemaVersion: protocol == syncProtocolVersion ? 16 : 14,
   exportedAtUtc: _instant,
   records: records,
   lists: lists,
@@ -154,12 +161,6 @@ SyncRecord _node(String id, String name, {String? parent}) =>
       'parentWorldNodeSyncId': parent,
       'categorySyncId': null,
       'order': 0,
-    });
-
-SyncRecord _link(String legacyId) =>
-    _record(SyncEntityKind.legacyEventWorldNodeLink, legacyId, {
-      'legacyEventSyncId': legacyId,
-      'worldNodeSyncId': WorldNodeIds.fromLegacyEvent(legacyId),
     });
 
 SyncRecord _record(

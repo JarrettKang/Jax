@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const expectedSchemaVersion = 14;
+const expectedSchemaVersion = 16;
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty ||
@@ -71,8 +71,10 @@ Future<void> _inspect(String path, {required bool requireCurrentSchema}) async {
       'routine_run_segments',
       'event_day_plans',
       'world_nodes',
-      'legacy_event_world_node_links',
+      'plans',
+      'plan_items',
       'sync_tombstones',
+      'dataset_metadata',
       'world_category_collapse_preferences',
       'routine_category_collapse_preferences',
     ];

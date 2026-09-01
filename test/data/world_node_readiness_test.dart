@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jax/core/entities/world_node_ids.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/sync/sqlite_sync_readiness.dart';
 
@@ -30,7 +29,7 @@ void main() {
   });
 
   test(
-    'readiness blocks cycles and non-deterministic migration mapping',
+    'readiness blocks WorldNode cycles',
     () async {
       const first = '11111111-1111-4111-8111-111111111111';
       const second = '22222222-2222-4222-8222-222222222222';
@@ -42,29 +41,8 @@ void main() {
         where: 'id = ?',
         whereArgs: [first],
       );
-      await app.database.insert('events', {
-        'id': 'legacy',
-        'name': '检查超算',
-        'status': 'paused',
-        'sort_order': 0,
-        'created_at_utc': 1,
-        'updated_at_utc': 1,
-      });
-      await app.database.insert('legacy_event_world_node_links', {
-        'id': 'legacy',
-        'legacy_event_id': 'legacy',
-        'world_node_id': first,
-        'created_at_utc': 1,
-        'updated_at_utc': 1,
-      });
-
       final issues = await SqliteSyncReadiness(app).validate();
       expect(issues.map((issue) => issue.code), contains('world-node-cycle'));
-      expect(
-        issues.map((issue) => issue.code),
-        contains('world-node-invalid-migration-mapping'),
-      );
-      expect(first, isNot(WorldNodeIds.fromLegacyEvent('legacy')));
     },
   );
 }

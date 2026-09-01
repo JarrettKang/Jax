@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
 
@@ -11,8 +10,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Jax'), findsOneWidget);
     await openWorldOverview(tester);
-    expect(find.byKey(const ValueKey('world-new-category')), findsOneWidget);
-    expect(find.text('你的世界还没有分类'), findsOneWidget);
+    expect(find.text('世界数据库不可用'), findsOneWidget);
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
     expect(find.text('这一天没有记录到执行时间'), findsOneWidget);

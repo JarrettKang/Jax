@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import '../../core/entities/category.dart';
+import '../../core/entities/category_palette.dart';
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
 import '../../core/entities/world_node.dart';
+import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
 import '../../core/repositories/planning_repository.dart';
 import '../../core/repositories/world_node_repository.dart';
@@ -71,6 +73,139 @@ class PlanningController extends ChangeNotifier {
   bool hasCurrentPlan(String worldNodeId) =>
       plans.any((plan) => plan.worldNodeId == worldNodeId && plan.isCurrent);
 
+  Plan? currentPlanFor(String worldNodeId) => plans
+      .where((plan) => plan.worldNodeId == worldNodeId && plan.isCurrent)
+      .firstOrNull;
+
+  bool hasEndedPlan(String worldNodeId) => plans.any(
+    (plan) => plan.worldNodeId == worldNodeId && plan.status == PlanStatus.ended,
+  );
+
+  Future<void> createCategory(String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty) throw const DomainFailure('分类名称不能为空');
+    if (categories.any((category) => category.name == name)) {
+      throw const DomainFailure('分类名称已存在');
+    }
+    final timestamp = now().toUtc();
+    await eventRepository.insertCategory(
+      Category(
+        id: newId(),
+        name: name,
+        sortOrder: categories.length,
+        colorKey: CategoryPalette.leastUsed(
+          categories.map((category) => category.colorKey),
+        ),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      ),
+    );
+    await load();
+  }
+
+  Future<void> renameCategory(Category category, String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty) throw const DomainFailure('分类名称不能为空');
+    if (categories.any(
+      (value) => value.id != category.id && value.name == name,
+    )) {
+      throw const DomainFailure('分类名称已存在');
+    }
+    await eventRepository.updateCategory(
+      Category(
+        id: category.id,
+        name: name,
+        sortOrder: category.sortOrder,
+        colorKey: category.colorKey,
+        createdAt: category.createdAt,
+        updatedAt: now().toUtc(),
+      ),
+    );
+    await load();
+  }
+
+  Future<void> deleteCategory(Category category) async {
+    await eventRepository.deleteCategory(category.id);
+    await load();
+  }
+
+  Future<void> moveCategory(Category category, int targetIndex) async {
+    await eventRepository.reorderCategory(category.id, targetIndex);
+    await load();
+  }
+
+  Future<void> createWorldNode(
+    String rawName, {
+    String? parentWorldNodeId,
+    String? categoryId,
+  }) async {
+    final name = rawName.trim();
+    if (name.isEmpty) throw const DomainFailure('世界节点名称不能为空');
+    final siblings = worldNodes.where(
+      (node) => parentWorldNodeId != null
+          ? node.parentWorldNodeId == parentWorldNodeId
+          : node.parentWorldNodeId == null && node.categoryId == categoryId,
+    );
+    final timestamp = now().toUtc();
+    await worldNodeRepository.insertWorldNode(
+      WorldNode(
+        id: newId(),
+        name: name,
+        status: WorldNodeStatus.inProgress,
+        parentWorldNodeId: parentWorldNodeId,
+        categoryId: parentWorldNodeId == null ? categoryId : null,
+        sortOrder: siblings.length,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      ),
+    );
+    await load();
+  }
+
+  Future<void> renameWorldNode(WorldNode node, String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty) throw const DomainFailure('世界节点名称不能为空');
+    await worldNodeRepository.updateWorldNode(
+      node.copyWith(name: name, updatedAt: now().toUtc()),
+    );
+    await load();
+  }
+
+  Future<void> setWorldNodeStatus(
+    WorldNode node,
+    WorldNodeStatus status,
+  ) async {
+    await worldNodeRepository.updateWorldNode(
+      node.copyWith(status: status, updatedAt: now().toUtc()),
+    );
+    await load();
+  }
+
+  Future<void> moveWorldNodeOrder(WorldNode node, int targetIndex) async {
+    await worldNodeRepository.reorderWorldNode(node.id, targetIndex);
+    await load();
+  }
+
+  Future<void> moveWorldNode(
+    WorldNode node, {
+    String? parentWorldNodeId,
+    String? categoryId,
+  }) async {
+    final siblings = worldNodes.where(
+      (value) => parentWorldNodeId != null
+          ? value.parentWorldNodeId == parentWorldNodeId
+          : value.parentWorldNodeId == null && value.categoryId == categoryId,
+    );
+    await worldNodeRepository.reparentWorldNode(
+      node.id,
+      parentWorldNodeId,
+      parentWorldNodeId == null ? categoryId : null,
+      siblings.length,
+      now().toUtc(),
+    );
+    await load();
+  }
+
   Future<Plan> createPlan(WorldNode node) async {
     final plan = await planningRepository.createPlan(
       id: newId(),
@@ -88,6 +223,17 @@ class PlanningController extends ChangeNotifier {
 
   Future<void> setPlanStatus(Plan plan, PlanStatus status) async {
     await planningRepository.setPlanStatus(plan.id, status, now());
+    await load();
+  }
+
+  bool canDeletePlan(Plan plan) => itemsFor(plan.id).every(
+    (item) =>
+        item.status != PlanItemStatus.dispatched &&
+        item.status != PlanItemStatus.done,
+  );
+
+  Future<void> deletePlan(Plan plan) async {
+    await planningRepository.deletePlan(plan.id);
     await load();
   }
 

@@ -14,9 +14,6 @@ class DeleteEvent {
         event.status != EventStatus.waiting) {
       throw const DomainFailure('当前状态不允许删除');
     }
-    if ((await repository.getDirectChildren(id)).isNotEmpty) {
-      throw const DomainFailure('该事件仍包含下层事件，请先解除或调整层级关系');
-    }
     await repository.deleteEvent(id);
   }
 }

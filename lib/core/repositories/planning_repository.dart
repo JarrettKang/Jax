@@ -14,6 +14,7 @@ abstract interface class PlanningRepository {
   });
   Future<void> renamePlan(String id, String? title, DateTime now);
   Future<void> setPlanStatus(String id, PlanStatus status, DateTime now);
+  Future<void> deletePlan(String id);
 
   Future<PlanItem> createPlanItem({
     required String id,

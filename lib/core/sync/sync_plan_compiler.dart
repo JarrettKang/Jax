@@ -50,6 +50,7 @@ class SyncPlanCompiler {
     final expected = SyncSnapshot(
       protocolVersion: windows.protocolVersion,
       schemaVersion: windows.schemaVersion,
+      datasetGeneration: windows.datasetGeneration,
       exportedAtUtc: windows.exportedAtUtc.isAfter(android.exportedAtUtc)
           ? windows.exportedAtUtc
           : android.exportedAtUtc,
@@ -212,7 +213,7 @@ class SyncPlanCompiler {
     SyncRecord? find(SyncEntityKind kind) => records['${kind.name}:$id'];
     final record = switch (list.kind) {
       SyncListKind.eventCategories => find(SyncEntityKind.eventCategory),
-      SyncListKind.eventSiblings => find(SyncEntityKind.event),
+      SyncListKind.eventSiblings => null,
       SyncListKind.routineCategories => find(SyncEntityKind.routineCategory),
       SyncListKind.routines => find(SyncEntityKind.routine),
       SyncListKind.eventDayPlans =>
@@ -229,8 +230,7 @@ class SyncPlanCompiler {
     };
     if (record == null || record.isDeleted) return false;
     return switch (list.kind) {
-      SyncListKind.eventSiblings =>
-        (record.payload['parentSyncId'] ?? 'root') == list.scopeId,
+      SyncListKind.eventSiblings => false,
       SyncListKind.routines =>
         (record.payload['routineCategorySyncId'] ?? 'uncategorized') ==
             list.scopeId,

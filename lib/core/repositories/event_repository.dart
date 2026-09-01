@@ -1,6 +1,6 @@
+import '../entities/category.dart';
 import '../entities/jax_event.dart';
 import '../entities/run_segment.dart';
-import '../entities/category.dart';
 
 abstract interface class EventRepository {
   Future<void> insertEvent(JaxEvent event);
@@ -17,27 +17,17 @@ abstract interface class EventRepository {
   Future<void> deleteClosedRunSegment(String id);
   Future<void> pauseEvent(JaxEvent event, RunSegment segment);
   Future<void> restoreCompletedEvents(List<JaxEvent> events);
-  Future<JaxEvent?> getParent(String eventId);
-  Future<List<JaxEvent>> getDirectChildren(String parentEventId);
-  Future<List<JaxEvent>> getOrderedSiblings(String eventId);
-  Future<List<JaxEvent>> getOrderedTopLevelEvents();
-  Future<void> reorderSibling(String eventId, int targetIndex);
-  Future<void> updateParent(
-    String eventId,
-    String? parentEventId,
-    DateTime updatedAt,
-  );
   Future<void> switchRunningEvent({
     required JaxEvent pausedRunning,
     required RunSegment closedSegment,
     required JaxEvent runningTarget,
     required RunSegment newSegment,
-    required List<JaxEvent> pausedAncestors,
   });
+  Future<String?> getEffectiveCategoryId(String eventId);
   Future<List<Category>> getCategories();
   Future<void> insertCategory(Category category);
   Future<void> updateCategory(Category category);
   Future<void> deleteCategory(String id);
   Future<void> reorderCategory(String id, int targetIndex);
-  Future<void> setRootCategory(String eventId, String? categoryId);
+  Future<void> setStandaloneCategory(String eventId, String? categoryId);
 }

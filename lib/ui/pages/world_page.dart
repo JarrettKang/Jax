@@ -1,19 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/entities/category.dart';
-import '../../core/entities/jax_event.dart';
-import '../../core/entities/world_display_state.dart';
-import '../../core/entities/event_status.dart';
+import '../../core/entities/plan.dart';
+import '../../core/entities/world_node.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
-import '../controllers/event_controller.dart';
-import '../theme/category_palette_colors.dart';
-import '../widgets/category_selector.dart';
-import '../widgets/category_color_picker.dart';
-import '../widgets/category_edit_dialog.dart';
-import '../widgets/event_more_menu_button.dart';
-import '../widgets/event_reorder_buttons.dart';
-import 'event_hierarchy_dialog.dart';
-import 'history_detail_dialog.dart';
+import '../controllers/planning_controller.dart';
+import 'planning_page.dart';
 
 class WorldPage extends StatefulWidget {
   const WorldPage({
@@ -21,1171 +13,478 @@ class WorldPage extends StatefulWidget {
     required this.worldCategoryCollapseStore,
     super.key,
   });
-  final EventController controller;
+
+  final PlanningController controller;
   final WorldCategoryCollapseStore worldCategoryCollapseStore;
+
   @override
   State<WorldPage> createState() => _WorldPageState();
 }
 
 class _WorldPageState extends State<WorldPage> {
-  final Set<String> _collapsedEvents = {};
-  final Set<String> _selectedEventIds = {};
-  var _showingDetail = false;
-  var _selecting = false;
-  String? _selectedCategoryId;
+  final Set<String> _collapsedBranches = {};
+  Set<String> _collapsedCategories = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.load();
+    widget.worldCategoryCollapseStore.loadCollapsedSectionKeys().then((value) {
+      if (mounted) setState(() => _collapsedCategories = value);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
-      if (widget.controller.loading) {
+      final controller = widget.controller;
+      if (controller.loading && controller.worldNodes.isEmpty) {
         return const Center(child: CircularProgressIndicator());
       }
-      final roots = widget.controller.worldEvents
-          .where((e) => e.parentEventId == null)
-          .toList();
-      final categoriesById = {
-        for (final category in widget.controller.categories)
-          category.id: category,
-      };
-      final groups = <String?, List<JaxEvent>>{};
-      for (final event in roots) {
-        // `null` is the deliberate representation of the virtual
-        // "未分类" section.  A stale category reference is also displayed
-        // there: it must never make a World rebuild depend on a record that
-        // no longer exists (for example while a category deletion reloads).
-        final groupId = categoriesById.containsKey(event.categoryId)
-            ? event.categoryId
-            : null;
-        groups.putIfAbsent(groupId, () => []).add(event);
-      }
-      final overviewKeys = <String?>[
-        ...widget.controller.categories.map((c) => c.id),
-        if (groups.containsKey(null)) null,
-      ];
-      if (_showingDetail &&
-          _selectedCategoryId != null &&
-          !categoriesById.containsKey(_selectedCategoryId)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _leaveDetail();
-        });
-        return _overview(context, overviewKeys, groups, categoriesById);
-      }
-      return _showingDetail
-          ? _detail(
-              context,
-              _selectedCategoryId,
-              categoriesById[_selectedCategoryId],
-              groups[_selectedCategoryId] ?? const <JaxEvent>[],
-            )
-          : _overview(context, overviewKeys, groups, categoriesById);
-    },
-  );
-
-  Widget _overview(
-    BuildContext context,
-    List<String?> keys,
-    Map<String?, List<JaxEvent>> groups,
-    Map<String, Category> categoriesById,
-  ) => Center(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 1120),
-      child: ListView(
-        key: const ValueKey('world-overview'),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonalIcon(
-              key: const ValueKey('world-new-category'),
-              onPressed: () => _createCategory(context),
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('新建分类'),
-            ),
-          ),
-          if (keys.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 72),
-              child: Center(child: Text('你的世界还没有分类')),
-            )
-          else ...[
-            const SizedBox(height: 20),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = constraints.maxWidth >= 980
-                    ? 4
-                    : constraints.maxWidth >= 700
-                    ? 3
-                    : 2;
-                final largeText =
-                    MediaQuery.textScalerOf(context).scale(1) > 1.2;
-                return GridView.builder(
-                  key: const ValueKey('world-category-grid'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    mainAxisExtent: largeText ? 112 : 92,
-                  ),
-                  itemCount: keys.length,
-                  itemBuilder: (context, index) {
-                    final id = keys[index];
-                    final category = id == null ? null : categoriesById[id];
-                    final roots = groups[id] ?? const <JaxEvent>[];
-                    final eventCount = roots.fold<int>(
-                      0,
-                      (count, root) => count + 1 + _descendantCount(root.id),
-                    );
-                    final active = _categoryContainsRunning(roots);
-                    return _CategoryOverviewCard(
-                      key: ValueKey('world-category-$id'),
-                      categoryId: id,
-                      name: category?.name ?? '未分类',
-                      colorKey: category?.colorKey,
-                      eventCount: eventCount,
-                      rootCount: roots.length,
-                      active: active,
-                      onTap: () => _enterDetail(id),
-                      menu: category == null
-                          ? null
-                          : _categoryMenu(
-                              context,
-                              category,
-                              widget.controller.categories.indexOf(category),
-                            ),
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
-
-  Widget _detail(
-    BuildContext context,
-    String? categoryId,
-    Category? category,
-    List<JaxEvent> roots,
-  ) => ListView(
-    key: const ValueKey('world-tree'),
-    padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-    children: [
-      Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 4,
-        runSpacing: 4,
-        children: [
-          TextButton.icon(
-            key: const ValueKey('world-back-overview'),
-            onPressed: _leaveDetail,
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('世界'),
-          ),
-          const Icon(Icons.chevron_right, size: 18),
-          CategoryColorDot(colorKey: category?.colorKey),
-          Text(
-            category?.name ?? '未分类',
-            key: const ValueKey('world-detail-title'),
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      _selecting
-          ? _selectionToolbar(context, roots)
-          : Wrap(
-              spacing: 8,
-              runSpacing: 8,
+      return Scaffold(
+        body: ListView(
+          key: const ValueKey('world-node-overview'),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 96),
+          children: [
+            Row(
               children: [
-                FilledButton.icon(
-                  key: const ValueKey('world-new-event'),
-                  onPressed: () => _createTopLevelEvent(context, categoryId),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新建事件'),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('world-batch-select'),
-                  onPressed: () => setState(() => _selecting = true),
-                  icon: const Icon(Icons.checklist),
-                  label: const Text('批量选择'),
+                Text('世界', style: Theme.of(context).textTheme.headlineSmall),
+                const Spacer(),
+                TextButton.icon(
+                  key: const ValueKey('add-world-category'),
+                  onPressed: _addCategory,
+                  icon: const Icon(Icons.create_new_folder_outlined),
+                  label: const Text('添加分类'),
                 ),
               ],
             ),
-      if (roots.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 72),
-          child: Center(child: Text('这个分类还没有事件')),
-        )
-      else ...[
-        const SizedBox(height: 16),
-        for (final root in roots) ..._tree(context, root),
-      ],
-    ],
-  );
-
-  Widget _categoryMenu(BuildContext context, Category category, int index) =>
-      PopupMenuButton<_CatAction>(
-        key: ValueKey('world-category-more-${category.id}'),
-        tooltip: '分类操作',
-        onSelected: (action) => _catAction(context, category, index, action),
-        itemBuilder: (_) => [
-          const PopupMenuItem(
-            value: _CatAction.rename,
-            child: ListTile(leading: Icon(Icons.edit), title: Text('编辑分类')),
-          ),
-          if (index > 0)
-            const PopupMenuItem(
-              value: _CatAction.up,
-              child: ListTile(
-                leading: Icon(Icons.arrow_upward),
-                title: Text('上移'),
-              ),
-            ),
-          if (index < widget.controller.categories.length - 1)
-            const PopupMenuItem(
-              value: _CatAction.down,
-              child: ListTile(
-                leading: Icon(Icons.arrow_downward),
-                title: Text('下移'),
-              ),
-            ),
-          const PopupMenuItem(
-            value: _CatAction.delete,
-            child: ListTile(
-              leading: Icon(Icons.delete_outline),
-              title: Text('删除分类'),
-            ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            for (final category in <Category?>[
+              ...controller.categories,
+              null,
+            ])
+              _categorySection(category),
+          ],
+        ),
       );
-
-  void _enterDetail(String? categoryId) => setState(() {
-    _selectedCategoryId = categoryId;
-    _showingDetail = true;
-    _selecting = false;
-    _selectedEventIds.clear();
-  });
-
-  void _leaveDetail() => setState(() {
-    _showingDetail = false;
-    _selectedCategoryId = null;
-    _selecting = false;
-    _selectedEventIds.clear();
-  });
-
-  Widget _selectionToolbar(BuildContext context, List<JaxEvent> roots) => Wrap(
-    key: const ValueKey('world-batch-toolbar'),
-    crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      Text(
-        '已选择 ${_selectedEventIds.length} 项',
-        key: const ValueKey('world-batch-count'),
-      ),
-      FilledButton.icon(
-        key: const ValueKey('world-batch-add-today'),
-        onPressed: _selectedEventIds.isEmpty
-            ? null
-            : () => _addSelectedToToday(context, roots),
-        icon: const Icon(Icons.today),
-        label: const Text('加入今日'),
-      ),
-      TextButton(
-        key: const ValueKey('world-batch-cancel'),
-        onPressed: () => setState(() {
-          _selecting = false;
-          _selectedEventIds.clear();
-        }),
-        child: const Text('取消'),
-      ),
-    ],
+    },
   );
 
-  Future<void> _addSelectedToToday(
-    BuildContext context,
-    List<JaxEvent> roots,
-  ) async {
-    final ids = [
-      for (final root in roots)
-        for (final event in _visibleTreeEvents(root))
-          if (_selectedEventIds.contains(event.id)) event.id,
+  Widget _categorySection(Category? category) {
+    final roots = widget.controller.worldNodes
+        .where(
+          (node) =>
+              node.parentWorldNodeId == null && node.categoryId == category?.id,
+        )
+        .toList()
+      ..sort(_nodeOrder);
+    final key = WorldCategoryCollapseStore.sectionKey(category?.id);
+    final collapsed = _collapsedCategories.contains(key);
+    return Card(
+      key: ValueKey('world-category-${category?.id ?? 'unclassified'}'),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(
+              collapsed ? Icons.chevron_right : Icons.expand_more,
+              color: category == null
+                  ? Theme.of(context).colorScheme.outline
+                  : Theme.of(context).colorScheme.primary,
+            ),
+            title: Text(category?.name ?? '未分类'),
+            subtitle: Text('${roots.length} 个根节点'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: ValueKey(
+                    'add-root-${category?.id ?? 'unclassified'}',
+                  ),
+                  tooltip: '添加根节点',
+                  onPressed: () => _addNode(categoryId: category?.id),
+                  icon: const Icon(Icons.add),
+                ),
+                if (category != null)
+                  PopupMenuButton<String>(
+                    key: ValueKey('world-category-more-${category.id}'),
+                    onSelected: (action) => _categoryAction(category, action),
+                    itemBuilder: (_) => _categoryActions(category),
+                  ),
+              ],
+            ),
+            onTap: () async {
+              setState(() {
+                collapsed
+                    ? _collapsedCategories.remove(key)
+                    : _collapsedCategories.add(key);
+              });
+              await widget.worldCategoryCollapseStore.setCollapsed(
+                key,
+                !collapsed,
+              );
+            },
+          ),
+          if (!collapsed)
+            if (roots.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 18),
+                child: Text('暂无世界节点'),
+              )
+            else
+              for (final root in roots) _nodeRow(root, 0),
+        ],
+      ),
+    );
+  }
+
+  Widget _nodeRow(WorldNode node, int depth) {
+    final children = widget.controller.worldNodes
+        .where((value) => value.parentWorldNodeId == node.id)
+        .toList()
+      ..sort(_nodeOrder);
+    final collapsed = _collapsedBranches.contains(node.id);
+    final completed = node.status == WorldNodeStatus.completed;
+    return Column(
+      children: [
+        ListTile(
+          key: ValueKey('world-node-${node.id}'),
+          contentPadding: EdgeInsets.only(left: 12.0 + depth * 24, right: 8),
+          leading: children.isEmpty
+              ? Icon(
+                  completed ? Icons.check_circle_outline : Icons.circle_outlined,
+                  size: 20,
+                )
+              : IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                  onPressed: () => setState(() {
+                    collapsed
+                        ? _collapsedBranches.remove(node.id)
+                        : _collapsedBranches.add(node.id);
+                  }),
+                  icon: Icon(
+                    collapsed ? Icons.chevron_right : Icons.expand_more,
+                  ),
+                ),
+          title: Text(
+            node.name,
+            style: completed
+                ? const TextStyle(decoration: TextDecoration.lineThrough)
+                : null,
+          ),
+          subtitle: Text(_planningState(node)),
+          trailing: PopupMenuButton<String>(
+            key: ValueKey('world-node-more-${node.id}'),
+            onSelected: (action) => _nodeAction(node, action),
+            itemBuilder: (_) => _actionsFor(node),
+          ),
+        ),
+        if (!collapsed)
+          for (final child in children) _nodeRow(child, depth + 1),
+      ],
+    );
+  }
+
+  String _planningState(WorldNode node) {
+    if (node.status == WorldNodeStatus.completed) return '已完成 · 仅可查看历史计划';
+    if (widget.controller.currentPlanFor(node.id) != null) return '已有当前计划';
+    if (widget.controller.hasEndedPlan(node.id)) return '上一轮已结束';
+    return '尚无计划';
+  }
+
+  List<PopupMenuEntry<String>> _actionsFor(WorldNode node) {
+    final completed = node.status == WorldNodeStatus.completed;
+    final current = widget.controller.currentPlanFor(node.id);
+    final ended = widget.controller.plans
+        .where(
+          (plan) =>
+              plan.worldNodeId == node.id && plan.status == PlanStatus.ended,
+        )
+        .toList();
+    final siblings = _siblings(node);
+    final index = siblings.indexWhere((value) => value.id == node.id);
+    return [
+      if (node.status == WorldNodeStatus.inProgress && current == null)
+        PopupMenuItem(
+          value: 'create-plan',
+          child: Text(ended.isEmpty ? '添加计划' : '添加新一轮计划'),
+        ),
+      if (current != null)
+        const PopupMenuItem(value: 'open-current', child: Text('查看当前计划')),
+      if (ended.isNotEmpty)
+        const PopupMenuItem(value: 'open-history', child: Text('查看历史计划')),
+      const PopupMenuDivider(),
+      const PopupMenuItem(value: 'add-child', child: Text('添加子节点')),
+      const PopupMenuItem(value: 'rename', child: Text('重命名')),
+      if (index > 0)
+        const PopupMenuItem(value: 'move-up', child: Text('上移')),
+      if (index >= 0 && index < siblings.length - 1)
+        const PopupMenuItem(value: 'move-down', child: Text('下移')),
+      const PopupMenuItem(value: 'reparent', child: Text('移动到…')),
+      PopupMenuItem(
+        value: completed ? 'restore' : 'complete',
+        child: Text(completed ? '恢复节点' : '完成节点'),
+      ),
     ];
-    final selectedCount = ids.length;
-    final error = await widget.controller.addManyToToday(ids);
-    if (!mounted || !context.mounted) return;
-    if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  Future<void> _nodeAction(WorldNode node, String action) async {
+    if (action == 'add-child') return _addNode(parent: node);
+    if (action == 'rename') return _renameNode(node);
+    if (action == 'move-up' || action == 'move-down') {
+      final siblings = _siblings(node);
+      final index = siblings.indexWhere((value) => value.id == node.id);
+      return _guard(
+        () => widget.controller.moveWorldNodeOrder(
+          node,
+          action == 'move-up' ? index - 1 : index + 1,
+        ),
+      );
+    }
+    if (action == 'reparent') return _moveNode(node);
+    if (action == 'complete' || action == 'restore') {
+      return _guard(
+        () => widget.controller.setWorldNodeStatus(
+          node,
+          action == 'complete'
+              ? WorldNodeStatus.completed
+              : WorldNodeStatus.inProgress,
+        ),
+      );
+    }
+    if (action == 'create-plan') {
+      await _guard(() async {
+        final plan = await widget.controller.createPlan(node);
+        if (mounted) await _openPlan(plan);
+      });
       return;
     }
-    setState(() {
-      _selecting = false;
-      _selectedEventIds.clear();
-    });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('已加入今日 $selectedCount 项')));
-  }
-
-  int _descendantCount(String rootId) => widget.controller.worldEvents
-      .where((event) => event.id != rootId && _under(event, rootId))
-      .length;
-
-  bool _categoryContainsRunning(List<JaxEvent> roots) => roots.any(
-    (root) => widget.controller.worldEvents.any(
-      (event) =>
-          event.status == EventStatus.running &&
-          (event.id == root.id || _under(event, root.id)),
-    ),
-  );
-
-  Iterable<Widget> _tree(BuildContext c, JaxEvent root) {
-    return [for (final e in _visibleTreeEvents(root)) _node(c, e)];
-  }
-
-  Iterable<JaxEvent> _visibleTreeEvents(JaxEvent root) {
-    final result = <JaxEvent>[];
-    final hidden = <String>{};
-    for (final e in widget.controller.worldEvents.where(
-      (x) => x.id == root.id || _under(x, root.id),
-    )) {
-      if (e.id != root.id && hidden.contains(e.parentEventId)) {
-        hidden.add(e.id);
-        continue;
-      }
-      result.add(e);
-      if (_collapsedEvents.contains(e.id)) hidden.add(e.id);
+    if (action == 'open-current') {
+      final plan = widget.controller.currentPlanFor(node.id);
+      if (plan != null) await _openPlan(plan);
+      return;
     }
-    return result;
-  }
-
-  bool _under(JaxEvent e, String root) {
-    var p = e.parentEventId;
-    final seen = <String>{};
-    while (p != null && seen.add(p)) {
-      if (p == root) return true;
-      p = widget.controller.worldEvents
-          .where((x) => x.id == p)
-          .firstOrNull
-          ?.parentEventId;
+    if (action == 'open-history') {
+      final plans = widget.controller.plans
+          .where(
+            (plan) =>
+                plan.worldNodeId == node.id && plan.status == PlanStatus.ended,
+          )
+          .toList()
+        ..sort((a, b) => b.roundNumber.compareTo(a.roundNumber));
+      if (plans.isNotEmpty) await _openPlan(plans.first);
     }
-    return false;
   }
 
-  Widget _node(BuildContext c, JaxEvent e) {
-    final child = widget.controller.hasDirectChildren(e.id);
-    final displayState = widget.controller.worldDisplayStateFor(e.id);
-    final state = _state(displayState);
-    final depth = widget.controller.hierarchyDepthFor(e.id);
-    final root = e.parentEventId == null;
-    final active =
-        displayState == WorldDisplayState.running ||
-        displayState == WorldDisplayState.progressing;
-    final completed = displayState == WorldDisplayState.completed;
-    final planned = widget.controller.isPlannedToday(e.id);
-    final selectable = e.status != EventStatus.completed && !planned;
-    final actions = <PopupMenuEntry<_WorldAction>>[
-      if (e.status != EventStatus.completed &&
-          !widget.controller.isPlannedToday(e.id))
-        PopupMenuItem(
-          key: ValueKey('world-add-today-${e.id}'),
-          value: _WorldAction.addToday,
-          child: const ListTile(
-            leading: Icon(Icons.today),
-            title: Text('加入今日'),
-          ),
-        ),
-      if (widget.controller.isPlannedToday(e.id) &&
-          e.status != EventStatus.running &&
-          e.status != EventStatus.completed)
-        PopupMenuItem(
-          key: ValueKey('world-remove-today-${e.id}'),
-          value: _WorldAction.removeToday,
-          child: const ListTile(
-            leading: Icon(Icons.today_outlined),
-            title: Text('移出今日'),
-          ),
-        ),
-      if (e.status == EventStatus.pending)
-        PopupMenuItem(
-          key: ValueKey('start-${e.id}'),
-          value: _WorldAction.start,
-          child: ListTile(leading: Icon(Icons.play_arrow), title: Text('开始')),
-        ),
-      if (e.status == EventStatus.paused || e.status == EventStatus.waiting)
-        PopupMenuItem(
-          key: ValueKey('resume-${e.id}'),
-          value: _WorldAction.resume,
-          child: ListTile(leading: Icon(Icons.play_arrow), title: Text('恢复')),
-        ),
-      if (e.status == EventStatus.running)
-        PopupMenuItem(
-          key: ValueKey('pause-${e.id}'),
-          value: _WorldAction.pause,
-          child: ListTile(leading: Icon(Icons.pause), title: Text('暂停')),
-        ),
-      if (e.status == EventStatus.completed)
-        PopupMenuItem(
-          key: ValueKey('world-restore-${e.id}'),
-          value: _WorldAction.restore,
-          child: ListTile(leading: Icon(Icons.restore), title: Text('恢复事件')),
-        ),
-      if (e.status == EventStatus.completed)
-        PopupMenuItem(
-          key: ValueKey('world-investment-${e.id}'),
-          value: _WorldAction.investment,
-          child: ListTile(
-            leading: Icon(Icons.analytics_outlined),
-            title: Text('投入详情'),
-          ),
-        ),
-      if (e.status == EventStatus.running || e.status == EventStatus.waiting)
-        PopupMenuItem(
-          key: ValueKey('complete-${e.id}'),
-          value: _WorldAction.complete,
-          child: const ListTile(leading: Icon(Icons.check), title: Text('完成')),
-        ),
-      if (e.status == EventStatus.running || e.status == EventStatus.paused)
-        PopupMenuItem(
-          key: ValueKey('wait-${e.id}'),
-          value: _WorldAction.wait,
-          child: const ListTile(
-            leading: Icon(Icons.hourglass_empty),
-            title: Text('设为等待'),
-          ),
-        ),
-      if (e.status != EventStatus.completed)
-        PopupMenuItem(
-          key: ValueKey('world-create-child-${e.id}'),
-          value: _WorldAction.createChild,
-          child: const ListTile(
-            leading: Icon(Icons.add),
-            title: Text('新建下层事件'),
-          ),
-        ),
-      PopupMenuItem(
-        key: ValueKey('hierarchy-${e.id}'),
-        value: _WorldAction.hierarchy,
-        child: ListTile(
-          leading: Icon(Icons.account_tree_outlined),
-          title: Text('层级详情'),
+  Future<void> _openPlan(Plan plan) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlanDetailPage(
+          controller: widget.controller,
+          planId: plan.id,
         ),
       ),
-      PopupMenuItem(
-        key: ValueKey('edit-${e.id}'),
-        value: _WorldAction.edit,
-        child: ListTile(leading: Icon(Icons.edit), title: Text('编辑事件')),
-      ),
-      if (e.parentEventId == null)
-        PopupMenuItem(
-          key: ValueKey('world-move-category-${e.id}'),
-          value: _WorldAction.category,
-          child: const ListTile(
-            leading: Icon(Icons.folder_outlined),
-            title: Text('移动到分类…'),
-          ),
-        ),
-      if (e.status == EventStatus.completed && !child)
-        PopupMenuItem(
-          key: ValueKey('world-delete-history-${e.id}'),
-          value: _WorldAction.deleteHistory,
-          child: ListTile(
-            leading: Icon(Icons.delete_outline),
-            title: Text('删除历史记录'),
-          ),
-        ),
-      if (e.status != EventStatus.running &&
-          e.status != EventStatus.completed &&
-          !child)
-        PopupMenuItem(
-          key: ValueKey('delete-${e.id}'),
-          value: _WorldAction.delete,
-          child: const ListTile(
-            leading: Icon(Icons.delete_outline),
-            title: Text('删除事件'),
-          ),
-        ),
+    );
+    await widget.controller.load();
+  }
+
+  Future<void> _addCategory() async {
+    final name = await _nameDialog('添加分类');
+    if (name != null) await _guard(() => widget.controller.createCategory(name));
+  }
+
+  List<PopupMenuEntry<String>> _categoryActions(Category category) {
+    final index = widget.controller.categories.indexWhere(
+      (value) => value.id == category.id,
+    );
+    return [
+      const PopupMenuItem(value: 'rename', child: Text('重命名分类')),
+      if (index > 0)
+        const PopupMenuItem(value: 'move-up', child: Text('分类上移')),
+      if (index >= 0 && index < widget.controller.categories.length - 1)
+        const PopupMenuItem(value: 'move-down', child: Text('分类下移')),
+      const PopupMenuItem(value: 'delete', child: Text('删除分类')),
     ];
-    return _WorldEventNode(
-      key: ValueKey('world-node-${e.id}'),
-      depth: depth,
-      root: root,
-      active: active,
-      completed: completed,
-      child: _WorldNodeRow(
-        root: root,
-        active: active,
-        completed: completed,
-        leading: _selecting
-            ? Checkbox(
-                key: ValueKey('world-batch-checkbox-${e.id}'),
-                value: _selectedEventIds.contains(e.id),
-                onChanged: selectable
-                    ? (selected) => setState(() {
-                        if (selected == true) {
-                          _selectedEventIds.add(e.id);
-                        } else {
-                          _selectedEventIds.remove(e.id);
-                        }
-                      })
-                    : null,
-              )
-            : child
-            ? IconButton(
-                key: ValueKey('world-toggle-${e.id}'),
-                tooltip: _collapsedEvents.contains(e.id) ? '展开下层事件' : '折叠下层事件',
-                icon: Icon(
-                  _collapsedEvents.contains(e.id)
-                      ? Icons.chevron_right
-                      : Icons.expand_more,
-                ),
-                onPressed: () => setState(
-                  () => _collapsedEvents.contains(e.id)
-                      ? _collapsedEvents.remove(e.id)
-                      : _collapsedEvents.add(e.id),
-                ),
-              )
-            : const SizedBox(width: 48, height: 48),
-        name: e.name,
-        statusIcon: state.$1,
-        statusLabel: !_selecting
-            ? state.$2
-            : planned
-            ? '${state.$2} · 已在今日'
-            : completed
-            ? '${state.$2} · 不可加入'
-            : state.$2,
-        trailing: _selecting
-            ? const SizedBox(width: 8, height: 48)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  EventReorderButtons(
-                    controller: widget.controller,
-                    eventId: e.id,
-                    upKey: ValueKey('world-move-up-${e.id}'),
-                    downKey: ValueKey('world-move-down-${e.id}'),
-                    compact: true,
-                  ),
-                  EventMoreMenuButton<_WorldAction>(
-                    key: ValueKey('world-more-${e.id}'),
-                    compact: true,
-                    onSelected: (a) => _select(c, e, a),
-                    itemBuilder: (_) => actions,
-                  ),
-                ],
-              ),
-      ),
-    );
   }
 
-  (IconData, String) _state(WorldDisplayState s) => switch (s) {
-    WorldDisplayState.pending => (Icons.radio_button_unchecked, '未开始'),
-    WorldDisplayState.paused => (Icons.pause_circle_outline, '已暂停'),
-    WorldDisplayState.running => (Icons.radio_button_checked, '正在执行'),
-    WorldDisplayState.progressing => (Icons.adjust, '推进中'),
-    WorldDisplayState.waiting => (Icons.hourglass_empty, '等待中'),
-    WorldDisplayState.completed => (Icons.check_circle_outline, '已完成'),
-  };
-  void _select(BuildContext c, JaxEvent e, _WorldAction a) {
-    switch (a) {
-      case _WorldAction.hierarchy:
-        showEventHierarchyDialog(c, controller: widget.controller, event: e);
-      case _WorldAction.createChild:
-        _createChildEvent(c, e);
-      case _WorldAction.edit:
-        _edit(c, e);
-      case _WorldAction.category:
-        _assign(c, e);
-      case _WorldAction.restore:
-        _confirmRestore(c, e);
-      case _WorldAction.investment:
-        showHistoryDetailDialog(c, controller: widget.controller, event: e);
-      case _WorldAction.deleteHistory:
-        _confirmDeleteHistory(c, e);
-      case _WorldAction.addToday:
-        widget.controller.addToToday(e.id);
-      case _WorldAction.removeToday:
-        widget.controller.removeFromToday(e.id);
-      case _WorldAction.start:
-        widget.controller.start(e.id);
-      case _WorldAction.resume:
-        widget.controller.resume(e.id);
-      case _WorldAction.pause:
-        widget.controller.pause(e.id);
-      case _WorldAction.complete:
-        widget.controller.complete(e.id);
-      case _WorldAction.wait:
-        widget.controller.wait(e.id);
-      case _WorldAction.delete:
-        _confirmDelete(c, e);
-    }
-  }
-
-  Future<void> _confirmRestore(BuildContext c, JaxEvent e) async {
-    final confirmed = await showDialog<bool>(
-      context: c,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('恢复事件'),
-        content: Text('恢复“${e.name}”后，该事件将重新进入事件列表，原有执行记录会保留。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('恢复事件'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      final error = await widget.controller.restore(e.id);
-      if (error != null && c.mounted) {
-        ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(error)));
+  Future<void> _categoryAction(Category category, String action) async {
+    if (action == 'rename') {
+      final name = await _nameDialog('重命名分类', initial: category.name);
+      if (name != null) {
+        await _guard(() => widget.controller.renameCategory(category, name));
       }
+      return;
     }
-  }
-
-  Future<void> _confirmDeleteHistory(BuildContext c, JaxEvent e) async {
-    final confirmed = await showDialog<bool>(
-      context: c,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('删除历史记录'),
-        content: Text('确定删除“${e.name}”及其执行记录吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      final error = await widget.controller.deleteHistory(e.id);
-      if (error != null && c.mounted) {
-        ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(error)));
-      }
+    if (action == 'move-up' || action == 'move-down') {
+      final index = widget.controller.categories.indexWhere(
+        (value) => value.id == category.id,
+      );
+      await _guard(
+        () => widget.controller.moveCategory(
+          category,
+          action == 'move-up' ? index - 1 : index + 1,
+        ),
+      );
+      return;
     }
-  }
-
-  Future<void> _edit(BuildContext c, JaxEvent e) async {
-    final n = await _name(c, '编辑事件', e.name);
-    if (n != null) await widget.controller.edit(e.id, n);
-  }
-
-  Future<void> _createCategory(BuildContext c) async {
-    await showDialog<void>(
-      context: c,
-      builder: (_) => CategoryEditDialog(
-        title: '新建分类',
-        initialColorKey: widget.controller.recommendedCategoryColorKey,
-        onSave: (name, colorKey) =>
-            widget.controller.createCategory(name, colorKey: colorKey),
-      ),
-    );
-  }
-
-  Future<void> _createTopLevelEvent(BuildContext c, String? categoryId) =>
-      _showCreateEventDialog(c, rootCategoryId: categoryId);
-
-  Future<void> _createChildEvent(BuildContext c, JaxEvent parent) =>
-      _showCreateEventDialog(c, parent: parent);
-
-  Future<void> _showCreateEventDialog(
-    BuildContext c, {
-    JaxEvent? parent,
-    String? rootCategoryId,
-  }) async {
-    final text = TextEditingController();
-    String? error;
-    await showDialog<void>(
-      context: c,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final inheritedCategoryId = parent == null
-              ? null
-              : _rootCategoryId(parent.id);
-          return AlertDialog(
-            title: Text(parent == null ? '新建事件' : '新建下层事件'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: text,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: '事件名称',
-                      errorText: error,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (parent != null) ...[
-                    InputDecorator(
-                      key: const ValueKey('world-create-child-parent'),
-                      decoration: const InputDecoration(labelText: '上层事件'),
-                      child: Text(
-                        parent.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  CategorySelector(
-                    selectorKey: const ValueKey('world-create-category'),
-                    categories: widget.controller.categories,
-                    value: parent == null
-                        ? rootCategoryId
-                        : inheritedCategoryId,
-                    enabled: false,
-                    helperText: parent == null ? '由当前分类确定' : '由上层事件继承',
-                    onChanged: (_) {},
-                  ),
-                ],
-              ),
+    if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('删除分类？'),
+          content: const Text('分类中的根节点与临时事项将移入“未分类”，不会被删除。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final result = await widget.controller.create(
-                    text.text,
-                    parentEventId: parent?.id,
-                    categoryId: parent == null ? rootCategoryId : null,
-                  );
-                  if (!context.mounted) return;
-                  if (result == null) {
-                    Navigator.pop(context);
-                  } else {
-                    setDialogState(() => error = result);
-                  }
-                },
-                child: const Text('创建'),
-              ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await _guard(() => widget.controller.deleteCategory(category));
+      }
+    }
+  }
+
+  Future<void> _addNode({WorldNode? parent, String? categoryId}) async {
+    final name = await _nameDialog(parent == null ? '添加世界节点' : '添加子节点');
+    if (name == null) return;
+    await _guard(
+      () => widget.controller.createWorldNode(
+        name,
+        parentWorldNodeId: parent?.id,
+        categoryId: categoryId,
+      ),
+    );
+  }
+
+  Future<void> _renameNode(WorldNode node) async {
+    final name = await _nameDialog('重命名', initial: node.name);
+    if (name != null) {
+      await _guard(() => widget.controller.renameWorldNode(node, name));
+    }
+  }
+
+  Future<void> _moveNode(WorldNode node) async {
+    final descendants = <String>{};
+    void collect(String parent) {
+      for (final child in widget.controller.worldNodes.where(
+        (value) => value.parentWorldNodeId == parent,
+      )) {
+        if (descendants.add(child.id)) collect(child.id);
+      }
+    }
+    collect(node.id);
+    final target = await showDialog<(String?, String?)>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移动世界节点'),
+        content: SizedBox(
+          width: 480,
+          height: 480,
+          child: ListView(
+            children: [
+              for (final category in <Category?>[
+                ...widget.controller.categories,
+                null,
+              ])
+                ListTile(
+                  title: Text('${category?.name ?? '未分类'}（根节点）'),
+                  onTap: () => Navigator.pop(context, (null, category?.id)),
+                ),
+              const Divider(),
+              for (final candidate in widget.controller.worldNodes)
+                if (candidate.id != node.id &&
+                    !descendants.contains(candidate.id))
+                  ListTile(
+                    title: Text(candidate.name),
+                    subtitle: const Text('作为其子节点'),
+                    onTap: () => Navigator.pop(context, (candidate.id, null)),
+                  ),
             ],
-          );
-        },
-      ),
-    );
-  }
-
-  String? _rootCategoryId(String eventId) {
-    final events = {
-      for (final event in widget.controller.worldEvents) event.id: event,
-    };
-    var current = events[eventId];
-    final visited = <String>{};
-    while (current != null &&
-        current.parentEventId != null &&
-        visited.add(current.id)) {
-      current = events[current.parentEventId];
-    }
-    return current?.categoryId;
-  }
-
-  Future<void> _confirmDelete(BuildContext c, JaxEvent e) async {
-    final confirmed = await showDialog<bool>(
-      context: c,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('删除事件'),
-        content: Text('确定删除“${e.name}”吗？'),
+          ),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
-          ),
         ],
       ),
     );
-    if (confirmed == true) await widget.controller.delete(e.id);
-  }
-
-  Future<void> _catAction(
-    BuildContext c,
-    Category x,
-    int i,
-    _CatAction a,
-  ) async {
-    switch (a) {
-      case _CatAction.rename:
-        await showDialog<void>(
-          context: c,
-          builder: (_) => CategoryEditDialog(
-            title: '编辑分类',
-            initialName: x.name,
-            initialColorKey: x.colorKey,
-            onSave: (name, colorKey) => widget.controller.updateCategory(
-              x.id,
-              name,
-              colorKey: colorKey,
-            ),
-          ),
-        );
-      case _CatAction.up:
-        await widget.controller.reorderCategory(x.id, i - 1);
-      case _CatAction.down:
-        await widget.controller.reorderCategory(x.id, i + 1);
-      case _CatAction.delete:
-        await widget.controller.deleteCategory(x.id);
+    if (target != null) {
+      await _guard(
+        () => widget.controller.moveWorldNode(
+          node,
+          parentWorldNodeId: target.$1,
+          categoryId: target.$2,
+        ),
+      );
     }
   }
 
-  Future<void> _assign(BuildContext c, JaxEvent e) async {
-    final id = await showDialog<String?>(
-      context: c,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('移动到分类'),
-        children: [
-          for (final x in widget.controller.categories)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(dialogContext, x.id),
-              child: Text(x.name),
-            ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, ''),
-            child: const Text('未分类'),
-          ),
-        ],
-      ),
-    );
-    if (id != null) {
-      await widget.controller.assignCategory(e.id, id.isEmpty ? null : id);
-    }
-  }
+  List<WorldNode> _siblings(WorldNode node) => widget.controller.worldNodes
+      .where(
+        (value) => node.parentWorldNodeId != null
+            ? value.parentWorldNodeId == node.parentWorldNodeId
+            : value.parentWorldNodeId == null &&
+                  value.categoryId == node.categoryId,
+      )
+      .toList()
+    ..sort(_nodeOrder);
 
-  Future<String?> _name(BuildContext c, String title, String? initial) async {
-    final t = TextEditingController(text: initial);
-    final r = await showDialog<String>(
-      context: c,
-      builder: (dialogContext) => AlertDialog(
+  Future<String?> _nameDialog(String title, {String initial = ''}) async {
+    var text = initial;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
         title: Text(title),
-        content: TextField(controller: t, autofocus: true),
+        content: TextFormField(
+          initialValue: initial,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: '名称'),
+          onChanged: (value) => text = value,
+          onFieldSubmitted: (value) => Navigator.pop(context, value),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, t.text),
+            onPressed: () => Navigator.pop(context, text),
             child: const Text('保存'),
           ),
         ],
       ),
     );
-    return r;
+    return result;
   }
-}
 
-class _CategoryOverviewCard extends StatefulWidget {
-  const _CategoryOverviewCard({
-    required super.key,
-    required this.categoryId,
-    required this.name,
-    required this.colorKey,
-    required this.eventCount,
-    required this.rootCount,
-    required this.active,
-    required this.onTap,
-    required this.menu,
-  });
-
-  final String? categoryId;
-  final String name;
-  final int? colorKey;
-  final int eventCount;
-  final int rootCount;
-  final bool active;
-  final VoidCallback onTap;
-  final Widget? menu;
-
-  @override
-  State<_CategoryOverviewCard> createState() => _CategoryOverviewCardState();
-}
-
-class _CategoryOverviewCardState extends State<_CategoryOverviewCard> {
-  var _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final accent = widget.colorKey == null
-        ? CategoryPaletteColors.neutral(context)
-        : CategoryPaletteColors.resolve(context, widget.colorKey!);
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: Card(
-        elevation: 0,
-        color: widget.active
-            ? accent.withValues(alpha: .07)
-            : _hovering
-            ? colors.surfaceContainerHighest.withValues(alpha: .68)
-            : widget.categoryId == null
-            ? colors.surfaceContainerLow.withValues(alpha: .65)
-            : colors.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: widget.active
-                ? accent.withValues(alpha: .62)
-                : _hovering
-                ? colors.outline.withValues(alpha: .48)
-                : colors.outlineVariant,
-            width: widget.active ? 1.25 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: InkWell(
-                key: ValueKey('world-category-open-${widget.categoryId}'),
-                onTap: widget.onTap,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          CategoryColorDot(colorKey: widget.colorKey),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                right: widget.menu == null ? 0 : 28,
-                              ),
-                              child: Text(
-                                widget.name,
-                                key: ValueKey(
-                                  'world-category-name-${widget.categoryId}',
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${widget.eventCount} 个事件 · ${widget.rootCount} 个顶级事件',
-                              key: ValueKey(
-                                'world-category-event-count-${widget.categoryId}',
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
-                            ),
-                          ),
-                          if (widget.active)
-                            Icon(
-                              Icons.play_arrow_rounded,
-                              key: ValueKey(
-                                'world-category-active-${widget.categoryId}',
-                              ),
-                              size: 16,
-                              color: accent,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (widget.menu case final menu?)
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Opacity(opacity: _hovering ? 1 : .62, child: menu),
-              ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _guard(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
   }
-}
 
-class _WorldNodeRow extends StatelessWidget {
-  const _WorldNodeRow({
-    required this.root,
-    required this.active,
-    required this.completed,
-    required this.leading,
-    required this.name,
-    required this.statusIcon,
-    required this.statusLabel,
-    required this.trailing,
-  });
-
-  final bool root;
-  final bool active;
-  final bool completed;
-  final Widget leading;
-  final String name;
-  final IconData statusIcon;
-  final String statusLabel;
-  final Widget trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final title = Text(
-      name,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-      style: theme.textTheme.bodyLarge?.copyWith(
-        fontWeight: active || root ? FontWeight.w600 : FontWeight.w400,
-      ),
-    );
-    final status = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(statusIcon, size: 15),
-        const SizedBox(width: 4),
-        Text(statusLabel, style: theme.textTheme.bodySmall),
-      ],
-    );
-    return ConstrainedBox(
-      constraints: BoxConstraints(minHeight: root || active ? 54 : 48),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          leading,
-          const SizedBox(width: 4),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) => constraints.maxWidth >= 220
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(fit: FlexFit.loose, child: title),
-                        const SizedBox(width: 10),
-                        status,
-                      ],
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [title, status],
-                    ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          trailing,
-        ],
-      ),
-    );
-  }
-}
-
-enum _WorldAction {
-  addToday,
-  removeToday,
-  start,
-  resume,
-  pause,
-  complete,
-  wait,
-  createChild,
-  delete,
-  hierarchy,
-  edit,
-  category,
-  restore,
-  investment,
-  deleteHistory,
-}
-
-enum _CatAction { rename, up, down, delete }
-
-class _WorldEventNode extends StatefulWidget {
-  const _WorldEventNode({
-    required super.key,
-    required this.depth,
-    required this.root,
-    required this.active,
-    required this.completed,
-    required this.child,
-  });
-
-  final int depth;
-  final bool root;
-  final bool active;
-  final bool completed;
-  final Widget child;
-
-  @override
-  State<_WorldEventNode> createState() => _WorldEventNodeState();
-}
-
-class _WorldEventNodeState extends State<_WorldEventNode> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final emphasis = widget.active
-        ? colors.primary
-        : widget.completed
-        ? colors.outlineVariant
-        : colors.outlineVariant;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: Opacity(
-        opacity: widget.completed ? .58 : 1,
-        child: Container(
-          margin: EdgeInsets.only(top: widget.root ? 6 : 0),
-          padding: EdgeInsets.only(
-            left: (widget.depth * 24.0).clamp(0.0, 120.0),
-          ),
-          decoration: BoxDecoration(
-            color: widget.active
-                ? colors.primary.withValues(alpha: .06)
-                : _hovering
-                ? colors.onSurface.withValues(alpha: .025)
-                : null,
-            border: widget.depth == 0 && !widget.active
-                ? null
-                : Border(
-                    left: BorderSide(
-                      color: emphasis,
-                      width: widget.active ? 2 : 1,
-                    ),
-                  ),
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
+  static int _nodeOrder(WorldNode a, WorldNode b) {
+    final order = a.sortOrder.compareTo(b.sortOrder);
+    return order != 0 ? order : a.id.compareTo(b.id);
   }
 }

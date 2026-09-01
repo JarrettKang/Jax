@@ -39,16 +39,22 @@ class SqliteSyncSnapshotAdapter {
       ),
       ...await _readEventDayPlans(),
       ...await _readTable('world_nodes', SyncEntityKind.worldNode),
-      ...await _readTable(
-        'legacy_event_world_node_links',
-        SyncEntityKind.legacyEventWorldNodeLink,
-      ),
       ...await _readTable('plans', SyncEntityKind.plan),
       ...await _readTable('plan_items', SyncEntityKind.planItem),
     ];
     records.addAll(await _readTombstones(records));
+    final generationRows = await database.query(
+      'dataset_metadata',
+      columns: ['generation'],
+      where: 'singleton = 1',
+      limit: 1,
+    );
+    if (generationRows.length != 1) {
+      throw StateError('Dataset generation is missing.');
+    }
     return SyncSnapshot(
       schemaVersion: version,
+      datasetGeneration: generationRows.single['generation']! as String,
       exportedAtUtc: now().toUtc(),
       records: records,
       lists: await _readLists(),
@@ -157,10 +163,6 @@ class SqliteSyncSnapshotAdapter {
       "SELECT id, 'all' scope FROM categories ORDER BY sort_order, created_at_utc, id",
     );
     await add(
-      SyncListKind.eventSiblings,
-      "SELECT id, COALESCE(parent_event_id, 'root') scope FROM events ORDER BY scope, sort_order, created_at_utc, id",
-    );
-    await add(
       SyncListKind.routineCategories,
       "SELECT id, 'all' scope FROM routine_categories ORDER BY sort_order, created_at_utc, id",
     );
@@ -187,7 +189,7 @@ class SqliteSyncSnapshotAdapter {
   }
 
   String _rename(String sql) => switch (sql) {
-    'parent_event_id' => 'parentSyncId',
+    'source_plan_item_id' => 'sourcePlanItemSyncId',
     'parent_world_node_id' => 'parentWorldNodeSyncId',
     'category_id' => 'categorySyncId',
     'event_id' => 'eventSyncId',

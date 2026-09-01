@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/sync/sync_contract.dart';
 import 'package:jax/data/database/app_database.dart';
-import 'package:jax/data/database/world_node_shadow_migration.dart';
 import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 
 void main() {
@@ -21,7 +20,6 @@ void main() {
       'routine_run_segments',
       'event_day_plans',
       'world_nodes',
-      'legacy_event_world_node_links',
       'sync_tombstones',
     ]) {
       result.addAll(
@@ -48,8 +46,7 @@ void main() {
         'id': 'event',
         'name': 'Jax',
         'status': 'paused',
-        'parent_event_id': null,
-        'sort_order': 0,
+        'source_plan_item_id': null,
         'category_id': 'category',
         'first_started_at_utc': 20,
         'completed_at_utc': null,
@@ -111,7 +108,16 @@ void main() {
       await db.insert('world_category_collapse_preferences', {
         'section_key': 'category',
       });
-      await WorldNodeShadowMigration.run(db);
+      await db.insert('world_nodes', {
+        'id': '11111111-1111-4111-8111-111111111111',
+        'name': 'Jax 世界',
+        'status': 'inProgress',
+        'parent_world_node_id': null,
+        'sort_order': 0,
+        'category_id': 'category',
+        'created_at_utc': 10,
+        'updated_at_utc': 10,
+      });
 
       final adapter = SqliteSyncSnapshotAdapter(
         db,
@@ -131,7 +137,6 @@ void main() {
           SyncEntityKind.event,
           SyncEntityKind.eventDayPlan,
           SyncEntityKind.worldNode,
-          SyncEntityKind.legacyEventWorldNodeLink,
         ]),
       );
       final event = first.records.singleWhere(
@@ -142,12 +147,12 @@ void main() {
       expect(event.payload.keys.toSet(), {
         'name',
         'status',
-        'parentSyncId',
-        'order',
+        'sourcePlanItemSyncId',
         'categorySyncId',
         'firstStartedAtUtc',
         'completedAtUtc',
       });
+      expect(first.datasetGeneration, isNotEmpty);
       expect(
         first.records
             .singleWhere((r) => r.kind == SyncEntityKind.routine)
@@ -241,7 +246,10 @@ void main() {
       'id': 'event',
       'name': 'Broken',
       'status': 'running',
-      'sort_order': 0,
+      'source_plan_item_id': null,
+      'category_id': null,
+      'first_started_at_utc': 10,
+      'completed_at_utc': null,
       'created_at_utc': 10,
       'updated_at_utc': 10,
     });

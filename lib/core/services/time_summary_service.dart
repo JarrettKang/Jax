@@ -1,4 +1,3 @@
-import '../entities/jax_event.dart';
 import '../entities/jax_day.dart';
 import '../entities/time_summary.dart';
 import '../repositories/event_repository.dart';
@@ -55,7 +54,6 @@ class TimeSummaryService {
       ...await _repository.getIncompleteEvents(),
       ...await _repository.getCompletedEvents(),
     ];
-    final byId = {for (final event in events) event.id: event};
     final categories = await _repository.getCategories();
     final categoryById = {
       for (final category in categories) category.id: category,
@@ -63,7 +61,7 @@ class TimeSummaryService {
     final totals = <String, Duration>{};
     const unclassified = 'unclassified';
     for (final event in events) {
-      final categoryId = _rootCategory(event, byId)?.categoryId;
+      final categoryId = await _repository.getEffectiveCategoryId(event.id);
       final bucket = categoryId == null ? unclassified : 'event:$categoryId';
       for (final segment in await _repository.getRunSegments(event.id)) {
         final segmentEnd = (segment.endedAt ?? now).toLocal();
@@ -151,14 +149,4 @@ class TimeSummaryService {
     );
   }
 
-  JaxEvent? _rootCategory(JaxEvent event, Map<String, JaxEvent> byId) {
-    var current = event;
-    final seen = <String>{};
-    while (current.parentEventId != null && seen.add(current.id)) {
-      final parent = byId[current.parentEventId];
-      if (parent == null) break;
-      current = parent;
-    }
-    return current;
-  }
 }

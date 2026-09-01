@@ -122,12 +122,13 @@ class SqliteSyncMutationExecutor {
     // not copy one side's raw storage index over an already-correct list.
     switch (record.kind) {
       case SyncEntityKind.eventCategory:
-      case SyncEntityKind.event:
       case SyncEntityKind.routineCategory:
       case SyncEntityKind.routine:
       case SyncEntityKind.worldNode:
       case SyncEntityKind.planItem:
         row.remove('sort_order');
+        break;
+      case SyncEntityKind.event:
         break;
       case SyncEntityKind.eventDayPlan:
         row.remove('order_index');
@@ -190,9 +191,9 @@ class SqliteSyncMutationExecutor {
     SyncListKind.eventCategories => _setOrder(db, 'categories', 'id = ?', [
       id,
     ], index),
-    SyncListKind.eventSiblings => _setOrder(db, 'events', 'id = ?', [
-      id,
-    ], index),
+    SyncListKind.eventSiblings => throw StateError(
+      'Event hierarchy lists are not supported by sync protocol 4.',
+    ),
     SyncListKind.routineCategories => _setOrder(
       db,
       'routine_categories',
@@ -229,22 +230,9 @@ class SqliteSyncMutationExecutor {
         null,
         <Object?>[],
       ),
-      SyncListKind.eventSiblings =>
-        list.scopeId == 'root'
-            ? (
-                'events',
-                'id',
-                'sort_order',
-                'parent_event_id IS NULL',
-                <Object?>[],
-              )
-            : (
-                'events',
-                'id',
-                'sort_order',
-                'parent_event_id = ?',
-                <Object?>[list.scopeId],
-              ),
+      SyncListKind.eventSiblings => throw StateError(
+        'Event hierarchy lists are not supported by sync protocol 4.',
+      ),
       SyncListKind.routineCategories => (
         'routine_categories',
         'id',
@@ -384,8 +372,7 @@ class SqliteSyncMutationExecutor {
         'id': record.metadata.id,
         'name': p['name'],
         'status': p['status'],
-        'parent_event_id': p['parentSyncId'],
-        'sort_order': p['order'],
+        'source_plan_item_id': p['sourcePlanItemSyncId'],
         'category_id': p['categorySyncId'],
         'first_started_at_utc': p['firstStartedAtUtc'],
         'completed_at_utc': p['completedAtUtc'],
@@ -446,12 +433,9 @@ class SqliteSyncMutationExecutor {
         'category_id': p['categorySyncId'],
         ...metadata,
       },
-      SyncEntityKind.legacyEventWorldNodeLink => {
-        'id': record.metadata.id,
-        'legacy_event_id': p['legacyEventSyncId'],
-        'world_node_id': p['worldNodeSyncId'],
-        ...metadata,
-      },
+      SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
+        'Legacy Event/WorldNode links are not supported by protocol 4.',
+      ),
       SyncEntityKind.plan => {
         'id': record.metadata.id,
         'world_node_id': p['worldNodeSyncId'],
@@ -509,10 +493,8 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.worldNode => _SqlTarget('world_nodes', 'id = ?', [
       record.metadata.id,
     ]),
-    SyncEntityKind.legacyEventWorldNodeLink => _SqlTarget(
-      'legacy_event_world_node_links',
-      'id = ?',
-      [record.metadata.id],
+    SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
+      'Legacy Event/WorldNode links are not supported by protocol 4.',
     ),
     SyncEntityKind.plan => _SqlTarget('plans', 'id = ?', [record.metadata.id]),
     SyncEntityKind.planItem => _SqlTarget('plan_items', 'id = ?', [
@@ -522,26 +504,26 @@ class SqliteSyncMutationExecutor {
 
   int _deleteRank(SyncEntityKind kind) => switch (kind) {
     SyncEntityKind.eventDayPlan ||
-    SyncEntityKind.legacyEventWorldNodeLink ||
-    SyncEntityKind.planItem => 0,
-    SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 1,
-    SyncEntityKind.routineExecution || SyncEntityKind.plan => 2,
-    SyncEntityKind.routine ||
-    SyncEntityKind.event ||
-    SyncEntityKind.worldNode => 3,
-    SyncEntityKind.routineCategory || SyncEntityKind.eventCategory => 4,
+    SyncEntityKind.eventRunSegment ||
+    SyncEntityKind.routineRunSegment => 0,
+    SyncEntityKind.event || SyncEntityKind.routineExecution => 1,
+    SyncEntityKind.planItem || SyncEntityKind.routine => 2,
+    SyncEntityKind.plan => 3,
+    SyncEntityKind.worldNode => 4,
+    SyncEntityKind.routineCategory || SyncEntityKind.eventCategory => 5,
+    SyncEntityKind.legacyEventWorldNodeLink => 6,
   };
   int _upsertRank(SyncEntityKind kind) => switch (kind) {
     SyncEntityKind.eventCategory || SyncEntityKind.routineCategory => 0,
-    SyncEntityKind.event => 1,
+    SyncEntityKind.event => 4,
     SyncEntityKind.routine => 2,
     SyncEntityKind.routineExecution => 3,
-    SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 4,
-    SyncEntityKind.eventDayPlan => 5,
+    SyncEntityKind.eventRunSegment || SyncEntityKind.routineRunSegment => 5,
+    SyncEntityKind.eventDayPlan => 6,
     SyncEntityKind.worldNode => 1,
     SyncEntityKind.plan => 2,
     SyncEntityKind.planItem => 3,
-    SyncEntityKind.legacyEventWorldNodeLink => 6,
+    SyncEntityKind.legacyEventWorldNodeLink => 7,
   };
   String _tombstoneType(SyncEntityKind kind) => switch (kind) {
     SyncEntityKind.eventCategory => 'category',

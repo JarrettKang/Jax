@@ -213,6 +213,62 @@ void main() {
     await plans.setPlanStatus(plan.id, PlanStatus.ended, _time(4));
     expect(await counts(), before);
   });
+
+  test('whole Plan delete is enforced by execution history and source links', () async {
+    final node = _node('11111111-1111-4111-8111-111111111111', 'A');
+    await nodes.insertWorldNode(node);
+    final deletable = await plans.createPlan(
+      id: 'deletable',
+      worldNodeId: node.id,
+      now: _time(1),
+    );
+    await plans.createPlanItem(
+      id: 'draft',
+      planId: deletable.id,
+      title: 'Draft',
+      now: _time(2),
+    );
+    await plans.deletePlan(deletable.id);
+    expect(await plans.getPlan(deletable.id), isNull);
+    expect(await plans.getPlanItems(deletable.id), isEmpty);
+    expect(await nodes.getWorldNode(node.id), isNotNull);
+    expect(
+      (await app.database.query('sync_tombstones')).map(
+        (row) => '${row['entity_type']}:${row['entity_id']}',
+      ),
+      containsAll(['plan:deletable', 'planItem:draft']),
+    );
+
+    final linked = await plans.createPlan(
+      id: 'linked',
+      worldNodeId: node.id,
+      now: _time(3),
+    );
+    await plans.createPlanItem(
+      id: 'linked-item',
+      planId: linked.id,
+      title: 'Linked',
+      now: _time(4),
+    );
+    await app.database.insert('events', {
+      'id': 'event',
+      'name': 'Event',
+      'status': 'pending',
+      'source_plan_item_id': 'linked-item',
+      'category_id': null,
+      'created_at_utc': 4,
+      'updated_at_utc': 4,
+    });
+    await expectLater(plans.deletePlan(linked.id), throwsA(anything));
+    await app.database.delete('events', where: 'id = ?', whereArgs: ['event']);
+    await app.database.update(
+      'plan_items',
+      {'status': 'dispatched'},
+      where: 'id = ?',
+      whereArgs: ['linked-item'],
+    );
+    await expectLater(plans.deletePlan(linked.id), throwsA(anything));
+  });
 }
 
 WorldNode _node(String id, String name) => WorldNode(
