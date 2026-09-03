@@ -1,5 +1,11 @@
 # Planning Phase P3 contract
 
+> **Status update:** This document preserves the P3 dispatch contract and its
+> original scope boundary. The Review and World second-layer work deferred here
+> was subsequently implemented in **Planning Phase P4**. Current status and model
+> ownership are defined by `PRD.md`, `Development_plan.md`,
+> `docs/planning_phase_p3_5.md`, and `docs/planning_phase_p4.md`.
+
 Phase P3 建立唯一的 `PlanItem → Event → Today` 派发边界，不改变
 SQLite schema v16、Sync protocol 4 或 dataset generation。
 

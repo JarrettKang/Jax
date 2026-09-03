@@ -1,5 +1,9 @@
 # Jax v0.2 开发计划
 
+> **Historical / superseded document:** 本文件保留 v0.2 各增量当时的设计、迁移与
+> 验收记录，不是当前 Planning/World/Review 规范。当前产品规则以 `PRD.md` 为准，
+> 当前开发状态与文档优先级以 `Development_plan.md` 为准。
+
 ## 1. 文档信息
 
 - 需求基线：`PRD.md`

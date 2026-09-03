@@ -1,21 +1,55 @@
-# Jax v0.1 开发计划
+# Jax 开发计划
 
 ## 1. 文档信息
 
 - 产品：Jax（我的电子管家）
-- 对应需求基线：`PRD.md` v0.1
-- 目标平台：Windows
-- 后续目标平台：Android
-- 文档状态：已确认，可直接执行
-- 更新日期：2026-08-24
+- 对应需求基线：`PRD.md`
+- 目标平台：Windows、Android
+- 文档状态：当前开发与验证基线
+- 更新日期：2026-09-03
 
 ## 2. 当前状态
 
-- 工作区当前只有需求与开发计划文档，尚无应用工程代码。
-- 尚未创建 Flutter 项目。
-- 尚未初始化 Git 仓库。
-- 当前系统未检测到 Flutter 和 Dart 命令。
-- 正式实施前必须先完成环境准备关卡。
+- Completed：P1 WorldNode foundation、P2 Planning Core、P2.5 Flat Event / World
+  switch / data reset、P3 Planning → Today dispatch、Planning Attention Model
+  Refactor、P4 Plan Review Notes + WorldNode Detail。
+- Current：稳定使用与体验反馈，不实施新的 Planning/Review workflow。
+- Deferred / under product evaluation：End-plan lightweight review、Review v2、
+  Automatic replan、Daily Review、Weekly Review、AI review。它们不是已承诺的下一阶段。
+
+### Current Planning Model
+
+```text
+WorldNode
+  lifecycle: inProgress / completed
+  attention: focused / notFocused
+  └─ 0..N Plan
+       current: max 1 per WorldNode
+       ended: N, never reopened
+       └─ PlanItem
+            draft / next / dispatched / done / dropped
+            └─ Event when dispatched
+
+Event: planned / standalone, flat execution object
+Today recommendation: focused + inProgress WorldNode + current Plan + next PlanItem
+Review: Plan 1:N PlanReviewNote; current and ended Plans both accept notes
+```
+
+WorldNode owns long-term Category/hierarchy/order/lifecycle/attention and Plan
+history; it does not run, own RunSegments, or enter Today. Focus belongs to
+WorldNode, never Plan. Plan status is only `current/ended`.
+
+### 文档优先级
+
+当前产品和开发判断依次使用：
+
+1. `PRD.md`
+2. `Development_plan.md`
+3. 与当前模型一致的最新 phase 文档
+4. 旧 phase/version documents，仅作为历史设计与迁移记录
+
+历史文档中的 `focused/waiting Plan` 或 Event hierarchy 不得覆盖当前规范。
+第 3–11 节保留最初 v0.1 交付过程；第 12 节以后记录后续增量。
 
 ## 3. v0.1 交付目标
 
@@ -688,7 +722,7 @@ flutter run -d windows
 9. 确认没有实现 v0.1 明确排除的功能。
 10. 标记 v0.1 完成。
 
-## 12. P3.5：当前 running 开始时间修正
+## 12. P3.5-A：Execution time correction（当前 running 开始时间修正）
 
 行为变化：用户可从 Home Running Hero 的 More 打开轻量时间对话框，把当前 open segment 的 `startedAt` 向前修正；Event 与 Routine 使用同一交互和 Core overlap 语义。
 
@@ -707,7 +741,7 @@ UI：
 
 - 覆盖 Event/Routine 原位修改、segment count/identity、向后拒绝、跨类型 overlap、邻接、跨 JaxDay、planned relation 不变、stale completion、SQLite rollback/sync metadata 与手机窄屏 dialog/timer 刷新。
 
-## 13. P3.5：Planning Attention Model Refactor
+## 13. P3.5-B：Planning Attention Model Refactor
 
 1. Schema v18 为 WorldNode 增加 `is_focused`，把 Plan active status 简化为
    `current/ended`；迁移按 focused→focused+current、waiting→notFocused+current、
@@ -733,7 +767,7 @@ UI：
    metadata 绘制中性的 ancestor continuation/短连接线；collapse/reparent 触发正常 rebuild，
    深层缩进设视觉上限且 painter 不参与 hit test 或 accessibility tree。
 
-## 14. P4：Plan Review 与 WorldNode Detail
+## 14. P4：Plan Review 与 WorldNode Detail（Completed）
 
 1. Schema v17 增加 PlanReviewNote 与 sync triggers；迁移必须只增加空结构。
 2. PlanningRepository 完成 current/ended 下的复盘增删改查，保留 createdAt，
@@ -747,3 +781,13 @@ UI：
    页面读取 fingerprint 不变及窄屏布局。
 7. 完整 analyze/test/build 后，先备份真实双端数据库，再做 v16→v17 rollout；
    rollout 不创建真实 PlanReviewNote、不执行真实 sync apply。
+
+## 15. Planning / Review 使用观察期
+
+- 当前不承诺新的 Planning/Review phase，以稳定使用和体验反馈为主。
+- End-plan lightweight review、Review v2、Automatic replan、Daily Review、Weekly
+  Review 与 AI review 均为 deferred / under product evaluation。
+- Known polish / future consideration：World history 当前只显示 Review count，
+  不内联最新 Review；current Plan summary 未显示 draft/dropped count；execution
+  history 不逐 RunSegment 展开；Record 尚未显示 WorldNode/Plan/PlanItem context。
+- 上述项目不是 roadmap commitment，不在文档清理阶段形成新产品决策。

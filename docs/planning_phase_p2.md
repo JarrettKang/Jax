@@ -1,5 +1,12 @@
 # Planning Phase P2: Planning Core
 
+> **Historical design note / superseded:** P2 originally modeled Plan as
+> `focused/waiting/ended`. The later **Planning Phase P3.5: WorldNode attention**
+> superseded that attention model: focus now belongs to `WorldNode.isFocused`,
+> while Plan status is only `current/ended`. This document preserves the P2
+> implementation and migration history; use `PRD.md`, `Development_plan.md`, and
+> `docs/planning_phase_p3_5.md` for the current model.
+
 P2 adds the editable intention layer above `WorldNode`. It does not create or
 modify execution facts. `WorldNode` is long-lived structure, `Plan` is one
 round of approach for one node, and `PlanItem` is an editable step inside that

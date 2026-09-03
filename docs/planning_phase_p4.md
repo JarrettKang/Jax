@@ -1,5 +1,8 @@
 # Planning Phase P4: Review and WorldNode Detail
 
+**Status: implemented.** This document describes current Review and WorldNode
+Detail behavior after the P3.5 WorldNode attention refactor.
+
 P4 adds reflection without turning Planning into a mandatory workflow, and adds a
 read-only second layer to World without making World an execution surface.
 
@@ -36,12 +39,14 @@ edit/delete actions. The multiline dialog scrolls on narrow Android layouts.
 Review remains optional and ending a Plan never prompts for one.
 
 Clicking a WorldNode opens a read-only detail with overview, current Plan summary,
-ended Plan history, and execution history. Waiting counts as current. Historical
-Plans use deterministic round/created order and open the canonical Plan Detail.
+ended Plan history, and execution history. A current Plan has `status == current`
+and `endedAt == null`; an ended Plan has `status == ended` and a non-null
+`endedAt`. Historical Plans use deterministic round/created order and open the
+canonical Plan Detail.
 Execution history is derived only through
 `Event.sourcePlanItem → PlanItem → Plan → exact WorldNode`; standalone Events,
-other nodes, and descendants are excluded. Current means `Plan.status == current`;
-WorldNode attention does not hide its detail or history. Direct RunSegment duration is shown,
+other nodes, and descendants are excluded. WorldNode attention is independent
+from Plan status and does not hide detail or history. Direct RunSegment duration is shown,
 but no execution controls are added.
 
 ## Explicit exclusions

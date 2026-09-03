@@ -1,5 +1,9 @@
 # Jax Android v0.1 开发计划
 
+> **Historical / superseded document:** 本文件保留 Android v0.1 平台适配历史，
+> 不代表当前 Planning/World/Review 模型。当前产品规则以 `PRD.md` 为准，当前开发
+> 状态与文档优先级以 `Development_plan.md` 为准。
+
 ## 1. 范围与基线
 
 - 产品规则以 `PRD.md` 为准；Windows v0.1 是已完成且必须保持兼容的产品基线。

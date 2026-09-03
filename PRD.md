@@ -3,10 +3,10 @@
 ## 1. 文档信息
 
 - 产品名称：Jax（我的电子管家）
-- 当前版本：v0.2（F2：事件层级）
+- 当前版本：Planning P4 / WorldNode Attention Model
 - 目标平台：Windows、Android
 - 文档状态：需求已确认，作为后续开发基线
-- 更新日期：2026-08-25
+- 更新日期：2026-09-03
 
 ## 2. 产品目标
 
@@ -219,19 +219,28 @@ v0.1 至少需要通过以下行为验证：
 
 ## 9. v0.2 F1：首页
 
+> 历史增量说明：本节保留 F1 当时的产品演进记录。其中 Event hierarchy 相关展示
+> 已被 Phase P2.5 的 flat Event 模型取代；当前行为以第 17–21 节为准。
+
 - Jax 在 Windows 和 Android 的导航中均按“首页 / 事件 / 记录”排列，并默认从首页启动；两端共用首页内容和业务规则，仅导航外壳可响应屏幕宽度变化。
 - 首页顶部按设备当前本地时间显示弱化的“早上好”“上午好”“中午好”“下午好”或“晚上好”。时间区间沿用既有规则，问候语在进入、返回首页及跨越区间边界后刷新，不作为业务数据持久化。
-- 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event ancestor breadcrumb 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
+- 首页是执行驾驶舱：存在 running Event 或 Routine 时，Hero 必须以真实 running 对象名称为主视觉，以 Event 的 effective Category 或“Routine Category · recurrence”为次级上下文，并以独立大号等宽数字显示真实 open run segment 的持续时间。
 - Running Hero 直接提供“暂停”主操作；More 对 Event 提供“修改开始时间… / 完成并修改结束时间… / 等待 / 完成”，对 Routine 提供“修改开始时间… / 完成并修改结束时间… / 完成”。普通完成仍以当前时间结束；结束时间修正只允许 open segment 开始后、当前时间前的真实结束时间，并在同一业务事务内完成对象和直接关闭原 open segment，不新增修正 segment。开始时间修正只原位修改当前 open segment，第一版仅允许向前调整，并保持 owner、segment ID、open/running 状态不变。这些操作复用既有 controller 与全局单 running 约束，不新增首页状态机。
-- Event 的当前 parent 上下文可在 Hero 底部以紧凑 direct children 列表和“已完成数 / 总数”呈现；它只辅助理解当前执行位置，不得取代 running 名称或扩展为预测、百分比进度条。
+- Event 是 flat execution object，Hero 不展示 parent/child 进度；running 名称、effective Category 与真实计时构成当前执行上下文。
 - Running Hero 之后优先显示 Waiting，然后显示最多 3 个“接下来”候选：先按 Today Event 既有顺序取未完成且非 waiting 的事项，再按 Today Routine 既有顺序补足未完成 occurrence。首页开始或恢复候选时先暂停已有 running，再通过既有 Event/Routine action 启动候选，保持全局最多一个 running。
 - 没有 running 时，首页显示“现在没有正在执行的事项”和“接下来可以做”，仍提供 Today 候选启动入口；无候选时可进入今日页。
-- Waiting 区域只列出 status 为 waiting 的 Event，位于 Running Hero 之后、“接下来”和“快捷动作”之前，采用弱于 Hero 但高于普通候选的紧凑列表。默认显示前 4 项，超出后提供“查看全部”。每项直接提供“恢复”，复用 waiting → running 状态机并新建 run segment；若已有 Event 或 Routine running，先暂停它再恢复 waiting Event。Routine 不具有 waiting。
-- 首页只组合现有 running、Today plan、hierarchy、category、recurrence、run segment 与 waiting 事实，不持久化第二份首页数据，不修改 SQLite schema。
+- Waiting 区域只列出 status 为 waiting 的 Event，位于 Running Hero 之后、“接下来”和“快捷动作”之前，采用弱于 Hero 但高于普通候选的紧凑列表。默认显示前 4 项，超出后提供“查看全部”。每项直接提供“恢复”，复用 waiting → running 状态机并新建 run segment；若已有 Event 或 Routine running，先暂停它再恢复 waiting Event。Routine 不具有 waiting，Event 上下文使用 effective Category 而非 ancestor path。
+- 首页只组合现有 running、Today plan、effective Category、recurrence、run segment 与 waiting 事实，不持久化第二份首页数据，不修改 SQLite schema。
 
 F1 验收须覆盖弱化问候、Running Event、Running Routine、真实持续时间、Hero 直接操作、无 running 的候选启动、稳定候选顺序、全局单 running、Waiting 低权重列表、窄屏无 overflow、重启恢复后的首页状态，并确认既有行为无回归。
 
 ## 10. v0.2 F2：事件层级
+
+> **Historical / superseded design:** 第 10.1–10.11 节记录 P2.5 以前以 Event
+> 承载长期 hierarchy 的产品演进，不再是当前规范。Phase P2.5 已正式移除 Event
+> parent/child、breadcrumb、sibling order、descendant completion 与 hierarchy duration
+> 语义。当前长期结构属于 WorldNode，规划拆解属于 Plan/PlanItem，Event 仅为 flat
+> execution object。当前规范见第 17–21 节。
 
 ### 10.1 层级模型与编辑
 
@@ -311,11 +320,11 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 
 ### 10.11 v0.2 F7：时间复盘
 
-- “记录”栏目以日总结与周总结复盘真实主动执行时间；事实来源仅为 Event 的 direct run_segments，不使用 aggregate duration，waiting、paused、pending 和 completed 状态本身不产生统计时间。
+- “记录”栏目以日总结与周总结复盘真实主动执行时间；事实来源为 Event RunSegment 与 RoutineRunSegment，不使用任何 hierarchy aggregate duration，waiting、paused、pending 和 completed 状态本身不产生统计时间。
 - Jax 统计日为本地时间前一日 23:00 至当日 23:00；segment 以与统计窗口的 overlap 裁剪，未结束的 running segment 截止当前时间。周从周一开始，至周日 23:00 结束；当前日/周可显示进行中数据。
-- 时间按 Event 的当前 hierarchy 向上找到 root，并按 root 当前 Category 动态归属；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
+- Event 时间按 effective Category 动态归属：planned Event 沿 PlanItem→Plan→WorldNode root 推导，standalone Event 使用自己的 nullable Category；null 归入虚拟“未分类”。Category 后续调整会重新解释历史统计，第一版不冻结 Category snapshot、不新增 summary 表或 schema。
 - 日总结显示按时长降序的 Category 横向条与占比；周总结显示七天真实时长的 Category 堆叠柱和全周 Category 汇总。Category identity 基于 id，未分类使用中性样式。
-- 日/周分类统计和今日时间分布统一通过 Category `colorKey` 解析主题颜色。Event descendant 使用当前 root Event Category 色，Routine 使用当前 Routine Category 色；删除分类后按未分类中性色显示，历史动态归属语义不变。
+- 日/周分类统计和今日时间分布统一通过 Category `colorKey` 解析主题颜色。planned Event 使用当前 WorldNode root Category 色，standalone Event 使用自己的 Category 色，Routine 使用当前 Routine Category 色；删除分类后按未分类中性色显示，历史动态归属语义不变。
 
 ### 10.12 v0.2 F8：Routine / 日常
 
@@ -403,15 +412,15 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 ## 16. Planning 重构 Phase P2：Planning Core
 
 - Planning 的产品定义是“为了推进某个 WorldNode，这一轮具体准备怎么做”。WorldNode 是长期结构，Plan 是一轮推进方案，PlanItem 是临时、具体、可反复修改的平级步骤。
-- Plan 必须且只能属于一个 WorldNode。同一 WorldNode 最多一个 `focused`/`waiting` current Plan，但可保留多个 `ended` 历史轮次；不同 WorldNode 可同时各有 focused Plan。
-- Plan 状态为 `focused` / `waiting` / `ended`。focused↔waiting 不改 PlanItem；结束必须用户确认，设置 `endedAtUtc`，不自动 dropped 未完成 item，不自动 completed WorldNode，也不普通 reopen。
+- Plan 必须且只能属于一个 WorldNode。同一 WorldNode 最多一个 `current` Plan，但可保留多个 `ended` 历史轮次；不同 WorldNode 可同时各有 current Plan。
+- P2 最初把 attention 建模为 Plan 的 `focused/waiting` 状态；该设计已被 P3.5 supersede。当前 attention ownership 属于 `WorldNode.isFocused`，Plan 状态只使用 `current/ended`。结束必须用户确认，设置 `endedAtUtc`，不自动 dropped 未完成 item，不自动 completed WorldNode，也不普通 reopen。
 - PlanItem 状态为 `draft` / `next` / `dispatched` / `done` / `dropped`。P2 用户只可草稿↔下一步、取消为 dropped、dropped 恢复为 draft；`dispatched`/`done` 只为 P3 模型兼容，不开放手工设置。
 - draft/next 可物理删除，用于误添加；dropped 保留“原先考虑过”的规划历史。PlanItem order 是 Plan scope 内的完整逻辑列表，状态不触发自动排序。
-- 主导航新增“规划”。overview 以低噪音列表分开已关注/等待中，历史轮次折叠；创建时使用保留 Category/层级/顺序的 WorldNode selector，completed 或已有 current Plan 的节点禁用。
+- 主导航提供“规划”。Planning 是所有 focused + inProgress WorldNode 的工作台；WorldNode 可以有 current Plan，也可以没有。没有 current Plan 时仍显示该节点并允许“添加计划”；全局创建入口使用保留 Category/层级/顺序的 WorldNode selector，completed 或已有 current Plan 的节点禁用。
 - detail 中 draft↔next 是行内高频操作，上下移仅显示合法方向，edit/drop/delete/restore/end 放 More。有未完成 item 仍可结束，但必须明确确认。
 - WorldNode 存在 current Plan 时不得 completed；需先结束当前 Plan。Plan ended 不会反向完成 WorldNode。
-- Plan/PlanItem 与 tombstone 进入 Sync protocol 3，PlanItem order 使用 `planItems:<planId>` full-list conflict。旧 protocol 2 baseline 读取时升级为 protocol 3，不发明 Plan 数据。
-- P2 不创建 Event/EventDayPlan/RunSegment，不影响 Home/Today/Record，不从 legacy Event 推导 Plan，不正式切换 World UI。P3 再实现 focused Plan 的 next item 推荐、用户接受后派发 Event 以及 Event 完成联动。
+- P2 当时将 Plan/PlanItem 与 tombstone 引入 Sync protocol 3；当前 Sync protocol 6 已把 attention 迁移到 WorldNode，并继续同步 Plan/PlanItem。PlanItem order 使用 `planItems:<planId>` full-list conflict。
+- P2 milestone 本身没有创建 Event/EventDayPlan/RunSegment，也没有从 legacy Event 推导 Plan；后续 P3 已实现基于 WorldNode attention 的 next item 推荐、用户确认派发 Event 与完成联动。
 
 ## 17. Planning 重构 Phase P2.5：Flat Event 与正式 WorldNode
 
@@ -452,9 +461,9 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 
 ## 18. Planning 重构 Phase P3：Planning → Event → Today Dispatch
 
-- Today 从 `focused Plan + next PlanItem` 派生只读建议；不保存第二份推荐数据，
-  不在 Home 展示，不自动派发或写入 Today。waiting/ended Plan 与非 next item
-  立即从建议中消失。
+- Today 从 `inProgress + focused WorldNode + current Plan + next PlanItem` 派生只读建议；
+  不保存第二份推荐数据，不在 Home 展示，不自动派发或写入 Today。notFocused、
+  completed、无 current Plan 的 WorldNode，以及 ended Plan 与非 next item 均不可见。
 - 用户可多选建议并一次“加入今日”。整批在单一 SQLite transaction 中重新
   验证 Plan/item/link 状态，按可见顺序创建 pending planned Event、写入
   `sourcePlanItemId`、将 item 改为 dispatched，并追加 current JaxDay Today。
@@ -489,6 +498,8 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   `isFocused` attention。focused 表示“用户当前希望 Jax 主动帮助推进这个长期节点”；
   父子节点与 Category 不传播 attention，允许任意多个 focused 节点，也允许 focused
   节点没有 Plan。
+- WorldNode 还拥有 Category、任意深度 hierarchy、同级 order，以及 current/historical
+  Plans；它不直接 running、不产生 RunSegment、不加入 Today。
 - Plan 不再拥有 focused/waiting 语义，只使用 `current/ended`；同一 WorldNode 最多
   一个 current Plan。创建 Plan 不自动 focus，结束 Plan 不取消 focus，notFocused
   节点的 current Plan 仍可完整编辑。
@@ -508,8 +519,12 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 
 ## 21. Planning 重构 Phase P4：复盘与 WorldNode Detail
 
+本阶段核心能力已经实现并构成当前产品行为，不是 future work。
+
 - PlanReviewNote 是 Plan 下独立、可追加的复盘事实，包含非空 content 与独立
   created/updated 时间；current、ended Plan 均可新增、编辑、确认删除。
+- Plan 与 PlanReviewNote 为 1:N；PlanItem.note 仅是单个计划项说明，不等价于 Plan
+  Review。Review Note 是 Sync business entity。
 - 复盘不进入 Record，不改变 Plan/PlanItem/Event/WorldNode 状态。删除 Plan 仅在
   从未派发/执行时允许，并同时 tombstone 其 PlanItem 与 PlanReviewNote；有执行事实
   的 Plan 继续只能结束并保留复盘。
