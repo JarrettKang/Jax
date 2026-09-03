@@ -6,6 +6,8 @@ import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
+import '../../core/entities/plan_review_note.dart';
+import '../../core/entities/run_segment.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/event_repository.dart';
@@ -41,7 +43,9 @@ class PlanningController extends ChangeNotifier {
   List<WorldNode> worldNodes = const [];
   List<Category> categories = const [];
   final Map<String, List<PlanItem>> _items = {};
+  final Map<String, List<PlanReviewNote>> _reviewNotes = {};
   final Map<String, JaxEvent> _linkedEvents = {};
+  final Map<String, List<RunSegment>> _segments = {};
   bool loading = false;
   bool dispatching = false;
   Object? error;
@@ -57,11 +61,15 @@ class PlanningController extends ChangeNotifier {
         eventRepository.getCategories(),
         eventRepository.getIncompleteEvents(),
         eventRepository.getCompletedEvents(),
+        eventRepository.getAllRunSegments(),
       ]);
       plans = values[0] as List<Plan>;
       worldNodes = values[1] as List<WorldNode>;
       categories = values[2] as List<Category>;
+      _items.clear();
+      _reviewNotes.clear();
       _linkedEvents.clear();
+      _segments.clear();
       for (final event in <JaxEvent>[
         ...(values[3] as List<JaxEvent>),
         ...(values[4] as List<JaxEvent>),
@@ -70,8 +78,14 @@ class PlanningController extends ChangeNotifier {
           _linkedEvents[itemId] = event;
         }
       }
+      for (final segment in values[5] as List<RunSegment>) {
+        _segments.putIfAbsent(segment.eventId, () => []).add(segment);
+      }
       for (final plan in plans) {
         _items[plan.id] = await planningRepository.getPlanItems(plan.id);
+        _reviewNotes[plan.id] = await planningRepository.getPlanReviewNotes(
+          plan.id,
+        );
       }
     } catch (value) {
       error = value;
@@ -82,6 +96,8 @@ class PlanningController extends ChangeNotifier {
   }
 
   List<PlanItem> itemsFor(String planId) => _items[planId] ?? const [];
+  List<PlanReviewNote> reviewNotesFor(String planId) =>
+      _reviewNotes[planId] ?? const [];
   JaxEvent? linkedEventFor(String planItemId) => _linkedEvents[planItemId];
 
   List<PlanningRecommendationGroup> get recommendationGroups {
@@ -185,6 +201,66 @@ class PlanningController extends ChangeNotifier {
   Plan? currentPlanFor(String worldNodeId) => plans
       .where((plan) => plan.worldNodeId == worldNodeId && plan.isCurrent)
       .firstOrNull;
+
+  List<Plan> endedPlansFor(String worldNodeId) =>
+      plans
+          .where(
+            (plan) =>
+                plan.worldNodeId == worldNodeId &&
+                plan.status == PlanStatus.ended,
+          )
+          .toList()
+        ..sort((a, b) {
+          final round = a.roundNumber.compareTo(b.roundNumber);
+          return round != 0 ? round : a.createdAt.compareTo(b.createdAt);
+        });
+
+  List<WorldNode> pathFor(WorldNode node) => _nodePath(node);
+
+  List<WorldNodeExecutionHistoryItem> executionHistoryFor(String worldNodeId) {
+    final referenceTime = now();
+    final planById = {
+      for (final plan in plans.where((p) => p.worldNodeId == worldNodeId))
+        plan.id: plan,
+    };
+    final itemById = <String, PlanItem>{};
+    for (final entry in _items.entries) {
+      if (!planById.containsKey(entry.key)) continue;
+      for (final item in entry.value) {
+        itemById[item.id] = item;
+      }
+    }
+    final result = <WorldNodeExecutionHistoryItem>[];
+    for (final entry in _linkedEvents.entries) {
+      final item = itemById[entry.key];
+      if (item == null) continue;
+      final event = entry.value;
+      final segments = _segments[event.id] ?? const [];
+      final directDuration = segments.fold<Duration>(
+        Duration.zero,
+        (sum, segment) => sum + segment.durationAt(referenceTime),
+      );
+      DateTime recentAt = event.completedAt ?? event.updatedAt;
+      for (final segment in segments) {
+        final candidate = segment.endedAt ?? segment.startedAt;
+        if (candidate.isAfter(recentAt)) recentAt = candidate;
+      }
+      result.add(
+        WorldNodeExecutionHistoryItem(
+          event: event,
+          plan: planById[item.planId]!,
+          planItem: item,
+          directDuration: directDuration,
+          recentAt: recentAt,
+        ),
+      );
+    }
+    result.sort((a, b) {
+      final recent = b.recentAt.compareTo(a.recentAt);
+      return recent != 0 ? recent : a.event.id.compareTo(b.event.id);
+    });
+    return result;
+  }
 
   bool hasEndedPlan(String worldNodeId) => plans.any(
     (plan) =>
@@ -382,6 +458,46 @@ class PlanningController extends ChangeNotifier {
     await planningRepository.reorderPlanItem(item.id, targetIndex, now());
     await load();
   }
+
+  Future<void> addReviewNote(Plan plan, String content) async {
+    await planningRepository.createPlanReviewNote(
+      id: newId(),
+      planId: plan.id,
+      content: content,
+      now: now(),
+    );
+    await load();
+  }
+
+  Future<void> editReviewNote(PlanReviewNote note, String content) async {
+    await planningRepository.editPlanReviewNote(
+      note.id,
+      content: content,
+      now: now(),
+    );
+    await load();
+  }
+
+  Future<void> deleteReviewNote(PlanReviewNote note) async {
+    await planningRepository.deletePlanReviewNote(note.id);
+    await load();
+  }
+}
+
+class WorldNodeExecutionHistoryItem {
+  const WorldNodeExecutionHistoryItem({
+    required this.event,
+    required this.plan,
+    required this.planItem,
+    required this.directDuration,
+    required this.recentAt,
+  });
+
+  final JaxEvent event;
+  final Plan plan;
+  final PlanItem planItem;
+  final Duration directDuration;
+  final DateTime recentAt;
 }
 
 class PlanningRecommendationGroup {

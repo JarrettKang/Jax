@@ -6,6 +6,7 @@ import '../../core/entities/world_node.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/planning_controller.dart';
 import 'planning_page.dart';
+import 'world_node_detail_page.dart';
 
 class WorldPage extends StatefulWidget {
   const WorldPage({
@@ -60,10 +61,7 @@ class _WorldPageState extends State<WorldPage> {
               ],
             ),
             const SizedBox(height: 12),
-            for (final category in <Category?>[
-              ...controller.categories,
-              null,
-            ])
+            for (final category in <Category?>[...controller.categories, null])
               _categorySection(category),
           ],
         ),
@@ -72,13 +70,15 @@ class _WorldPageState extends State<WorldPage> {
   );
 
   Widget _categorySection(Category? category) {
-    final roots = widget.controller.worldNodes
-        .where(
-          (node) =>
-              node.parentWorldNodeId == null && node.categoryId == category?.id,
-        )
-        .toList()
-      ..sort(_nodeOrder);
+    final roots =
+        widget.controller.worldNodes
+            .where(
+              (node) =>
+                  node.parentWorldNodeId == null &&
+                  node.categoryId == category?.id,
+            )
+            .toList()
+          ..sort(_nodeOrder);
     final key = WorldCategoryCollapseStore.sectionKey(category?.id);
     final collapsed = _collapsedCategories.contains(key);
     return Card(
@@ -99,9 +99,7 @@ class _WorldPageState extends State<WorldPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  key: ValueKey(
-                    'add-root-${category?.id ?? 'unclassified'}',
-                  ),
+                  key: ValueKey('add-root-${category?.id ?? 'unclassified'}'),
                   tooltip: '添加根节点',
                   onPressed: () => _addNode(categoryId: category?.id),
                   icon: const Icon(Icons.add),
@@ -140,10 +138,11 @@ class _WorldPageState extends State<WorldPage> {
   }
 
   Widget _nodeRow(WorldNode node, int depth) {
-    final children = widget.controller.worldNodes
-        .where((value) => value.parentWorldNodeId == node.id)
-        .toList()
-      ..sort(_nodeOrder);
+    final children =
+        widget.controller.worldNodes
+            .where((value) => value.parentWorldNodeId == node.id)
+            .toList()
+          ..sort(_nodeOrder);
     final collapsed = _collapsedBranches.contains(node.id);
     final completed = node.status == WorldNodeStatus.completed;
     return Column(
@@ -153,7 +152,9 @@ class _WorldPageState extends State<WorldPage> {
           contentPadding: EdgeInsets.only(left: 12.0 + depth * 24, right: 8),
           leading: children.isEmpty
               ? Icon(
-                  completed ? Icons.check_circle_outline : Icons.circle_outlined,
+                  completed
+                      ? Icons.check_circle_outline
+                      : Icons.circle_outlined,
                   size: 20,
                 )
               : IconButton(
@@ -183,6 +184,7 @@ class _WorldPageState extends State<WorldPage> {
             onSelected: (action) => _nodeAction(node, action),
             itemBuilder: (_) => _actionsFor(node),
           ),
+          onTap: () => _openNodeDetail(node),
         ),
         if (!collapsed)
           for (final child in children) _nodeRow(child, depth + 1),
@@ -221,8 +223,7 @@ class _WorldPageState extends State<WorldPage> {
       const PopupMenuDivider(),
       const PopupMenuItem(value: 'add-child', child: Text('添加子节点')),
       const PopupMenuItem(value: 'rename', child: Text('重命名')),
-      if (index > 0)
-        const PopupMenuItem(value: 'move-up', child: Text('上移')),
+      if (index > 0) const PopupMenuItem(value: 'move-up', child: Text('上移')),
       if (index >= 0 && index < siblings.length - 1)
         const PopupMenuItem(value: 'move-down', child: Text('下移')),
       const PopupMenuItem(value: 'reparent', child: Text('移动到…')),
@@ -270,13 +271,15 @@ class _WorldPageState extends State<WorldPage> {
       return;
     }
     if (action == 'open-history') {
-      final plans = widget.controller.plans
-          .where(
-            (plan) =>
-                plan.worldNodeId == node.id && plan.status == PlanStatus.ended,
-          )
-          .toList()
-        ..sort((a, b) => b.roundNumber.compareTo(a.roundNumber));
+      final plans =
+          widget.controller.plans
+              .where(
+                (plan) =>
+                    plan.worldNodeId == node.id &&
+                    plan.status == PlanStatus.ended,
+              )
+              .toList()
+            ..sort((a, b) => b.roundNumber.compareTo(a.roundNumber));
       if (plans.isNotEmpty) await _openPlan(plans.first);
     }
   }
@@ -284,9 +287,19 @@ class _WorldPageState extends State<WorldPage> {
   Future<void> _openPlan(Plan plan) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PlanDetailPage(
+        builder: (_) =>
+            PlanDetailPage(controller: widget.controller, planId: plan.id),
+      ),
+    );
+    await widget.controller.load();
+  }
+
+  Future<void> _openNodeDetail(WorldNode node) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WorldNodeDetailPage(
           controller: widget.controller,
-          planId: plan.id,
+          worldNodeId: node.id,
         ),
       ),
     );
@@ -295,7 +308,9 @@ class _WorldPageState extends State<WorldPage> {
 
   Future<void> _addCategory() async {
     final name = await _nameDialog('添加分类');
-    if (name != null) await _guard(() => widget.controller.createCategory(name));
+    if (name != null) {
+      await _guard(() => widget.controller.createCategory(name));
+    }
   }
 
   List<PopupMenuEntry<String>> _categoryActions(Category category) {
@@ -304,8 +319,7 @@ class _WorldPageState extends State<WorldPage> {
     );
     return [
       const PopupMenuItem(value: 'rename', child: Text('重命名分类')),
-      if (index > 0)
-        const PopupMenuItem(value: 'move-up', child: Text('分类上移')),
+      if (index > 0) const PopupMenuItem(value: 'move-up', child: Text('分类上移')),
       if (index >= 0 && index < widget.controller.categories.length - 1)
         const PopupMenuItem(value: 'move-down', child: Text('分类下移')),
       const PopupMenuItem(value: 'delete', child: Text('删除分类')),
@@ -384,6 +398,7 @@ class _WorldPageState extends State<WorldPage> {
         if (descendants.add(child.id)) collect(child.id);
       }
     }
+
     collect(node.id);
     final target = await showDialog<(String?, String?)>(
       context: context,
@@ -433,15 +448,16 @@ class _WorldPageState extends State<WorldPage> {
     }
   }
 
-  List<WorldNode> _siblings(WorldNode node) => widget.controller.worldNodes
-      .where(
-        (value) => node.parentWorldNodeId != null
-            ? value.parentWorldNodeId == node.parentWorldNodeId
-            : value.parentWorldNodeId == null &&
-                  value.categoryId == node.categoryId,
-      )
-      .toList()
-    ..sort(_nodeOrder);
+  List<WorldNode> _siblings(WorldNode node) =>
+      widget.controller.worldNodes
+          .where(
+            (value) => node.parentWorldNodeId != null
+                ? value.parentWorldNodeId == node.parentWorldNodeId
+                : value.parentWorldNodeId == null &&
+                      value.categoryId == node.categoryId,
+          )
+          .toList()
+        ..sort(_nodeOrder);
 
   Future<String?> _nameDialog(String title, {String initial = ''}) async {
     var text = initial;
@@ -477,7 +493,9 @@ class _WorldPageState extends State<WorldPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
         );
       }
     }

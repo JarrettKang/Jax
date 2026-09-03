@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
+import '../../core/entities/plan_review_note.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/errors/domain_failure.dart';
@@ -347,6 +348,7 @@ class PlanDetailPage extends StatelessWidget {
       }
       final node = controller.nodeFor(plan.worldNodeId);
       final items = controller.itemsFor(plan.id);
+      final reviewNotes = controller.reviewNotesFor(plan.id);
       return Scaffold(
         appBar: AppBar(
           title: Text(node?.name ?? '计划'),
@@ -398,7 +400,8 @@ class PlanDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              _planStatusText(plan.status),
+              '${_planStatusText(plan.status)} · 第 ${plan.roundNumber} 轮 · 创建于 ${_dateText(plan.createdAt)}'
+              '${plan.endedAt == null ? '' : ' · 结束于 ${_dateText(plan.endedAt!)}'}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const Divider(height: 28),
@@ -445,6 +448,35 @@ class PlanDetailPage extends StatelessWidget {
                           await controller.load();
                         }),
                   isEventToday: isEventToday,
+                ),
+              ),
+            const Divider(height: 32),
+            Row(
+              children: [
+                Text('复盘', style: Theme.of(context).textTheme.titleMedium),
+                const Spacer(),
+                TextButton.icon(
+                  key: const ValueKey('add-review-note'),
+                  onPressed: () => _editReviewNote(context, plan: plan),
+                  icon: const Icon(Icons.add_comment_outlined),
+                  label: const Text('添加复盘'),
+                ),
+              ],
+            ),
+            if (reviewNotes.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  '还没有复盘记录',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            else
+              ...reviewNotes.map(
+                (note) => _ReviewNoteRow(
+                  note: note,
+                  onEdit: () => _editReviewNote(context, note: note),
+                  onDelete: () => _deleteReviewNote(context, note),
                 ),
               ),
           ],
@@ -516,7 +548,7 @@ class PlanDetailPage extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('删除整个计划？'),
-        content: const Text('未进入执行的计划项会一并删除。世界节点会保留。'),
+        content: const Text('未进入执行的计划项和复盘会一并删除。世界节点会保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -577,6 +609,85 @@ class PlanDetailPage extends StatelessWidget {
       );
     }
   }
+
+  Future<void> _editReviewNote(
+    BuildContext context, {
+    Plan? plan,
+    PlanReviewNote? note,
+  }) async {
+    final content = await _reviewNoteDialog(context, note);
+    if (content == null || !context.mounted) return;
+    await _guard(
+      context,
+      () => note == null
+          ? controller.addReviewNote(plan!, content)
+          : controller.editReviewNote(note, content),
+    );
+  }
+
+  Future<void> _deleteReviewNote(
+    BuildContext context,
+    PlanReviewNote note,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('删除这条复盘？'),
+        content: const Text('删除后会在同步中保留删除记录。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-review-note'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await _guard(context, () => controller.deleteReviewNote(note));
+    }
+  }
+}
+
+class _ReviewNoteRow extends StatelessWidget {
+  const _ReviewNoteRow({
+    required this.note,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final PlanReviewNote note;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    key: ValueKey('review-note-${note.id}'),
+    children: [
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(note.content),
+        subtitle: Text(
+          note.updatedAt == note.createdAt
+              ? _dateTimeText(note.createdAt)
+              : '${_dateTimeText(note.createdAt)} · 已编辑',
+        ),
+        trailing: PopupMenuButton<String>(
+          key: ValueKey('review-note-more-${note.id}'),
+          onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit', child: Text('编辑')),
+            PopupMenuItem(value: 'delete', child: Text('删除')),
+          ],
+        ),
+      ),
+      const Divider(height: 1),
+    ],
+  );
 }
 
 class _PlanItemRow extends StatelessWidget {
@@ -778,6 +889,52 @@ Future<(String, String?)?> _itemDialog(
   return result;
 }
 
+Future<String?> _reviewNoteDialog(
+  BuildContext context,
+  PlanReviewNote? note,
+) async {
+  var content = note?.content ?? '';
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(note == null ? '添加复盘' : '编辑复盘'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: TextFormField(
+            key: const ValueKey('review-note-content'),
+            initialValue: content,
+            autofocus: true,
+            minLines: 4,
+            maxLines: 10,
+            keyboardType: TextInputType.multiline,
+            onChanged: (value) => content = value,
+            decoration: const InputDecoration(
+              labelText: '记录这轮计划的观察与思考',
+              alignLabelWithHint: true,
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          key: const ValueKey('save-review-note'),
+          onPressed: () {
+            if (content.trim().isEmpty) return;
+            Navigator.pop(context, content.trim());
+          },
+          child: const Text('保存'),
+        ),
+      ],
+    ),
+  );
+  return result;
+}
+
 Future<void> _guard(
   BuildContext context,
   Future<void> Function() action,
@@ -798,6 +955,18 @@ String _planStatusText(PlanStatus status) => switch (status) {
   PlanStatus.waiting => '等待中',
   PlanStatus.ended => '已结束',
 };
+
+String _dateText(DateTime value) {
+  final local = value.toLocal();
+  return '${local.year}-${_two(local.month)}-${_two(local.day)}';
+}
+
+String _dateTimeText(DateTime value) {
+  final local = value.toLocal();
+  return '${_dateText(value)} ${_two(local.hour)}:${_two(local.minute)}';
+}
+
+String _two(int value) => value.toString().padLeft(2, '0');
 
 String _itemStatusText(PlanItemStatus status) => switch (status) {
   PlanItemStatus.draft => '草稿',
