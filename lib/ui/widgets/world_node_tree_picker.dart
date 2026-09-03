@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/entities/category.dart';
 import '../../core/entities/world_node.dart';
+import 'world_node_tree_guide.dart';
 
 typedef WorldNodeDisabledReason = String? Function(WorldNode node);
 
@@ -99,12 +100,18 @@ class _WorldNodeTreePickerState extends State<WorldNodeTreePicker> {
           }),
         ),
         if (expanded)
-          for (final root in roots) _nodeRow(root, 0),
+          for (var index = 0; index < roots.length; index++)
+            _nodeRow(
+              roots[index],
+              WorldNodeTreeVisualContext.root(
+                isLastSibling: index == roots.length - 1,
+              ),
+            ),
       ],
     );
   }
 
-  Widget _nodeRow(WorldNode node, int depth) {
+  Widget _nodeRow(WorldNode node, WorldNodeTreeVisualContext visualContext) {
     final children =
         widget.worldNodes
             .where((candidate) => candidate.parentWorldNodeId == node.id)
@@ -112,47 +119,60 @@ class _WorldNodeTreePickerState extends State<WorldNodeTreePicker> {
           ..sort(_sortNodes);
     final expanded = _expandedBranches.contains(node.id);
     final disabledReason = widget.disabledReasonFor(node);
-    final cappedDepth = depth.clamp(0, 6);
     return Column(
       children: [
-        ListTile(
-          key: ValueKey('${widget.nodeKeyPrefix}${node.id}'),
-          contentPadding: EdgeInsets.only(
-            left: 12 + cappedDepth * 18.0,
-            right: 8,
-          ),
-          dense: true,
-          enabled: disabledReason == null,
-          minLeadingWidth: 40,
-          leading: children.isEmpty
-              ? const SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Icon(Icons.subdirectory_arrow_right, size: 20),
-                )
-              : IconButton(
-                  key: ValueKey('${widget.branchKeyPrefix}${node.id}'),
-                  tooltip: expanded ? '折叠下级' : '展开下级',
-                  constraints: const BoxConstraints.tightFor(
+        WorldNodeTreeGuideFrame(
+          key: ValueKey('${widget.nodeKeyPrefix}guide-${node.id}'),
+          visualContext: visualContext,
+          child: ListTile(
+            key: ValueKey('${widget.nodeKeyPrefix}${node.id}'),
+            contentPadding: EdgeInsets.only(
+              left: visualContext.contentIndent(),
+              right: 8,
+            ),
+            dense: true,
+            enabled: disabledReason == null,
+            minLeadingWidth: 40,
+            leading: children.isEmpty
+                ? const SizedBox(
                     width: 40,
                     height: 40,
+                    child: Icon(Icons.subdirectory_arrow_right, size: 20),
+                  )
+                : IconButton(
+                    key: ValueKey('${widget.branchKeyPrefix}${node.id}'),
+                    tooltip: expanded ? '折叠下级' : '展开下级',
+                    constraints: const BoxConstraints.tightFor(
+                      width: 40,
+                      height: 40,
+                    ),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => setState(() {
+                      expanded
+                          ? _expandedBranches.remove(node.id)
+                          : _expandedBranches.add(node.id);
+                    }),
+                    icon: Icon(
+                      expanded ? Icons.expand_more : Icons.chevron_right,
+                    ),
                   ),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => setState(() {
-                    expanded
-                        ? _expandedBranches.remove(node.id)
-                        : _expandedBranches.add(node.id);
-                  }),
-                  icon: Icon(
-                    expanded ? Icons.expand_more : Icons.chevron_right,
-                  ),
-                ),
-          title: Text(node.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-          subtitle: disabledReason == null ? null : Text(disabledReason),
-          onTap: disabledReason == null ? () => widget.onSelected(node) : null,
+            title: Text(
+              node.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: disabledReason == null ? null : Text(disabledReason),
+            onTap: disabledReason == null
+                ? () => widget.onSelected(node)
+                : null,
+          ),
         ),
         if (expanded)
-          for (final child in children) _nodeRow(child, depth + 1),
+          for (var index = 0; index < children.length; index++)
+            _nodeRow(
+              children[index],
+              visualContext.child(isLastSibling: index == children.length - 1),
+            ),
       ],
     );
   }

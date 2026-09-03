@@ -5,6 +5,7 @@ import '../../core/entities/plan.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/planning_controller.dart';
+import '../widgets/world_node_tree_guide.dart';
 import '../widgets/world_node_tree_picker.dart';
 import 'planning_page.dart';
 import 'world_node_detail_page.dart';
@@ -132,13 +133,19 @@ class _WorldPageState extends State<WorldPage> {
                 child: Text('暂无世界节点'),
               )
             else
-              for (final root in roots) _nodeRow(root, 0),
+              for (var index = 0; index < roots.length; index++)
+                _nodeRow(
+                  roots[index],
+                  WorldNodeTreeVisualContext.root(
+                    isLastSibling: index == roots.length - 1,
+                  ),
+                ),
         ],
       ),
     );
   }
 
-  Widget _nodeRow(WorldNode node, int depth) {
+  Widget _nodeRow(WorldNode node, WorldNodeTreeVisualContext visualContext) {
     final children =
         widget.controller.worldNodes
             .where((value) => value.parentWorldNodeId == node.id)
@@ -148,47 +155,62 @@ class _WorldPageState extends State<WorldPage> {
     final completed = node.status == WorldNodeStatus.completed;
     return Column(
       children: [
-        ListTile(
-          key: ValueKey('world-node-${node.id}'),
-          contentPadding: EdgeInsets.only(left: 12.0 + depth * 24, right: 8),
-          leading: children.isEmpty
-              ? Icon(
-                  completed
-                      ? Icons.check_circle_outline
-                      : Icons.circle_outlined,
-                  size: 20,
-                )
-              : IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
+        WorldNodeTreeGuideFrame(
+          key: ValueKey('world-node-guide-${node.id}'),
+          visualContext: visualContext,
+          levelIndent: 20,
+          child: ListTile(
+            key: ValueKey('world-node-${node.id}'),
+            contentPadding: EdgeInsets.only(
+              left: visualContext.contentIndent(levelIndent: 20),
+              right: 8,
+            ),
+            leading: children.isEmpty
+                ? Icon(
+                    completed
+                        ? Icons.check_circle_outline
+                        : Icons.circle_outlined,
+                    size: 20,
+                  )
+                : IconButton(
+                    key: ValueKey('world-node-branch-${node.id}'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 28,
+                    ),
+                    onPressed: () => setState(() {
+                      collapsed
+                          ? _collapsedBranches.remove(node.id)
+                          : _collapsedBranches.add(node.id);
+                    }),
+                    icon: Icon(
+                      collapsed ? Icons.chevron_right : Icons.expand_more,
+                    ),
                   ),
-                  onPressed: () => setState(() {
-                    collapsed
-                        ? _collapsedBranches.remove(node.id)
-                        : _collapsedBranches.add(node.id);
-                  }),
-                  icon: Icon(
-                    collapsed ? Icons.chevron_right : Icons.expand_more,
-                  ),
-                ),
-          title: Text(
-            node.name,
-            style: completed
-                ? const TextStyle(decoration: TextDecoration.lineThrough)
-                : null,
+            title: Text(
+              node.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: completed
+                  ? const TextStyle(decoration: TextDecoration.lineThrough)
+                  : null,
+            ),
+            subtitle: Text(_planningState(node)),
+            trailing: PopupMenuButton<String>(
+              key: ValueKey('world-node-more-${node.id}'),
+              onSelected: (action) => _nodeAction(node, action),
+              itemBuilder: (_) => _actionsFor(node),
+            ),
+            onTap: () => _openNodeDetail(node),
           ),
-          subtitle: Text(_planningState(node)),
-          trailing: PopupMenuButton<String>(
-            key: ValueKey('world-node-more-${node.id}'),
-            onSelected: (action) => _nodeAction(node, action),
-            itemBuilder: (_) => _actionsFor(node),
-          ),
-          onTap: () => _openNodeDetail(node),
         ),
         if (!collapsed)
-          for (final child in children) _nodeRow(child, depth + 1),
+          for (var index = 0; index < children.length; index++)
+            _nodeRow(
+              children[index],
+              visualContext.child(isLastSibling: index == children.length - 1),
+            ),
       ],
     );
   }

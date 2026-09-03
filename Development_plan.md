@@ -729,6 +729,9 @@ UI：
 7. WorldNode reparent picker 与 Planning picker 复用 Category/recursive tree renderer；
    move 场景仅注入 cycle/no-op eligibility、当前路径默认展开与独立 root target，
    不新增 schema、Sync contract 或业务字段。
+8. World 主树和共享 picker 使用 UI-only `depth + ancestorHasNextSibling + isLastSibling`
+   metadata 绘制中性的 ancestor continuation/短连接线；collapse/reparent 触发正常 rebuild，
+   深层缩进设视觉上限且 painter 不参与 hit test 或 accessibility tree。
 
 ## 14. P4：Plan Review 与 WorldNode Detail
 

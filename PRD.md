@@ -442,6 +442,9 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - WorldNode“移动到…”复用同一套 Category → 可折叠 WorldNode hierarchy 选择器；
   Category header 只导航，目标仍是 parent。self、descendants、current parent 可见但
   禁用并解释原因，顶部独立提供“无上层”，不改变既有 reparent/Category/order 语义。
+- World 主树与上述 picker 在既有缩进内绘制低对比 hierarchy guide；竖线只在 ancestor
+  尚有后续 sibling 时继续，并以短横线连接当前节点。Category 与 root 不计入 guide
+  depth，折叠或 reparent 后始终由当前树结构重新计算，不保存 UI metadata。
 - Schema v16 与 Sync protocol 4 引入 dataset generation。Development Data Reset
   后旧 baseline/snapshot/resolved plan 因 generation/fingerprint 不匹配而拒绝，
   防止旧数据复活。

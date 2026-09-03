@@ -10,6 +10,7 @@ import 'package:jax/core/repositories/world_node_repository.dart';
 import 'package:jax/ui/controllers/planning_controller.dart';
 import 'package:jax/ui/pages/planning_page.dart';
 import 'package:jax/ui/pages/world_page.dart';
+import 'package:jax/ui/widgets/world_node_tree_guide.dart';
 
 import '../support/memory_repository.dart';
 
@@ -382,6 +383,14 @@ void main() {
       final moved = nodes.nodes.singleWhere((node) => node.id == child.id);
       expect(moved.parentWorldNodeId, rootB.id);
       expect(moved.categoryId, isNull);
+      final movedGuide = tester
+          .widget<WorldNodeTreeGuideFrame>(
+            find.byKey(ValueKey('world-node-guide-${child.id}')),
+          )
+          .visualContext;
+      expect(movedGuide.depth, 1);
+      expect(movedGuide.ancestorHasNextSibling, isEmpty);
+      expect(movedGuide.isLastSibling, isTrue);
 
       await _openMenu(tester, child.id);
       await tester.tap(find.text('移动到…'));
@@ -399,6 +408,111 @@ void main() {
       );
       expect(movedToRoot.parentWorldNodeId, isNull);
       expect(movedToRoot.categoryId, 'b');
+    },
+  );
+
+  testWidgets(
+    'World tree guides track ancestor continuation, branch ends, and roots',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final a = _node('10000000-0000-4000-8000-000000000001', 'A');
+      final b = _node(
+        '10000000-0000-4000-8000-000000000002',
+        'B',
+        parentId: a.id,
+        categoryId: null,
+      );
+      final c = _node(
+        '10000000-0000-4000-8000-000000000003',
+        'C with a very long name that remains bounded on a narrow screen',
+        parentId: b.id,
+        categoryId: null,
+      );
+      final d = _node(
+        '10000000-0000-4000-8000-000000000004',
+        'D',
+        parentId: b.id,
+        categoryId: null,
+        order: 1,
+      );
+      final e = _node(
+        '10000000-0000-4000-8000-000000000005',
+        'E',
+        parentId: a.id,
+        categoryId: null,
+        order: 1,
+      );
+      final f = _node(
+        '10000000-0000-4000-8000-000000000006',
+        'F',
+        parentId: a.id,
+        categoryId: null,
+        order: 2,
+      );
+      final g = _node(
+        '10000000-0000-4000-8000-000000000007',
+        'G',
+        parentId: f.id,
+        categoryId: null,
+      );
+      final h = _node(
+        '10000000-0000-4000-8000-000000000008',
+        'H',
+        parentId: g.id,
+        categoryId: null,
+      );
+      final rootB = _node(
+        '10000000-0000-4000-8000-000000000009',
+        'Root B',
+        order: 1,
+      );
+      nodes.nodes.addAll([a, b, c, d, e, f, g, h, rootB]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: InMemoryWorldCategoryCollapseStore(),
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+
+      WorldNodeTreeVisualContext contextFor(WorldNode node) => tester
+          .widget<WorldNodeTreeGuideFrame>(
+            find.byKey(ValueKey('world-node-guide-${node.id}')),
+          )
+          .visualContext;
+
+      expect(contextFor(a).depth, 0);
+      expect(contextFor(a).ancestorHasNextSibling, isEmpty);
+      expect(contextFor(rootB).depth, 0);
+      expect(contextFor(b).depth, 1);
+      expect(contextFor(b).isLastSibling, isFalse);
+      expect(contextFor(c).depth, 2);
+      expect(contextFor(c).ancestorHasNextSibling, [true]);
+      expect(contextFor(c).isLastSibling, isFalse);
+      expect(contextFor(d).ancestorHasNextSibling, [true]);
+      expect(contextFor(d).isLastSibling, isTrue);
+      expect(contextFor(e).depth, 1);
+      expect(contextFor(e).isLastSibling, isFalse);
+      expect(contextFor(f).isLastSibling, isTrue);
+      expect(contextFor(g).ancestorHasNextSibling, [false]);
+      expect(contextFor(h).depth, 3);
+      expect(contextFor(h).ancestorHasNextSibling, [false, false]);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(ValueKey('world-node-branch-${a.id}')));
+      await _pumpFrames(tester);
+      expect(find.byKey(ValueKey('world-node-guide-${b.id}')), findsNothing);
+      expect(
+        find.byKey(ValueKey('world-node-guide-${rootB.id}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(ValueKey('world-node-branch-${a.id}')));
+      await _pumpFrames(tester);
+      expect(find.byKey(ValueKey('world-node-guide-${h.id}')), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 }
