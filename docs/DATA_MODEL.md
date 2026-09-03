@@ -1,6 +1,6 @@
-# Jax 当前数据模型（Planning P4）
+# Jax 当前数据模型（Planning P3.5 attention + P4）
 
-当前 SQLite schema version 为 `17`。时间字段均保存为 UTC Unix 毫秒，UI
+当前 SQLite schema version 为 `18`。时间字段均保存为 UTC Unix 毫秒，UI
 显示时转换为设备本地时间。业务层级与执行事实严格分离：
 
 `WorldNode → Plan → PlanItem → Event → RunSegment`
@@ -12,16 +12,18 @@ Standalone Event 则不经过 Planning：`Event → EventDayPlan → RunSegment`
 ## 长期结构与规划
 
 - `categories`：World Category。仅 WorldNode root 或 standalone Event 可直接引用。
-- `world_nodes`：长期关键节点；保留任意深度 parent/child、scope 内顺序与
-  `inProgress/completed` 状态。child 不直接保存 Category，而是从 root 继承。
-- `plans`：一个 WorldNode 的一轮规划。状态为 `focused/waiting/ended`；同一
-  WorldNode 最多一个 current Plan，轮次号唯一。
+- `world_nodes`：长期关键节点；保留任意深度 parent/child、scope 内顺序、
+  `inProgress/completed` lifecycle 与独立的 `is_focused` attention。完成节点必须
+  不关注；父子关注互不传播。child 不直接保存 Category，而是从 root 继承。
+- `plans`：一个 WorldNode 的一轮规划。状态仅为 `current/ended`；同一 WorldNode
+  最多一个 current Plan，轮次号唯一。attention 不再属于 Plan。
 - `plan_items`：Plan 内平级、有序步骤。状态为
-  `draft/next/dispatched/done/dropped`。P3 仅允许 focused Plan 的 next item
+  `draft/next/dispatched/done/dropped`。只有 focused、inProgress WorldNode 的
+  current Plan 中的 next item
   通过原子 dispatch 进入 dispatched；Event completion/restore 驱动
   `dispatched↔done`。
 - `plan_review_notes`：Plan 下独立、可追加的复盘文本；保留创建/更新时间，
-  focused、waiting、ended 均可新增、编辑和删除，不驱动任何规划或执行状态。
+  current、ended 均可新增、编辑和删除，不驱动任何规划或执行状态。
 
 未产生执行事实的 Plan 可连同 draft/next PlanItem 物理删除，并正常产生 Sync
 tombstone。若存在 dispatched/done PlanItem 或 linked Event，Data 层拒绝删除。
@@ -68,12 +70,14 @@ Event 与 RoutineExecution 共用全局 one-running/open-segment invariant。开
 ## Sync generation
 
 Schema v16 增加单例 `dataset_metadata.generation`。Schema v17 只新增空的
-`plan_review_notes` 表及同步触发器。Sync protocol 5 的 snapshot、
+`plan_review_notes` 表及同步触发器。Schema v18 把旧 Plan attention 归一到
+`world_nodes.is_focused`，并把 Plan active 状态统一为 `current`。Sync protocol 6 的 snapshot、
 fingerprint、compare、compile 与 apply 均携带 generation；不同 generation 明确
 拒绝，避免 Development Data Reset 后旧 baseline/plan 复活旧业务世界。
 
-Protocol 1–4 只在反序列化兼容层中升级；protocol 4 baseline 升级到 protocol 5
-时不发明复盘记录。当前 snapshot 不输出 legacy Event hierarchy、Event sibling
+Protocol 1–5 只在反序列化兼容层中升级；protocol 4 baseline 升级时不发明复盘记录；
+protocol 5 的 focused/waiting Plan 显式归一为 WorldNode attention + current Plan，
+并保留 generation。当前 snapshot 不输出 legacy Event hierarchy、Event sibling
 list 或 LegacyEventWorldNodeLink。
 
 Development Data Reset 清空所有业务实体、执行事实、tombstone 与绑定已删除实体

@@ -7,8 +7,8 @@ read-only second layer to World without making World an execution surface.
 
 SQLite schema v17 adds `plan_review_notes(id, plan_id, content,
 created_at_utc, updated_at_utc)`. Migration from v16 creates an empty table and
-sync triggers only. A note may be created, edited, or deleted while its Plan is
-focused, waiting, or ended. Editing preserves `created_at_utc`; blank content is
+sync triggers only. After P3.5, a note may be created, edited, or deleted while
+its Plan is current or ended. Editing preserves `created_at_utc`; blank content is
 rejected. Notes never enter Record or change Plan, PlanItem, Event, or WorldNode.
 
 An unexecuted Plan remains physically deletable even if it has review notes.
@@ -18,11 +18,12 @@ when ended.
 
 ## Sync contract
 
-Sync protocol 5 adds `planReviewNote` with `planSyncId` and `content`. Notes are
+Sync protocol 5 added `planReviewNote` with `planSyncId` and `content`; P3.5
+protocol 6 preserves it while moving attention to WorldNode. Notes are
 part of snapshots, business fingerprints, three-way comparison, mutation plans,
 apply, tombstones, and readiness. Concurrent content edits are field conflicts,
-not last-writer-wins. Protocol 4 baselines normalize to protocol 5 without
-inventing notes. Dataset generation is unchanged.
+not last-writer-wins. Protocol 4 baselines normalize without inventing notes;
+protocol 5 baselines then normalize Plan attention without changing generation.
 
 Readiness rejects missing/invalid identities, blank content, invalid timestamp
 order, dangling Plan references, and normal FK failures. Apply upserts Plan before
@@ -39,7 +40,8 @@ ended Plan history, and execution history. Waiting counts as current. Historical
 Plans use deterministic round/created order and open the canonical Plan Detail.
 Execution history is derived only through
 `Event.sourcePlanItem → PlanItem → Plan → exact WorldNode`; standalone Events,
-other nodes, and descendants are excluded. Direct RunSegment duration is shown,
+other nodes, and descendants are excluded. Current means `Plan.status == current`;
+WorldNode attention does not hide its detail or history. Direct RunSegment duration is shown,
 but no execution controls are added.
 
 ## Explicit exclusions

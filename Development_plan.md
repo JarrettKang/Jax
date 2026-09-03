@@ -707,13 +707,33 @@ UI：
 
 - 覆盖 Event/Routine 原位修改、segment count/identity、向后拒绝、跨类型 overlap、邻接、跨 JaxDay、planned relation 不变、stale completion、SQLite rollback/sync metadata 与手机窄屏 dialog/timer 刷新。
 
-## 13. P4：Plan Review 与 WorldNode Detail
+## 13. P3.5：Planning Attention Model Refactor
+
+1. Schema v18 为 WorldNode 增加 `is_focused`，把 Plan active status 简化为
+   `current/ended`；迁移按 focused→focused+current、waiting→notFocused+current、
+   ended→ended 映射，并逐表证明 execution facts 不变。
+2. Core/Data 将 attention lifecycle、current Plan completion guard 与 Today suggestion
+   eligibility 集中实现；focus/unfocus 不修改 Plan、item、Event、Today、segment 或
+   Record，父子节点不传播。
+3. Planning Overview 改为 focused + inProgress WorldNode 投影，current Plan nullable；
+   World 保留低噪音 focus action 与全部 Plan/history 入口，Plan Detail 移除旧 Plan
+   focus/wait actions。
+4. Sync protocol 6 把 attention 纳入 snapshot/fingerprint/compare/apply/readiness；
+   protocol 5 baseline 使用只读 normalization 并保留 generation。并发不同字段变化按
+   现有三方 field conflict 处理，不使用 LWW。
+5. 自动化覆盖 migration、focus/no-Plan、unfocus/refocus、hierarchy independence、
+   completion/restore、recommendation、dispatched preservation、sync compatibility、
+   rollback 和 no-op navigation。
+6. P4 的 Review Note 与 WorldNode Detail 保持现有能力，但其 current/history 显示和
+   Sync 合同必须建立在新的 attention 模型上。
+
+## 14. P4：Plan Review 与 WorldNode Detail
 
 1. Schema v17 增加 PlanReviewNote 与 sync triggers；迁移必须只增加空结构。
-2. PlanningRepository 完成 focused/waiting/ended 下的复盘增删改查，保留 createdAt，
+2. PlanningRepository 完成 current/ended 下的复盘增删改查，保留 createdAt，
    Plan 安全删除按 note → item → plan 顺序写 tombstone。
-3. Sync protocol 5 覆盖 snapshot、fingerprint、3-way conflict、mutation/apply、
-   dependency order、readiness 与 protocol 4 baseline 兼容升级。
+3. Sync protocol 5 引入复盘实体；P3.5 protocol 6 延续其 snapshot、fingerprint、
+   3-way conflict、mutation/apply、dependency order 与 readiness。
 4. Plan Detail 增加低噪音复盘区和窄屏多行编辑对话框，不强制 review。
 5. WorldNode Detail 提供 overview/current/history/execution 四段只读信息；执行历史仅
    聚合 exact-node planned Event 的 direct duration。

@@ -477,10 +477,33 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - 建议顺序为 Category order → WorldNode hierarchy/display order → Plan round/id
   → PlanItem order/id。本阶段不新增 schema，仍为 v16；Sync protocol 仍为 4。
 
-## 20. Planning 重构 Phase P4：复盘与 WorldNode Detail
+## 20. Planning 重构 Phase P3.5：Attention Model Refactor
+
+- WorldNode lifecycle 保持 `inProgress/completed`，新增独立、可同步的
+  `isFocused` attention。focused 表示“用户当前希望 Jax 主动帮助推进这个长期节点”；
+  父子节点与 Category 不传播 attention，允许任意多个 focused 节点，也允许 focused
+  节点没有 Plan。
+- Plan 不再拥有 focused/waiting 语义，只使用 `current/ended`；同一 WorldNode 最多
+  一个 current Plan。创建 Plan 不自动 focus，结束 Plan 不取消 focus，notFocused
+  节点的 current Plan 仍可完整编辑。
+- Planning 是所有 focused + inProgress WorldNode 的工作台，以 WorldNode 为视觉主体，
+  current Plan 可空；没有 current Plan 时展示新增/新一轮入口。全局 Plan picker 仍可
+  选择符合创建条件的全部节点。
+- Today 建议的唯一资格为 focused + inProgress WorldNode、current Plan、next
+  PlanItem。取消关注只移除尚未派发的建议；同一 item 保持 next，重新关注后自动出现。
+  dispatched/done、Event、Today、RunSegment、Routine 与 Record 完全不受 attention
+  操作影响。
+- 有 current Plan 时仍禁止完成 WorldNode。完成无 current Plan 的节点时原子写入
+  completed + notFocused；恢复时回到 inProgress + notFocused，不自动重新关注。
+- Schema v18 将旧 focused Plan 映射为 focused WorldNode + current Plan，将旧 waiting
+  Plan 映射为 notFocused WorldNode + current Plan，ended 保持不变；不得改写任何执行
+  事实。Sync protocol 6 同步 attention，并兼容归一 protocol 5 baseline，保留 dataset
+  generation，三方冲突不采用 LWW。
+
+## 21. Planning 重构 Phase P4：复盘与 WorldNode Detail
 
 - PlanReviewNote 是 Plan 下独立、可追加的复盘事实，包含非空 content 与独立
-  created/updated 时间；focused、waiting、ended Plan 均可新增、编辑、确认删除。
+  created/updated 时间；current、ended Plan 均可新增、编辑、确认删除。
 - 复盘不进入 Record，不改变 Plan/PlanItem/Event/WorldNode 状态。删除 Plan 仅在
   从未派发/执行时允许，并同时 tombstone 其 PlanItem 与 PlanReviewNote；有执行事实
   的 Plan 继续只能结束并保留复盘。
@@ -491,5 +514,5 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - 执行历史只沿 planned Event 的 sourcePlanItem 关系反查该节点，不包含 standalone
   Event、不汇总 descendant，不提供 start/pause/complete 等执行控制。
 - completed WorldNode 的完整历史仍可读，但必须先恢复节点才能创建新 Plan。
-- Schema v17 新增 `plan_review_notes`；Sync protocol 5 将其作为三方同步业务实体，
-  不采用 LWW。旧 protocol 4 baseline 兼容升级且复盘为空。
+- Schema v17 新增 `plan_review_notes`；P3.5 后 Sync protocol 6 继续将其作为三方同步
+  业务实体，不采用 LWW。旧 protocol 4 baseline 兼容升级且复盘为空。

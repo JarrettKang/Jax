@@ -20,7 +20,7 @@ Jax 遵循 `UI → Core ← Data`。Core 不依赖 Flutter、SQLite 或具体平
 
 强制结束进程、系统崩溃和断电不属于 v0.1 的精确关闭保证。该退出监听只在 Windows 注册；Android 后台、锁屏、返回键和进程回收不映射为自动暂停，具体策略留待 Android v0.1 功能适配阶段确认。
 
-## Planning P4 边界
+## Planning P3.5 attention 与 P4 边界
 
 当前长期结构由 `WorldNode` tree 承担，规划由 `Plan/PlanItem` 承担，`Event`
 只承担扁平执行。World UI 与 Planning picker 都读取 WorldNode；Today/Home/Record
@@ -31,12 +31,18 @@ Planned Event 只保存唯一 `sourcePlanItemId`，effective Category 在 Reposi
 Category。Core Repository API 已移除 Event hierarchy、reparent、sibling reorder、
 descendant switch 和 hierarchical completion。
 
-Sync protocol 5 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
+WorldNode 同时拥有独立 lifecycle（`inProgress/completed`）和 attention
+（`isFocused`）。Plan 仅拥有 `current/ended` 轮次状态。Planning Overview 的唯一
+投影以 focused + inProgress WorldNode 为主体；current Plan 可以为空。关注切换只写
+WorldNode，不结束 Plan、不修改 PlanItem 或任何执行事实。
+
+Sync protocol 6 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
 读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
 拒绝 legacy Event hierarchy mutation。
 
-Today recommendation 是 `PlanningController` 根据 focused Plan 和 next PlanItem
-即时派生的 presentation，不是数据库实体。用户确认后，
+Today recommendation 由同一 Planning projection 根据 focused + inProgress
+WorldNode、current Plan 和 next PlanItem 即时派生，不是数据库实体。Data 层在提交
+时用同一资格条件再次校验。用户确认后，
 `DispatchPlanItems → PlanningDispatchRepository` 将 Event insert、PlanItem
 transition 与 EventDayPlan append 组合为一个事务。UI 不分别调用三个写 API。
 
