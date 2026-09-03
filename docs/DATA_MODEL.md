@@ -1,9 +1,11 @@
-# Jax 当前数据模型（Planning P2.5）
+# Jax 当前数据模型（Planning P4）
 
-当前 SQLite schema version 为 `16`。时间字段均保存为 UTC Unix 毫秒，UI
+当前 SQLite schema version 为 `17`。时间字段均保存为 UTC Unix 毫秒，UI
 显示时转换为设备本地时间。业务层级与执行事实严格分离：
 
 `WorldNode → Plan → PlanItem → Event → RunSegment`
+
+`Plan → PlanReviewNote`
 
 Standalone Event 则不经过 Planning：`Event → EventDayPlan → RunSegment`。
 
@@ -18,6 +20,8 @@ Standalone Event 则不经过 Planning：`Event → EventDayPlan → RunSegment`
   `draft/next/dispatched/done/dropped`。P3 仅允许 focused Plan 的 next item
   通过原子 dispatch 进入 dispatched；Event completion/restore 驱动
   `dispatched↔done`。
+- `plan_review_notes`：Plan 下独立、可追加的复盘文本；保留创建/更新时间，
+  focused、waiting、ended 均可新增、编辑和删除，不驱动任何规划或执行状态。
 
 未产生执行事实的 Plan 可连同 draft/next PlanItem 物理删除，并正常产生 Sync
 tombstone。若存在 dispatched/done PlanItem 或 linked Event，Data 层拒绝删除。
@@ -63,12 +67,14 @@ Event 与 RoutineExecution 共用全局 one-running/open-segment invariant。开
 
 ## Sync generation
 
-Schema v16 增加单例 `dataset_metadata.generation`。Sync protocol 4 的 snapshot、
+Schema v16 增加单例 `dataset_metadata.generation`。Schema v17 只新增空的
+`plan_review_notes` 表及同步触发器。Sync protocol 5 的 snapshot、
 fingerprint、compare、compile 与 apply 均携带 generation；不同 generation 明确
 拒绝，避免 Development Data Reset 后旧 baseline/plan 复活旧业务世界。
 
-Protocol 1–3 只在反序列化兼容层中升级；protocol 4 snapshot 不输出 legacy
-Event hierarchy、Event sibling list 或 LegacyEventWorldNodeLink。
+Protocol 1–4 只在反序列化兼容层中升级；protocol 4 baseline 升级到 protocol 5
+时不发明复盘记录。当前 snapshot 不输出 legacy Event hierarchy、Event sibling
+list 或 LegacyEventWorldNodeLink。
 
 Development Data Reset 清空所有业务实体、执行事实、tombstone 与绑定已删除实体
 ID 的折叠偏好，同时写入双端相同的新 generation。外部 SyncStorageRoot、主题、

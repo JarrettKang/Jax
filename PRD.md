@@ -476,3 +476,20 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - Home correction 只处理当前 open segment；Record segment editor 继续负责已关闭历史段的完整修正，两者不得合并成 timeline editor。
 - 建议顺序为 Category order → WorldNode hierarchy/display order → Plan round/id
   → PlanItem order/id。本阶段不新增 schema，仍为 v16；Sync protocol 仍为 4。
+
+## 20. Planning 重构 Phase P4：复盘与 WorldNode Detail
+
+- PlanReviewNote 是 Plan 下独立、可追加的复盘事实，包含非空 content 与独立
+  created/updated 时间；focused、waiting、ended Plan 均可新增、编辑、确认删除。
+- 复盘不进入 Record，不改变 Plan/PlanItem/Event/WorldNode 状态。删除 Plan 仅在
+  从未派发/执行时允许，并同时 tombstone 其 PlanItem 与 PlanReviewNote；有执行事实
+  的 Plan 继续只能结束并保留复盘。
+- Plan detail 以低噪音时间顺序展示复盘，提供窄屏可滚动的多行编辑器；复盘可选，
+  结束计划不强迫填写。
+- World 首页保持 Category/节点/status/current Plan 的低噪音树；点击节点进入只读
+  Detail，展示 breadcrumb、当前计划摘要、按轮次确定排序的历史计划及精确节点执行历史。
+- 执行历史只沿 planned Event 的 sourcePlanItem 关系反查该节点，不包含 standalone
+  Event、不汇总 descendant，不提供 start/pause/complete 等执行控制。
+- completed WorldNode 的完整历史仍可读，但必须先恢复节点才能创建新 Plan。
+- Schema v17 新增 `plan_review_notes`；Sync protocol 5 将其作为三方同步业务实体，
+  不采用 LWW。旧 protocol 4 baseline 兼容升级且复盘为空。

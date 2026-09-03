@@ -20,7 +20,7 @@ Jax 遵循 `UI → Core ← Data`。Core 不依赖 Flutter、SQLite 或具体平
 
 强制结束进程、系统崩溃和断电不属于 v0.1 的精确关闭保证。该退出监听只在 Windows 注册；Android 后台、锁屏、返回键和进程回收不映射为自动暂停，具体策略留待 Android v0.1 功能适配阶段确认。
 
-## Planning P3 边界
+## Planning P4 边界
 
 当前长期结构由 `WorldNode` tree 承担，规划由 `Plan/PlanItem` 承担，`Event`
 只承担扁平执行。World UI 与 Planning picker 都读取 WorldNode；Today/Home/Record
@@ -31,7 +31,7 @@ Planned Event 只保存唯一 `sourcePlanItemId`，effective Category 在 Reposi
 Category。Core Repository API 已移除 Event hierarchy、reparent、sibling reorder、
 descendant switch 和 hierarchical completion。
 
-Sync protocol 4 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
+Sync protocol 5 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
 读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
 拒绝 legacy Event hierarchy mutation。
 
@@ -44,3 +44,11 @@ planned Event 的 completion/restore coupling 放在 SQLite Event Repository 事
 因此 waiting completion 与 running completion（包括关闭 open segment）都不会留下
 Event/PlanItem 半提交状态。Today relation 仍是独立索引，移除/重加不改变
 dispatch 事实。
+
+PlanReviewNote 是 Plan 下独立的 appendable 业务实体。它不改变 Plan 状态、
+PlanItem、Event 或 Record，只通过 PlanningRepository 写入；同步使用三方字段比较，
+delete 产生 tombstone，apply 依赖顺序为 WorldNode → Plan → PlanReviewNote。
+
+WorldNode Detail 是只读聚合层：当前/历史计划由 Plan 状态派生，执行历史只沿
+`Event.sourcePlanItemId → PlanItem → Plan → exact WorldNode` 反查。它不聚合子节点，
+不纳入 standalone Event，也不提供执行控制。

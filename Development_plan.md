@@ -706,3 +706,18 @@ UI：
 测试：
 
 - 覆盖 Event/Routine 原位修改、segment count/identity、向后拒绝、跨类型 overlap、邻接、跨 JaxDay、planned relation 不变、stale completion、SQLite rollback/sync metadata 与手机窄屏 dialog/timer 刷新。
+
+## 13. P4：Plan Review 与 WorldNode Detail
+
+1. Schema v17 增加 PlanReviewNote 与 sync triggers；迁移必须只增加空结构。
+2. PlanningRepository 完成 focused/waiting/ended 下的复盘增删改查，保留 createdAt，
+   Plan 安全删除按 note → item → plan 顺序写 tombstone。
+3. Sync protocol 5 覆盖 snapshot、fingerprint、3-way conflict、mutation/apply、
+   dependency order、readiness 与 protocol 4 baseline 兼容升级。
+4. Plan Detail 增加低噪音复盘区和窄屏多行编辑对话框，不强制 review。
+5. WorldNode Detail 提供 overview/current/history/execution 四段只读信息；执行历史仅
+   聚合 exact-node planned Event 的 direct duration。
+6. 自动化覆盖迁移不变性、复盘全生命周期、同步冲突/墓碑/回滚、历史排序与过滤、
+   页面读取 fingerprint 不变及窄屏布局。
+7. 完整 analyze/test/build 后，先备份真实双端数据库，再做 v16→v17 rollout；
+   rollout 不创建真实 PlanReviewNote、不执行真实 sync apply。
