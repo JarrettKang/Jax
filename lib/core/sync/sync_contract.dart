@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 5;
+const syncProtocolVersion = 6;
 
 enum SyncEntityKind {
   eventCategory,
@@ -188,9 +188,12 @@ class SyncSnapshot {
     final withFlatEvents = withPlanning.protocolVersion == 3
         ? _upgradeProtocol3Baseline(withPlanning)
         : withPlanning;
-    return withFlatEvents.protocolVersion == 4
+    final withReviews = withFlatEvents.protocolVersion == 4
         ? _upgradeProtocol4Baseline(withFlatEvents)
         : withFlatEvents;
+    return withReviews.protocolVersion == 5
+        ? _upgradeProtocol5Baseline(withReviews)
+        : withReviews;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -397,7 +400,7 @@ SyncSnapshot _upgradeProtocol3Baseline(SyncSnapshot source) {
 }
 
 SyncSnapshot _upgradeProtocol4Baseline(SyncSnapshot source) => SyncSnapshot(
-  protocolVersion: syncProtocolVersion,
+  protocolVersion: 5,
   schemaVersion: source.schemaVersion,
   datasetGeneration: source.datasetGeneration,
   exportedAtUtc: source.exportedAtUtc,
@@ -408,6 +411,59 @@ SyncSnapshot _upgradeProtocol4Baseline(SyncSnapshot source) => SyncSnapshot(
     'baseline-upgraded: sync protocol 4 normalized to protocol 5 PlanReviewNotes',
   ],
 );
+
+SyncSnapshot _upgradeProtocol5Baseline(SyncSnapshot source) {
+  final focusedNodes = source.records
+      .where(
+        (record) =>
+            record.kind == SyncEntityKind.plan &&
+            !record.isDeleted &&
+            record.payload['status'] == 'focused',
+      )
+      .map((record) => record.payload['worldNodeSyncId'])
+      .whereType<String>()
+      .toSet();
+  final records = source.records
+      .map((record) {
+        if (record.isDeleted) return record;
+        if (record.kind == SyncEntityKind.worldNode) {
+          final payload = Map<String, Object?>.from(record.payload);
+          payload['isFocused'] =
+              payload['status'] == 'inProgress' &&
+                  focusedNodes.contains(record.metadata.id)
+              ? 1
+              : 0;
+          return SyncRecord(
+            kind: record.kind,
+            metadata: record.metadata,
+            payload: payload,
+          );
+        }
+        if (record.kind == SyncEntityKind.plan &&
+            {'focused', 'waiting'}.contains(record.payload['status'])) {
+          return SyncRecord(
+            kind: record.kind,
+            metadata: record.metadata,
+            payload: Map<String, Object?>.from(record.payload)
+              ..['status'] = 'current',
+          );
+        }
+        return record;
+      })
+      .toList(growable: false);
+  return SyncSnapshot(
+    protocolVersion: syncProtocolVersion,
+    schemaVersion: source.schemaVersion,
+    datasetGeneration: source.datasetGeneration,
+    exportedAtUtc: source.exportedAtUtc,
+    records: records,
+    lists: source.lists,
+    warnings: [
+      ...source.warnings,
+      'baseline-upgraded: sync protocol 5 normalized Plan attention to WorldNodes',
+    ],
+  );
+}
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   final result = <String, Object?>{};

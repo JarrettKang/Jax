@@ -8,6 +8,7 @@ class WorldNode {
     required this.id,
     required this.name,
     required this.status,
+    required this.isFocused,
     required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
@@ -18,6 +19,7 @@ class WorldNode {
   final String id;
   final String name;
   final WorldNodeStatus status;
+  final bool isFocused;
   final String? parentWorldNodeId;
   final String? categoryId;
   final int sortOrder;
@@ -27,6 +29,7 @@ class WorldNode {
   WorldNode copyWith({
     String? name,
     WorldNodeStatus? status,
+    bool? isFocused,
     int? sortOrder,
     DateTime? updatedAt,
     Object? parentWorldNodeId = _unchangedWorldNodeParent,
@@ -35,6 +38,7 @@ class WorldNode {
     id: id,
     name: name ?? this.name,
     status: status ?? this.status,
+    isFocused: isFocused ?? this.isFocused,
     parentWorldNodeId: identical(parentWorldNodeId, _unchangedWorldNodeParent)
         ? this.parentWorldNodeId
         : parentWorldNodeId as String?,

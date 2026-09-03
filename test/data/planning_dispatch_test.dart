@@ -20,6 +20,7 @@ void main() {
   late Directory directory;
   late AppDatabase app;
   late SqlitePlanningRepository planning;
+  late SqliteWorldNodeRepository worlds;
   late SqliteEventRepository events;
   late _Ids ids;
   var now = DateTime(2026, 9, 2, 10);
@@ -30,11 +31,13 @@ void main() {
     planning = SqlitePlanningRepository(app);
     events = SqliteEventRepository(app);
     ids = _Ids();
-    await SqliteWorldNodeRepository(app).insertWorldNode(
+    worlds = SqliteWorldNodeRepository(app);
+    await worlds.insertWorldNode(
       WorldNode(
         id: '00000000-0000-4000-8000-000000000001',
         name: 'Jax',
         status: WorldNodeStatus.inProgress,
+        isFocused: true,
         sortOrder: 0,
         createdAt: now.toUtc(),
         updatedAt: now.toUtc(),
@@ -114,59 +117,71 @@ void main() {
     );
   });
 
-  test('draft, waiting, ended, and duplicate dispatch are rejected', () async {
-    final focused = await plan();
-    await item(focused, 'draft', next: false);
-    await expectLater(dispatcher()(['draft']), throwsA(isA<DomainFailure>()));
+  test(
+    'draft, unfocused, ended, and duplicate dispatch are rejected',
+    () async {
+      final focused = await plan();
+      await item(focused, 'draft', next: false);
+      await expectLater(dispatcher()(['draft']), throwsA(isA<DomainFailure>()));
 
-    await item(focused, 'next');
-    await planning.setPlanStatus(focused.id, PlanStatus.waiting, now);
-    await expectLater(dispatcher()(['next']), throwsA(isA<DomainFailure>()));
-    await planning.setPlanStatus(focused.id, PlanStatus.focused, now);
-    await dispatcher()(['next']);
-    await expectLater(dispatcher()(['next']), throwsA(isA<DomainFailure>()));
-    expect(await events.getIncompleteEvents(), hasLength(1));
+      await item(focused, 'next');
+      await worlds.setWorldNodeFocus(
+        '00000000-0000-4000-8000-000000000001',
+        false,
+        now,
+      );
+      await expectLater(dispatcher()(['next']), throwsA(isA<DomainFailure>()));
+      await worlds.setWorldNodeFocus(
+        '00000000-0000-4000-8000-000000000001',
+        true,
+        now,
+      );
+      await dispatcher()(['next']);
+      await expectLater(dispatcher()(['next']), throwsA(isA<DomainFailure>()));
+      expect(await events.getIncompleteEvents(), hasLength(1));
 
-    final secondDirectory = await Directory.systemTemp.createTemp(
-      'jax-p3-ended-',
-    );
-    final second = await AppDatabase.open('${secondDirectory.path}/jax.db');
-    addTearDown(() async {
-      await second.close();
-      await secondDirectory.delete(recursive: true);
-    });
-    final world = SqliteWorldNodeRepository(second);
-    final repo = SqlitePlanningRepository(second);
-    await world.insertWorldNode(
-      WorldNode(
-        id: '00000000-0000-4000-8000-000000000002',
-        name: 'Ended',
-        status: WorldNodeStatus.inProgress,
-        sortOrder: 0,
-        createdAt: now.toUtc(),
-        updatedAt: now.toUtc(),
-      ),
-    );
-    final ended = await repo.createPlan(
-      id: 'ended',
-      worldNodeId: '00000000-0000-4000-8000-000000000002',
-      now: now,
-    );
-    await repo.createPlanItem(
-      id: 'ended-item',
-      planId: ended.id,
-      title: 'x',
-      now: now,
-    );
-    await repo.setPlanItemStatus('ended-item', PlanItemStatus.next, now);
-    await repo.setPlanStatus(ended.id, PlanStatus.ended, now);
-    await expectLater(
-      DispatchPlanItems(repository: repo, newId: ids.call, now: () => now)([
-        'ended-item',
-      ]),
-      throwsA(isA<DomainFailure>()),
-    );
-  });
+      final secondDirectory = await Directory.systemTemp.createTemp(
+        'jax-p3-ended-',
+      );
+      final second = await AppDatabase.open('${secondDirectory.path}/jax.db');
+      addTearDown(() async {
+        await second.close();
+        await secondDirectory.delete(recursive: true);
+      });
+      final world = SqliteWorldNodeRepository(second);
+      final repo = SqlitePlanningRepository(second);
+      await world.insertWorldNode(
+        WorldNode(
+          id: '00000000-0000-4000-8000-000000000002',
+          name: 'Ended',
+          status: WorldNodeStatus.inProgress,
+          isFocused: true,
+          sortOrder: 0,
+          createdAt: now.toUtc(),
+          updatedAt: now.toUtc(),
+        ),
+      );
+      final ended = await repo.createPlan(
+        id: 'ended',
+        worldNodeId: '00000000-0000-4000-8000-000000000002',
+        now: now,
+      );
+      await repo.createPlanItem(
+        id: 'ended-item',
+        planId: ended.id,
+        title: 'x',
+        now: now,
+      );
+      await repo.setPlanItemStatus('ended-item', PlanItemStatus.next, now);
+      await repo.setPlanStatus(ended.id, PlanStatus.ended, now);
+      await expectLater(
+        DispatchPlanItems(repository: repo, newId: ids.call, now: () => now)([
+          'ended-item',
+        ]),
+        throwsA(isA<DomainFailure>()),
+      );
+    },
+  );
 
   test(
     'dispatch appends after existing Today order in selected order',
@@ -282,11 +297,7 @@ void main() {
         'Title item',
       );
       await expectLater(
-        planning.editPlanItem(
-          'item',
-          title: 'Forbidden',
-          now: now.toUtc(),
-        ),
+        planning.editPlanItem('item', title: 'Forbidden', now: now.toUtc()),
         throwsA(isA<DomainFailure>()),
       );
     },
@@ -321,26 +332,33 @@ void main() {
     },
   );
 
-  test('waiting or ended Plan preserves already dispatched Event facts', () async {
-    final focused = await plan();
-    await item(focused, 'item');
-    final event = (await dispatcher()(['item'])).single;
+  test(
+    'unfocus or ended Plan preserves already dispatched Event facts',
+    () async {
+      final focused = await plan();
+      await item(focused, 'item');
+      final event = (await dispatcher()(['item'])).single;
 
-    await planning.setPlanStatus(focused.id, PlanStatus.waiting, now);
-    expect(await events.getEvent(event.id), isNotNull);
-    expect(await events.getEventDayPlans('2026-09-02'), hasLength(1));
-    expect(
-      (await planning.getPlanItems(focused.id)).single.status,
-      PlanItemStatus.dispatched,
-    );
-    await planning.setPlanStatus(focused.id, PlanStatus.ended, now);
-    expect(await events.getEvent(event.id), isNotNull);
-    expect(await events.getEventDayPlans('2026-09-02'), hasLength(1));
-    await expectLater(
-      planning.deletePlan(focused.id),
-      throwsA(isA<DomainFailure>()),
-    );
-  });
+      await worlds.setWorldNodeFocus(
+        '00000000-0000-4000-8000-000000000001',
+        false,
+        now,
+      );
+      expect(await events.getEvent(event.id), isNotNull);
+      expect(await events.getEventDayPlans('2026-09-02'), hasLength(1));
+      expect(
+        (await planning.getPlanItems(focused.id)).single.status,
+        PlanItemStatus.dispatched,
+      );
+      await planning.setPlanStatus(focused.id, PlanStatus.ended, now);
+      expect(await events.getEvent(event.id), isNotNull);
+      expect(await events.getEventDayPlans('2026-09-02'), hasLength(1));
+      await expectLater(
+        planning.deletePlan(focused.id),
+        throwsA(isA<DomainFailure>()),
+      );
+    },
+  );
 
   test(
     'dispatch resolves JaxDay at submission across 23:00 boundary',

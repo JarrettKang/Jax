@@ -67,6 +67,7 @@ List<SyncMutation> _plannedEventGraph() {
     SyncMutation.upsertRecord(_record(SyncEntityKind.worldNode, nodeId, {
       'name': 'Planning',
       'status': 'inProgress',
+      'isFocused': 1,
       'parentWorldNodeSyncId': null,
       'categorySyncId': 'category',
       'order': 0,
@@ -74,7 +75,7 @@ List<SyncMutation> _plannedEventGraph() {
     SyncMutation.upsertRecord(_record(SyncEntityKind.plan, 'plan', {
       'worldNodeSyncId': nodeId,
       'title': null,
-      'status': 'focused',
+      'status': 'current',
       'roundNumber': 1,
       'endedAtUtc': null,
     })),

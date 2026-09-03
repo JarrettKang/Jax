@@ -112,6 +112,7 @@ void main() {
         'id': '11111111-1111-4111-8111-111111111111',
         'name': 'Jax 世界',
         'status': 'inProgress',
+        'is_focused': 0,
         'parent_world_node_id': null,
         'sort_order': 0,
         'category_id': 'category',

@@ -123,6 +123,19 @@ class SqliteSyncReadiness {
         issues.add(SyncReadinessIssue('world-node-invalid-uuid', id));
       }
     }
+    for (final row in await db.rawQuery('''SELECT id FROM world_nodes
+      WHERE is_focused NOT IN (0,1)''')) {
+      issues.add(SyncReadinessIssue('world-node-focus', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM world_nodes
+      WHERE status = 'completed' AND is_focused != 0''')) {
+      issues.add(
+        SyncReadinessIssue(
+          'completed-world-node-focused',
+          row['id'].toString(),
+        ),
+      );
+    }
     final generations = await db.query('dataset_metadata');
     if (generations.length != 1 ||
         (generations.single['generation'] as String?)?.trim().isEmpty !=
@@ -165,17 +178,18 @@ class SqliteSyncReadiness {
     }
     for (final row in await db.rawQuery('''SELECT id FROM plans WHERE
       (status = 'ended' AND ended_at_utc IS NULL) OR
-      (status != 'ended' AND ended_at_utc IS NOT NULL)''')) {
+      (status = 'current' AND ended_at_utc IS NOT NULL) OR
+      status NOT IN ('current','ended')''')) {
       issues.add(SyncReadinessIssue('plan-ended-at', row['id'].toString()));
     }
     for (final row in await db.rawQuery('''SELECT world_node_id, count(*) count
-      FROM plans WHERE status IN ('focused','waiting')
+      FROM plans WHERE status = 'current'
       GROUP BY world_node_id HAVING count(*) > 1''')) {
       issues.add(SyncReadinessIssue('multiple-current-plans', row.toString()));
     }
     for (final row in await db.rawQuery('''SELECT p.id FROM plans p
       JOIN world_nodes w ON w.id = p.world_node_id
-      WHERE p.status IN ('focused','waiting') AND w.status = 'completed' ''')) {
+      WHERE p.status = 'current' AND w.status = 'completed' ''')) {
       issues.add(
         SyncReadinessIssue(
           'completed-world-node-current-plan',

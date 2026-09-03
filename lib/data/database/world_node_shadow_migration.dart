@@ -15,6 +15,7 @@ class WorldNodeShadowMigration {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL CHECK(length(trim(name)) > 0),
       status TEXT NOT NULL CHECK(status IN ('inProgress','completed')),
+      is_focused INTEGER NOT NULL DEFAULT 0 CHECK(is_focused IN (0,1)),
       parent_world_node_id TEXT REFERENCES world_nodes(id) ON DELETE RESTRICT,
       sort_order INTEGER NOT NULL,
       category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
@@ -93,6 +94,7 @@ class WorldNodeShadowMigration {
         'id': worldNodeId,
         'name': event['name'],
         'status': event['status'] == 'completed' ? 'completed' : 'inProgress',
+        'is_focused': 0,
         'parent_world_node_id': parentLegacyId == null
             ? null
             : WorldNodeIds.fromLegacyEvent(parentLegacyId),

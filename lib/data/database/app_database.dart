@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 17;
+  static const schemaVersion = 18;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -111,6 +111,7 @@ class AppDatabase {
       await _createPlanReviewNotes(database);
       await _createSyncTriggers(database);
     }
+    if (oldVersion < 18) await _migratePlanningAttention(database);
   }
 
   static Future<void> _createFlatEventTable(
@@ -237,18 +238,18 @@ class AppDatabase {
       id TEXT PRIMARY KEY,
       world_node_id TEXT NOT NULL REFERENCES world_nodes(id) ON DELETE RESTRICT,
       title TEXT,
-      status TEXT NOT NULL CHECK(status IN ('focused','waiting','ended')),
+      status TEXT NOT NULL CHECK(status IN ('current','ended')),
       round_number INTEGER NOT NULL CHECK(round_number > 0),
       ended_at_utc INTEGER,
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL,
       UNIQUE(world_node_id, round_number),
       CHECK((status = 'ended' AND ended_at_utc IS NOT NULL) OR
-            (status != 'ended' AND ended_at_utc IS NULL))
+            (status = 'current' AND ended_at_utc IS NULL))
     )''');
     await database.execute('''CREATE UNIQUE INDEX IF NOT EXISTS
       plans_one_current_per_world_node
-      ON plans(world_node_id) WHERE status IN ('focused','waiting')''');
+      ON plans(world_node_id) WHERE status = 'current' ''');
     await database.execute('''CREATE TABLE IF NOT EXISTS plan_items (
       id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
@@ -271,6 +272,90 @@ class AppDatabase {
       updated_at_utc INTEGER NOT NULL,
       CHECK(updated_at_utc >= created_at_utc)
     )''');
+
+  static Future<void> _migratePlanningAttention(Database database) async {
+    final hasWorldNodes = await _tableExists(database, 'world_nodes');
+    if (hasWorldNodes) {
+      final worldColumns = await database.rawQuery(
+        'PRAGMA table_info(world_nodes)',
+      );
+      final hasAttention = worldColumns.any(
+        (row) => row['name'] == 'is_focused',
+      );
+      if (!hasAttention) {
+        await database.execute(
+          'ALTER TABLE world_nodes ADD COLUMN is_focused INTEGER NOT NULL DEFAULT 0 CHECK(is_focused IN (0,1))',
+        );
+      }
+    }
+
+    // Preserve metadata timestamps: attention is the normalized ownership of
+    // the old current Plan status, not a new user edit during migration.
+    await database.execute('DROP TRIGGER IF EXISTS world_nodes_sync_update');
+    final hasPlans = await _tableExists(database, 'plans');
+    if (hasWorldNodes && hasPlans) {
+      await database.execute('''UPDATE world_nodes SET is_focused = CASE
+        WHEN status = 'inProgress' AND EXISTS(
+          SELECT 1 FROM plans
+          WHERE plans.world_node_id = world_nodes.id
+            AND plans.status = 'focused'
+        ) THEN 1 ELSE 0 END''');
+    }
+
+    final hasItems = await _tableExists(database, 'plan_items');
+    final hasNotes = await _tableExists(database, 'plan_review_notes');
+    final hasEvents = await _tableExists(database, 'events');
+    final hasSegments = await _tableExists(database, 'run_segments');
+    final hasDayPlans = await _tableExists(database, 'event_day_plans');
+    final plans = hasPlans ? await database.query('plans') : const [];
+    final items = hasItems ? await database.query('plan_items') : const [];
+    final notes = hasNotes
+        ? await database.query('plan_review_notes')
+        : const [];
+    final events = hasEvents ? await database.query('events') : const [];
+    final segments = hasSegments
+        ? await database.query('run_segments')
+        : const [];
+    final dayPlans = hasDayPlans
+        ? await database.query('event_day_plans')
+        : const [];
+
+    // SQLite cannot replace a CHECK constraint in place. Rebuild the complete
+    // dependent chain child-first so every foreign key remains valid and no
+    // delete trigger is interpreted as a business deletion.
+    if (hasSegments) await database.execute('DROP TABLE run_segments');
+    if (hasDayPlans) await database.execute('DROP TABLE event_day_plans');
+    if (hasEvents) await database.execute('DROP TABLE events');
+    if (hasNotes) await database.execute('DROP TABLE plan_review_notes');
+    if (hasItems) await database.execute('DROP TABLE plan_items');
+    if (hasPlans) await database.execute('DROP TABLE plans');
+
+    await _createPlanningTables(database);
+    if (hasEvents) await _createFlatEventTable(database, 'events');
+    if (hasSegments) await _createRunSegments(database);
+    if (hasDayPlans) await _createEventDayPlans(database);
+    for (final source in plans) {
+      final row = Map<String, Object?>.from(source);
+      if (row['status'] != 'ended') row['status'] = 'current';
+      await database.insert('plans', row);
+    }
+    for (final row in items) {
+      await database.insert('plan_items', row);
+    }
+    for (final row in notes) {
+      await database.insert('plan_review_notes', row);
+    }
+    for (final row in events) {
+      await database.insert('events', row);
+    }
+    for (final row in segments) {
+      await database.insert('run_segments', row);
+    }
+    for (final row in dayPlans) {
+      await database.insert('event_day_plans', row);
+    }
+    await _createSyncTriggers(database);
+  }
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
     await database.execute('''CREATE TABLE events_v5 (

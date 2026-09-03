@@ -51,6 +51,7 @@ void main() {
               id: id,
               name: name,
               status: WorldNodeStatus.inProgress,
+              isFocused: id != '00000000-0000-4000-8000-000000000004',
               categoryId: category,
               sortOrder: order,
               createdAt: now,
@@ -91,7 +92,6 @@ void main() {
         '00000000-0000-4000-8000-000000000004',
       );
       await createItem(b1, 'waiting-next', PlanItemStatus.next);
-      await plans.setPlanStatus(b1.id, PlanStatus.waiting, now);
       final a1 = await createPlan(
         'a1-plan',
         '00000000-0000-4000-8000-000000000005',

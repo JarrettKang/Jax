@@ -1,4 +1,4 @@
-enum PlanStatus { focused, waiting, ended }
+enum PlanStatus { current, ended }
 
 class Plan {
   const Plan({
@@ -24,5 +24,5 @@ class Plan {
   String get displayTitle =>
       title?.trim().isNotEmpty == true ? title!.trim() : '第 $roundNumber 轮计划';
 
-  bool get isCurrent => status != PlanStatus.ended;
+  bool get isCurrent => status == PlanStatus.current;
 }

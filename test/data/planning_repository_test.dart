@@ -29,14 +29,13 @@ void main() {
       worldNodeId: a.id,
       now: _time(10),
     );
-    expect(first.status, PlanStatus.focused);
+    expect(first.status, PlanStatus.current);
     expect(first.roundNumber, 1);
 
     await expectLater(
       plans.createPlan(id: 'duplicate', worldNodeId: a.id, now: _time(11)),
       throwsA(anything),
     );
-    await plans.setPlanStatus(first.id, PlanStatus.waiting, _time(20));
     await expectLater(
       plans.createPlan(
         id: 'still-duplicate',
@@ -45,21 +44,20 @@ void main() {
       ),
       throwsA(anything),
     );
-    await plans.setPlanStatus(first.id, PlanStatus.focused, _time(30));
 
     final parallel = await plans.createPlan(
       id: 'plan-b-1',
       worldNodeId: b.id,
       now: _time(40),
     );
-    expect(parallel.status, PlanStatus.focused);
+    expect(parallel.status, PlanStatus.current);
 
     await plans.setPlanStatus(first.id, PlanStatus.ended, _time(50));
     final ended = await plans.getPlan(first.id);
     expect(ended!.status, PlanStatus.ended);
     expect(ended.endedAt, _time(50));
     await expectLater(
-      plans.setPlanStatus(first.id, PlanStatus.focused, _time(51)),
+      plans.setPlanStatus(first.id, PlanStatus.current, _time(51)),
       throwsA(anything),
     );
 
@@ -292,7 +290,7 @@ void main() {
         content: ' focused ',
         now: _time(2),
       );
-      await plans.setPlanStatus(plan.id, PlanStatus.waiting, _time(3));
+      await plans.setPlanStatus(plan.id, PlanStatus.current, _time(3));
       await plans.createPlanReviewNote(
         id: '11111111-1111-4111-8111-111111111113',
         planId: plan.id,
@@ -366,6 +364,7 @@ WorldNode _node(String id, String name) => WorldNode(
   id: id,
   name: name,
   status: WorldNodeStatus.inProgress,
+  isFocused: false,
   sortOrder: 0,
   createdAt: _time(0),
   updatedAt: _time(0),

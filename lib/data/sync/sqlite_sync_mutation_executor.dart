@@ -429,13 +429,14 @@ class SqliteSyncMutationExecutor {
         'id': record.metadata.id,
         'name': p['name'],
         'status': p['status'],
+        'is_focused': p['isFocused'],
         'parent_world_node_id': p['parentWorldNodeSyncId'],
         'sort_order': p['order'],
         'category_id': p['categorySyncId'],
         ...metadata,
       },
       SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
-        'Legacy Event/WorldNode links are not supported by protocol 5.',
+        'Legacy Event/WorldNode links are not supported by protocol 6.',
       ),
       SyncEntityKind.plan => {
         'id': record.metadata.id,

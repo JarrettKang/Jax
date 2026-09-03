@@ -28,6 +28,96 @@ void main() {
     );
   });
 
+  test(
+    'protocol 5 baseline normalizes Plan attention without changing generation',
+    () {
+      final waitingNode = _record(
+        SyncEntityKind.worldNode,
+        '22222222-2222-4222-8222-222222222222',
+        {
+          'name': 'Waiting',
+          'status': 'inProgress',
+          'parentWorldNodeSyncId': null,
+          'categorySyncId': null,
+          'order': 1,
+        },
+      );
+      final waitingPlan = _record(SyncEntityKind.plan, 'waiting-plan', {
+        'worldNodeSyncId': '22222222-2222-4222-8222-222222222222',
+        'title': null,
+        'status': 'waiting',
+        'roundNumber': 1,
+        'endedAtUtc': null,
+      });
+      final old = _snapshot([
+        _node(),
+        _plan(),
+        waitingNode,
+        waitingPlan,
+      ], protocol: 5).toJson();
+      old['datasetGeneration'] = 'generation-p35';
+      final records = (old['records']! as List).cast<Map<String, Object?>>();
+      for (final record in records.where(
+        (record) => record['kind'] == 'worldNode',
+      )) {
+        final payload = (record['payload']! as Map).cast<String, Object?>()
+          ..remove('isFocused');
+        record['payload'] = payload;
+      }
+      final focusedPlan = records.singleWhere(
+        (record) =>
+            record['kind'] == 'plan' &&
+            (record['metadata']! as Map)['id'] == 'plan',
+      );
+      final focusedPayload =
+          (focusedPlan['payload']! as Map).cast<String, Object?>()
+            ..['status'] = 'focused';
+      focusedPlan['payload'] = focusedPayload;
+
+      final upgraded = SyncSnapshot.fromJson(old);
+      expect(upgraded.protocolVersion, syncProtocolVersion);
+      expect(upgraded.schemaVersion, 17);
+      expect(upgraded.datasetGeneration, 'generation-p35');
+      expect(
+        upgraded.records
+            .where((record) => record.kind == SyncEntityKind.worldNode)
+            .map((record) => record.payload['isFocused']),
+        [1, 0],
+      );
+      expect(
+        upgraded.records
+            .where((record) => record.kind == SyncEntityKind.plan)
+            .map((record) => record.payload['status']),
+        everyElement('current'),
+      );
+    },
+  );
+
+  test('attention participates in ordinary three-way field conflicts', () {
+    SyncRecord node({required int focused, String name = 'Jax'}) => _record(
+      SyncEntityKind.worldNode,
+      '11111111-1111-4111-8111-111111111111',
+      {
+        'name': name,
+        'status': 'inProgress',
+        'isFocused': focused,
+        'parentWorldNodeSyncId': null,
+        'categorySyncId': null,
+        'order': 0,
+      },
+    );
+    final preview = compare.compare(
+      baseline: _snapshot([node(focused: 0)]),
+      windows: _snapshot([node(focused: 1)]),
+      android: _snapshot([node(focused: 0, name: 'Jax Android')]),
+    );
+    expect(preview.manualConflicts.single.conflictType, SyncConflictType.field);
+    expect(
+      preview.manualConflicts.single.changedFields.map((field) => field.field),
+      contains('isFocused'),
+    );
+  });
+
   test('Plan and PlanItem one-side changes merge and stale plans reject', () {
     final baseline = _snapshot([_node()]);
     final current = _snapshot(
@@ -170,6 +260,27 @@ void main() {
       validator.validate(missingEvent),
       contains('executed-plan-item-without-event:a'),
     );
+
+    final completedFocused = _snapshot([
+      _record(
+        SyncEntityKind.worldNode,
+        '11111111-1111-4111-8111-111111111111',
+        {
+          'name': 'Jax',
+          'status': 'completed',
+          'isFocused': 1,
+          'parentWorldNodeSyncId': null,
+          'categorySyncId': null,
+          'order': 0,
+        },
+      ),
+    ]);
+    expect(
+      validator.validate(completedFocused),
+      contains(
+        'completed-world-node-focused:11111111-1111-4111-8111-111111111111',
+      ),
+    );
   });
 
   test('concurrent dispatch of one PlanItem cannot silently merge', () {
@@ -302,6 +413,7 @@ SyncRecord _node() =>
     _record(SyncEntityKind.worldNode, '11111111-1111-4111-8111-111111111111', {
       'name': 'Jax',
       'status': 'inProgress',
+      'isFocused': 1,
       'parentWorldNodeSyncId': null,
       'categorySyncId': null,
       'order': 0,
@@ -311,7 +423,7 @@ SyncRecord _plan({String id = 'plan', String? title}) =>
     _record(SyncEntityKind.plan, id, {
       'worldNodeSyncId': '11111111-1111-4111-8111-111111111111',
       'title': title,
-      'status': 'focused',
+      'status': 'current',
       'roundNumber': id == 'p2' ? 2 : 1,
       'endedAtUtc': null,
     });

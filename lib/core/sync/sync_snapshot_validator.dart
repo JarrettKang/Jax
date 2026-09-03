@@ -84,6 +84,12 @@ class SyncSnapshotValidator {
           if (!{'inProgress', 'completed'}.contains(p['status'])) {
             issues.add('world-node-status:${record.metadata.id}');
           }
+          if (p['isFocused'] is! int || !{0, 1}.contains(p['isFocused'])) {
+            issues.add('world-node-focus:${record.metadata.id}');
+          }
+          if (p['status'] == 'completed' && p['isFocused'] != 0) {
+            issues.add('completed-world-node-focused:${record.metadata.id}');
+          }
           if (!has(SyncEntityKind.worldNode, p['parentWorldNodeSyncId'])) {
             issues.add('world-node-parent:${record.metadata.id}');
           }
@@ -116,7 +122,7 @@ class SyncSnapshotValidator {
           if (!has(SyncEntityKind.worldNode, p['worldNodeSyncId'])) {
             issues.add('plan-world-node:${record.metadata.id}');
           }
-          if (!{'focused', 'waiting', 'ended'}.contains(p['status'])) {
+          if (!{'current', 'ended'}.contains(p['status'])) {
             issues.add('plan-status:${record.metadata.id}');
           }
           if ((p['status'] == 'ended') != (p['endedAtUtc'] != null)) {
@@ -214,8 +220,7 @@ class SyncSnapshotValidator {
       if (nodeId != null && !rounds.add('$nodeId:$round')) {
         issues.add('duplicate-plan-round:$nodeId:$round');
       }
-      if (plan.payload['status'] == 'focused' ||
-          plan.payload['status'] == 'waiting') {
+      if (plan.payload['status'] == 'current') {
         if (nodeId != null) {
           activeByNode[nodeId] = (activeByNode[nodeId] ?? 0) + 1;
           if (nodes[nodeId]?.payload['status'] == 'completed') {

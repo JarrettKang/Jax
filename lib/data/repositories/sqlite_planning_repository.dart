@@ -37,15 +37,19 @@ class SqlitePlanningRepository
         for (final entry in eventIdsByPlanItemId.entries) {
           final rows = await tx.rawQuery(
             '''SELECT item.title, item.status item_status,
-                      plan.status plan_status
+                      plan.status plan_status, node.status node_status,
+                      node.is_focused node_is_focused
                FROM plan_items item
                JOIN plans plan ON plan.id = item.plan_id
+               JOIN world_nodes node ON node.id = plan.world_node_id
                WHERE item.id = ? LIMIT 1''',
             [entry.key],
           );
           if (rows.isEmpty) throw const DomainFailure('计划项不存在');
-          if (rows.single['plan_status'] != 'focused') {
-            throw const DomainFailure('只有已关注计划的下一步可以加入今日');
+          if (rows.single['plan_status'] != 'current' ||
+              rows.single['node_status'] != 'inProgress' ||
+              rows.single['node_is_focused'] != 1) {
+            throw const DomainFailure('只有关注中世界节点的当前计划下一步可以加入今日');
           }
           if (rows.single['item_status'] != PlanItemStatus.next.name) {
             throw const DomainFailure('计划项已变化，请刷新今日建议');
@@ -163,7 +167,7 @@ class SqlitePlanningRepository
     final current = await tx.query(
       'plans',
       columns: ['id'],
-      where: "world_node_id = ? AND status IN ('focused','waiting')",
+      where: "world_node_id = ? AND status = 'current'",
       whereArgs: [worldNodeId],
       limit: 1,
     );
@@ -178,7 +182,7 @@ class SqlitePlanningRepository
     final plan = Plan(
       id: id,
       worldNodeId: worldNodeId,
-      status: PlanStatus.focused,
+      status: PlanStatus.current,
       roundNumber: (rounds.single['value'] as num).toInt(),
       title: _cleanOptional(title),
       createdAt: utc,
@@ -216,11 +220,8 @@ class SqlitePlanningRepository
       });
       return;
     }
-    await _updateOne('plans', id, {
-      'status': status.name,
-      'ended_at_utc': null,
-      'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
-    });
+    // current is not a reopen action. An ended round remains immutable and a
+    // new round must be created instead.
   }
 
   @override

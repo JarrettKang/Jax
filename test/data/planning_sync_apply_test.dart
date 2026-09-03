@@ -74,6 +74,7 @@ List<SyncMutation> _operations() => [
     _record(SyncEntityKind.worldNode, _nodeId, {
       'name': 'Jax',
       'status': 'inProgress',
+      'isFocused': 1,
       'parentWorldNodeSyncId': null,
       'categorySyncId': null,
       'order': 0,
@@ -83,7 +84,7 @@ List<SyncMutation> _operations() => [
     _record(SyncEntityKind.plan, 'plan', {
       'worldNodeSyncId': _nodeId,
       'title': '本地同步',
-      'status': 'focused',
+      'status': 'current',
       'roundNumber': 1,
       'endedAtUtc': null,
     }),

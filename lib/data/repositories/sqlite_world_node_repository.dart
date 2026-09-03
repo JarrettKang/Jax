@@ -44,6 +44,14 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
   @override
   Future<void> updateWorldNode(WorldNode node) async {
     await _database.database.transaction((transaction) async {
+      final existing = await transaction.query(
+        'world_nodes',
+        columns: ['status'],
+        where: 'id = ?',
+        whereArgs: [node.id],
+        limit: 1,
+      );
+      if (existing.isEmpty) throw StateError('WorldNode not found: ${node.id}');
       if (node.status == WorldNodeStatus.completed &&
           await _hasCurrentPlan(transaction, node.id)) {
         throw StateError('End the current Plan before completing WorldNode');
@@ -54,9 +62,17 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
         node.parentWorldNodeId,
         node.categoryId,
       );
+      final restoring =
+          existing.single['status'] == 'completed' &&
+          node.status == WorldNodeStatus.inProgress;
+      final persisted = node.copyWith(
+        isFocused: node.status == WorldNodeStatus.completed || restoring
+            ? false
+            : node.isFocused,
+      );
       if (await transaction.update(
             'world_nodes',
-            _nodeToRow(node),
+            _nodeToRow(persisted),
             where: 'id = ?',
             whereArgs: [node.id],
           ) !=
@@ -64,6 +80,26 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
         throw StateError('WorldNode not found: ${node.id}');
       }
     });
+  }
+
+  @override
+  Future<void> setWorldNodeFocus(
+    String id,
+    bool isFocused,
+    DateTime updatedAt,
+  ) async {
+    final changed = await _database.database.update(
+      'world_nodes',
+      {
+        'is_focused': isFocused ? 1 : 0,
+        'updated_at_utc': updatedAt.toUtc().millisecondsSinceEpoch,
+      },
+      where: "id = ? AND status = 'inProgress'",
+      whereArgs: [id],
+    );
+    if (changed != 1) {
+      throw StateError('Only an in-progress WorldNode can change attention');
+    }
   }
 
   Future<bool> _hasCurrentPlan(DatabaseExecutor db, String worldNodeId) async {
@@ -74,7 +110,7 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
     return (await db.query(
       'plans',
       columns: ['id'],
-      where: "world_node_id = ? AND status IN ('focused','waiting')",
+      where: "world_node_id = ? AND status = 'current'",
       whereArgs: [worldNodeId],
       limit: 1,
     )).isNotEmpty;
@@ -193,6 +229,7 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
     'id': node.id,
     'name': node.name,
     'status': node.status.name,
+    'is_focused': node.isFocused ? 1 : 0,
     'parent_world_node_id': node.parentWorldNodeId,
     'sort_order': node.sortOrder,
     'category_id': node.parentWorldNodeId == null ? node.categoryId : null,
@@ -204,6 +241,7 @@ class SqliteWorldNodeRepository implements WorldNodeRepository {
     id: row['id']! as String,
     name: row['name']! as String,
     status: WorldNodeStatus.values.byName(row['status']! as String),
+    isFocused: (row['is_focused']! as num).toInt() == 1,
     parentWorldNodeId: row['parent_world_node_id'] as String?,
     categoryId: row['category_id'] as String?,
     sortOrder: (row['sort_order']! as num).toInt(),

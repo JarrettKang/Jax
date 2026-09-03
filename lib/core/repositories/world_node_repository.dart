@@ -5,6 +5,7 @@ abstract interface class WorldNodeRepository {
   Future<WorldNode?> getWorldNode(String id);
   Future<void> insertWorldNode(WorldNode node);
   Future<void> updateWorldNode(WorldNode node);
+  Future<void> setWorldNodeFocus(String id, bool isFocused, DateTime updatedAt);
   Future<void> reparentWorldNode(
     String id,
     String? parentWorldNodeId,

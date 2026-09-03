@@ -158,6 +158,7 @@ SyncRecord _node(String id, String name, {String? parent}) =>
     _record(SyncEntityKind.worldNode, id, {
       'name': name,
       'status': 'inProgress',
+      'isFocused': 0,
       'parentWorldNodeSyncId': parent,
       'categorySyncId': null,
       'order': 0,

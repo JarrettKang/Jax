@@ -202,6 +202,7 @@ class SqliteSyncSnapshotAdapter {
     'recurrence_type' => 'recurrenceType',
     'weekday_mask' => 'weekdayMask',
     'is_active' => 'isActive',
+    'is_focused' => 'isFocused',
     'first_started_at_utc' => 'firstStartedAtUtc',
     'completed_at_utc' => 'completedAtUtc',
     'started_at_utc' => 'startedAtUtc',

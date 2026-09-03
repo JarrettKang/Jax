@@ -31,12 +31,13 @@ void main() {
     const nodeId = '11111111-1111-4111-8111-111111111111';
     await db.insert('world_nodes', {
       'id': nodeId, 'name': 'World', 'status': 'inProgress',
+      'is_focused': 1,
       'parent_world_node_id': null, 'category_id': 'category', 'sort_order': 0,
       'created_at_utc': 1, 'updated_at_utc': 1,
     });
     await db.insert('plans', {
       'id': 'plan', 'world_node_id': nodeId, 'title': null,
-      'status': 'focused', 'round_number': 1, 'ended_at_utc': null,
+      'status': 'current', 'round_number': 1, 'ended_at_utc': null,
       'created_at_utc': 1, 'updated_at_utc': 1,
     });
     await db.insert('plan_items', {
