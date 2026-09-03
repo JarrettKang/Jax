@@ -7,6 +7,7 @@ import '../../core/entities/jax_event.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/errors/domain_failure.dart';
 import '../controllers/planning_controller.dart';
+import '../widgets/world_node_tree_picker.dart';
 
 class PlanningPage extends StatefulWidget {
   const PlanningPage({
@@ -168,17 +169,9 @@ class _FocusedWorldNodeTile extends StatelessWidget {
   }
 }
 
-class _WorldNodeSelector extends StatefulWidget {
+class _WorldNodeSelector extends StatelessWidget {
   const _WorldNodeSelector({required this.controller});
   final PlanningController controller;
-
-  @override
-  State<_WorldNodeSelector> createState() => _WorldNodeSelectorState();
-}
-
-class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
-  final Set<String> _collapsedCategories = {};
-  final Set<String> _collapsedBranches = {};
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -186,20 +179,24 @@ class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
     content: SizedBox(
       width: 520,
       height: 540,
-      child: widget.controller.worldNodes.isEmpty
-          ? const Center(child: Text('暂无世界节点'))
-          : ListView(
-              key: const ValueKey('planning-world-node-selector'),
-              children: [
-                for (final category in [
-                  ...widget.controller.categories.map(
-                    (value) => (id: value.id, name: value.name),
-                  ),
-                  (id: null, name: '未分类'),
-                ])
-                  _section(category.id, category.name),
-              ],
-            ),
+      child: WorldNodeTreePicker(
+        categories: controller.categories,
+        worldNodes: controller.worldNodes,
+        listKey: const ValueKey('planning-world-node-selector'),
+        categoryKeyPrefix: 'planning-selector-category-',
+        nodeKeyPrefix: 'select-world-node-',
+        branchKeyPrefix: 'planning-selector-branch-',
+        disabledReasonFor: (node) {
+          if (node.status == WorldNodeStatus.completed) {
+            return '已完成：只能查看历史，不能创建计划';
+          }
+          if (controller.hasCurrentPlan(node.id)) {
+            return '已有当前计划：请先查看或结束该轮';
+          }
+          return null;
+        },
+        onSelected: (node) => Navigator.pop(context, node),
+      ),
     ),
     actions: [
       TextButton(
@@ -208,92 +205,6 @@ class _WorldNodeSelectorState extends State<_WorldNodeSelector> {
       ),
     ],
   );
-
-  Widget _section(String? categoryId, String name) {
-    final key = categoryId ?? 'unclassified';
-    final roots =
-        widget.controller.worldNodes
-            .where(
-              (node) =>
-                  node.parentWorldNodeId == null &&
-                  node.categoryId == categoryId,
-            )
-            .toList()
-          ..sort(_sort);
-    final collapsed = _collapsedCategories.contains(key);
-    return Column(
-      children: [
-        ListTile(
-          key: ValueKey('planning-selector-category-$key'),
-          dense: true,
-          leading: Icon(collapsed ? Icons.chevron_right : Icons.expand_more),
-          title: Text(name),
-          subtitle: Text('${roots.length} 个根节点'),
-          onTap: () => setState(() {
-            collapsed
-                ? _collapsedCategories.remove(key)
-                : _collapsedCategories.add(key);
-          }),
-        ),
-        if (!collapsed)
-          for (final root in roots) _node(root, 0),
-      ],
-    );
-  }
-
-  Widget _node(WorldNode node, int depth) {
-    final children =
-        widget.controller.worldNodes
-            .where((value) => value.parentWorldNodeId == node.id)
-            .toList()
-          ..sort(_sort);
-    final collapsed = _collapsedBranches.contains(node.id);
-    final completed = node.status == WorldNodeStatus.completed;
-    final occupied = widget.controller.hasCurrentPlan(node.id);
-    return Column(
-      children: [
-        ListTile(
-          key: ValueKey('select-world-node-${node.id}'),
-          contentPadding: EdgeInsets.only(left: 20.0 + depth * 22, right: 8),
-          dense: true,
-          enabled: !completed && !occupied,
-          leading: children.isEmpty
-              ? const Icon(Icons.subdirectory_arrow_right)
-              : IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
-                  ),
-                  onPressed: () => setState(() {
-                    collapsed
-                        ? _collapsedBranches.remove(node.id)
-                        : _collapsedBranches.add(node.id);
-                  }),
-                  icon: Icon(
-                    collapsed ? Icons.chevron_right : Icons.expand_more,
-                  ),
-                ),
-          title: Text(node.name),
-          subtitle: completed
-              ? const Text('已完成：只能查看历史，不能创建计划')
-              : occupied
-              ? const Text('已有当前计划：请先查看或结束该轮')
-              : null,
-          onTap: completed || occupied
-              ? null
-              : () => Navigator.pop(context, node),
-        ),
-        if (!collapsed)
-          for (final child in children) _node(child, depth + 1),
-      ],
-    );
-  }
-
-  static int _sort(WorldNode a, WorldNode b) {
-    final order = a.sortOrder.compareTo(b.sortOrder);
-    return order != 0 ? order : a.id.compareTo(b.id);
-  }
 }
 
 class PlanDetailPage extends StatelessWidget {

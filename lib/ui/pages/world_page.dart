@@ -5,6 +5,7 @@ import '../../core/entities/plan.dart';
 import '../../core/entities/world_node.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/planning_controller.dart';
+import '../widgets/world_node_tree_picker.dart';
 import 'planning_page.dart';
 import 'world_node_detail_page.dart';
 
@@ -413,38 +414,67 @@ class _WorldPageState extends State<WorldPage> {
     }
 
     collect(node.id);
-    final target = await showDialog<(String?, String?)>(
+    final effectiveCategoryId = widget.controller.categoryForNode(node)?.id;
+    final expandedPath = widget.controller
+        .pathFor(node)
+        .map((value) => value.id)
+        .toSet();
+    final target = await showDialog<String?>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('移动世界节点'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text('移动“${node.name}”到…'),
         content: SizedBox(
-          width: 480,
-          height: 480,
-          child: ListView(
+          width: 520,
+          height: 540,
+          child: Column(
             children: [
-              for (final category in <Category?>[
-                ...widget.controller.categories,
-                null,
-              ])
-                ListTile(
-                  title: Text('${category?.name ?? '未分类'}（根节点）'),
-                  onTap: () => Navigator.pop(context, (null, category?.id)),
+              ListTile(
+                key: const ValueKey('move-target-root'),
+                leading: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(Icons.account_tree_outlined),
                 ),
+                title: const Text('无上层（移动为顶级节点）'),
+                subtitle: node.parentWorldNodeId == null
+                    ? const Text('当前已是顶级节点')
+                    : const Text('保留当前有效分类，并追加到顶级节点末尾'),
+                enabled: node.parentWorldNodeId != null,
+                onTap: node.parentWorldNodeId == null
+                    ? null
+                    : () => Navigator.pop(dialogContext, ''),
+              ),
               const Divider(),
-              for (final candidate in widget.controller.worldNodes)
-                if (candidate.id != node.id &&
-                    !descendants.contains(candidate.id))
-                  ListTile(
-                    title: Text(candidate.name),
-                    subtitle: const Text('作为其子节点'),
-                    onTap: () => Navigator.pop(context, (candidate.id, null)),
-                  ),
+              Expanded(
+                child: WorldNodeTreePicker(
+                  categories: widget.controller.categories,
+                  worldNodes: widget.controller.worldNodes,
+                  listKey: const ValueKey('world-move-tree'),
+                  categoryKeyPrefix: 'move-selector-category-',
+                  nodeKeyPrefix: 'move-target-',
+                  branchKeyPrefix: 'move-selector-branch-',
+                  initiallyExpandedCategoryIds: {effectiveCategoryId},
+                  initiallyExpandedBranchIds: expandedPath,
+                  disabledReasonFor: (candidate) {
+                    if (candidate.id == node.id) return '当前节点';
+                    if (descendants.contains(candidate.id)) {
+                      return '当前节点的下级';
+                    }
+                    if (candidate.id == node.parentWorldNodeId) {
+                      return '当前上层';
+                    }
+                    return null;
+                  },
+                  onSelected: (candidate) =>
+                      Navigator.pop(dialogContext, candidate.id),
+                ),
+              ),
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('取消'),
           ),
         ],
@@ -454,8 +484,8 @@ class _WorldPageState extends State<WorldPage> {
       await _guard(
         () => widget.controller.moveWorldNode(
           node,
-          parentWorldNodeId: target.$1,
-          categoryId: target.$2,
+          parentWorldNodeId: target.isEmpty ? null : target,
+          categoryId: target.isEmpty ? effectiveCategoryId : null,
         ),
       );
     }

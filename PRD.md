@@ -439,6 +439,9 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - Planning picker 按 Category（含虚拟未分类）分区，各分区及 WorldNode branch 可
   折叠，并保留 hierarchy/sibling order。completed 与已有 current Plan 的节点可见
   但禁用并解释原因。
+- WorldNode“移动到…”复用同一套 Category → 可折叠 WorldNode hierarchy 选择器；
+  Category header 只导航，目标仍是 parent。self、descendants、current parent 可见但
+  禁用并解释原因，顶部独立提供“无上层”，不改变既有 reparent/Category/order 语义。
 - Schema v16 与 Sync protocol 4 引入 dataset generation。Development Data Reset
   后旧 baseline/snapshot/resolved plan 因 generation/fingerprint 不匹配而拒绝，
   防止旧数据复活。

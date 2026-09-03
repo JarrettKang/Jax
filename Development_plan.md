@@ -726,6 +726,9 @@ UI：
    rollback 和 no-op navigation。
 6. P4 的 Review Note 与 WorldNode Detail 保持现有能力，但其 current/history 显示和
    Sync 合同必须建立在新的 attention 模型上。
+7. WorldNode reparent picker 与 Planning picker 复用 Category/recursive tree renderer；
+   move 场景仅注入 cycle/no-op eligibility、当前路径默认展开与独立 root target，
+   不新增 schema、Sync contract 或业务字段。
 
 ## 14. P4：Plan Review 与 WorldNode Detail
 
