@@ -206,6 +206,201 @@ void main() {
       await _dismissMenu(tester);
     },
   );
+
+  testWidgets(
+    'move picker groups the hierarchy and explains every cycle candidate',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final root = _node(
+        '11111111-1111-4111-8111-111111111111',
+        'A1 with a deliberately long narrow-screen name',
+      );
+      final child = _node(
+        '22222222-2222-4222-8222-222222222222',
+        'A1a',
+        parentId: root.id,
+        categoryId: null,
+      );
+      final grandchild = _node(
+        '33333333-3333-4333-8333-333333333333',
+        'A1a-child',
+        parentId: child.id,
+        categoryId: null,
+      );
+      final legal = _node(
+        '44444444-4444-4444-8444-444444444444',
+        'A2',
+        order: 1,
+      );
+      final categoryB = _node(
+        '55555555-5555-4555-8555-555555555555',
+        'B1',
+        categoryId: 'b',
+      );
+      final unclassified = _node(
+        '66666666-6666-4666-8666-666666666666',
+        'U1',
+        categoryId: null,
+      );
+      nodes.nodes.addAll([
+        root,
+        child,
+        grandchild,
+        legal,
+        categoryB,
+        unclassified,
+      ]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: InMemoryWorldCategoryCollapseStore(),
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+
+      await _openMenu(tester, root.id);
+      await tester.tap(find.text('移动到…'));
+      await _pumpFrames(tester);
+
+      expect(find.byKey(const ValueKey('move-target-root')), findsOneWidget);
+      expect(find.text('当前已是顶级节点'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('move-target-root')))
+            .enabled,
+        isFalse,
+      );
+      expect(
+        find.byKey(const ValueKey('move-selector-category-a')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('move-selector-category-b')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('move-selector-category-unclassified')),
+        findsOneWidget,
+      );
+      expect(find.byKey(ValueKey('move-target-${root.id}')), findsOneWidget);
+      expect(find.text('当前节点'), findsOneWidget);
+      expect(find.byKey(ValueKey('move-target-${child.id}')), findsOneWidget);
+      expect(find.text('当前节点的下级'), findsOneWidget);
+      expect(find.byKey(ValueKey('move-target-${legal.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('move-target-${categoryB.id}')), findsNothing);
+      expect(
+        find.byKey(ValueKey('move-target-${unclassified.id}')),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(ValueKey('move-selector-branch-${child.id}')),
+      );
+      await _pumpFrames(tester);
+      expect(
+        find.byKey(ValueKey('move-target-${grandchild.id}')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(ValueKey('move-target-${grandchild.id}')),
+            )
+            .enabled,
+        isFalse,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('move-selector-category-b')));
+      await _pumpFrames(tester);
+      expect(
+        find.byKey(ValueKey('move-target-${categoryB.id}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('取消'));
+      await _pumpFrames(tester);
+      expect(nodes.reparentCalls, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'move picker disables current parent and preserves reparent semantics',
+    (tester) async {
+      final rootA = _node('11111111-1111-4111-8111-111111111111', 'A root');
+      final child = _node(
+        '22222222-2222-4222-8222-222222222222',
+        'Moving child',
+        parentId: rootA.id,
+        categoryId: null,
+      );
+      final rootB = _node(
+        '33333333-3333-4333-8333-333333333333',
+        'B root',
+        categoryId: 'b',
+      );
+      nodes.nodes.addAll([rootA, child, rootB]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: InMemoryWorldCategoryCollapseStore(),
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+
+      await _openMenu(tester, child.id);
+      await tester.tap(find.text('移动到…'));
+      await _pumpFrames(tester);
+      expect(find.text('当前上层'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(ValueKey('move-target-${rootA.id}')))
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const ValueKey('move-target-root')))
+            .enabled,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const ValueKey('move-selector-category-b')));
+      await _pumpFrames(tester);
+      await tester.tap(find.byKey(ValueKey('move-target-${rootB.id}')));
+      await _pumpFrames(tester);
+
+      expect(nodes.reparentCalls, hasLength(1));
+      final call = nodes.reparentCalls.single;
+      expect(call.nodeId, child.id);
+      expect(call.parentId, rootB.id);
+      expect(call.categoryId, isNull);
+      expect(call.sortOrder, 0);
+      final moved = nodes.nodes.singleWhere((node) => node.id == child.id);
+      expect(moved.parentWorldNodeId, rootB.id);
+      expect(moved.categoryId, isNull);
+
+      await _openMenu(tester, child.id);
+      await tester.tap(find.text('移动到…'));
+      await _pumpFrames(tester);
+      await tester.tap(find.byKey(const ValueKey('move-target-root')));
+      await _pumpFrames(tester);
+      expect(nodes.reparentCalls, hasLength(2));
+      final rootCall = nodes.reparentCalls.last;
+      expect(rootCall.nodeId, child.id);
+      expect(rootCall.parentId, isNull);
+      expect(rootCall.categoryId, 'b');
+      expect(rootCall.sortOrder, 1);
+      final movedToRoot = nodes.nodes.singleWhere(
+        (node) => node.id == child.id,
+      );
+      expect(movedToRoot.parentWorldNodeId, isNull);
+      expect(movedToRoot.categoryId, 'b');
+    },
+  );
 }
 
 Future<void> _seedPickerTree(
@@ -302,9 +497,36 @@ DateTime _time(int value) =>
 
 class _WorldRepository implements WorldNodeRepository {
   final nodes = <WorldNode>[];
+  final reparentCalls =
+      <
+        ({String nodeId, String? parentId, String? categoryId, int sortOrder})
+      >[];
 
   @override
   Future<List<WorldNode>> getWorldNodes() async => List.unmodifiable(nodes);
+
+  @override
+  Future<void> reparentWorldNode(
+    String id,
+    String? parentWorldNodeId,
+    String? categoryId,
+    int sortOrder,
+    DateTime updatedAt,
+  ) async {
+    reparentCalls.add((
+      nodeId: id,
+      parentId: parentWorldNodeId,
+      categoryId: categoryId,
+      sortOrder: sortOrder,
+    ));
+    final index = nodes.indexWhere((node) => node.id == id);
+    nodes[index] = nodes[index].copyWith(
+      parentWorldNodeId: parentWorldNodeId,
+      categoryId: categoryId,
+      sortOrder: sortOrder,
+      updatedAt: updatedAt,
+    );
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
