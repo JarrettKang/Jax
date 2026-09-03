@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
+import '../../core/entities/plan_review_note.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/errors/domain_failure.dart';
@@ -133,6 +134,15 @@ class SqlitePlanningRepository
       )).map(_itemFromRow).toList(growable: false);
 
   @override
+  Future<List<PlanReviewNote>> getPlanReviewNotes(String planId) async =>
+      (await _app.database.query(
+        'plan_review_notes',
+        where: 'plan_id = ?',
+        whereArgs: [planId],
+        orderBy: 'created_at_utc DESC, id DESC',
+      )).map(_reviewNoteFromRow).toList(growable: false);
+
+  @override
   Future<Plan> createPlan({
     required String id,
     required String worldNodeId,
@@ -240,6 +250,7 @@ class SqlitePlanningRepository
     if (linked.isNotEmpty) {
       throw const DomainFailure('已有执行事项的计划不能删除');
     }
+    await tx.delete('plan_review_notes', where: 'plan_id = ?', whereArgs: [id]);
     await tx.delete('plan_items', where: 'plan_id = ?', whereArgs: [id]);
     final deleted = await tx.delete('plans', where: 'id = ?', whereArgs: [id]);
     if (deleted != 1) throw const DomainFailure('计划删除冲突');
@@ -378,6 +389,65 @@ class SqlitePlanningRepository
         }
       });
 
+  @override
+  Future<PlanReviewNote> createPlanReviewNote({
+    required String id,
+    required String planId,
+    required String content,
+    required DateTime now,
+  }) => _app.database.transaction((tx) async {
+    _requireReviewContent(content);
+    final plans = await tx.query(
+      'plans',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [planId],
+      limit: 1,
+    );
+    if (plans.isEmpty) throw const DomainFailure('计划不存在');
+    final utc = now.toUtc();
+    final note = PlanReviewNote(
+      id: id,
+      planId: planId,
+      content: content.trim(),
+      createdAt: utc,
+      updatedAt: utc,
+    );
+    await tx.insert('plan_review_notes', _reviewNoteToRow(note));
+    return note;
+  });
+
+  @override
+  Future<void> editPlanReviewNote(
+    String id, {
+    required String content,
+    required DateTime now,
+  }) async {
+    _requireReviewContent(content);
+    final rows = await _app.database.query(
+      'plan_review_notes',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) throw const DomainFailure('复盘不存在');
+    await _updateOne('plan_review_notes', id, {
+      'content': content.trim(),
+      'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+    });
+  }
+
+  @override
+  Future<void> deletePlanReviewNote(String id) async {
+    final deleted = await _app.database.delete(
+      'plan_review_notes',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (deleted != 1) throw const DomainFailure('复盘不存在');
+  }
+
   Future<PlanItem> _requireItem(String id) async {
     final rows = await _app.database.query(
       'plan_items',
@@ -451,6 +521,10 @@ class SqlitePlanningRepository
     if (value.trim().isEmpty) throw const DomainFailure('计划项标题不能为空');
   }
 
+  static void _requireReviewContent(String value) {
+    if (value.trim().isEmpty) throw const DomainFailure('复盘内容不能为空');
+  }
+
   static Map<String, Object?> _planToRow(Plan plan) => {
     'id': plan.id,
     'world_node_id': plan.worldNodeId,
@@ -494,6 +568,23 @@ class SqlitePlanningRepository
     createdAt: _date(row['created_at_utc']),
     updatedAt: _date(row['updated_at_utc']),
   );
+
+  static Map<String, Object?> _reviewNoteToRow(PlanReviewNote note) => {
+    'id': note.id,
+    'plan_id': note.planId,
+    'content': note.content,
+    'created_at_utc': note.createdAt.millisecondsSinceEpoch,
+    'updated_at_utc': note.updatedAt.millisecondsSinceEpoch,
+  };
+
+  static PlanReviewNote _reviewNoteFromRow(Map<String, Object?> row) =>
+      PlanReviewNote(
+        id: row['id']! as String,
+        planId: row['plan_id']! as String,
+        content: row['content']! as String,
+        createdAt: _date(row['created_at_utc']),
+        updatedAt: _date(row['updated_at_utc']),
+      );
 
   static DateTime _date(Object? value) =>
       DateTime.fromMillisecondsSinceEpoch((value! as num).toInt(), isUtc: true);

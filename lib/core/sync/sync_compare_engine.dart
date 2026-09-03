@@ -746,7 +746,7 @@ class SyncCompareEngine {
   ) {
     final name = record.payload['name'] as String?;
     if (name != null) return name;
-    for (final relation in ['eventSyncId', 'routineSyncId']) {
+    for (final relation in ['eventSyncId', 'routineSyncId', 'planSyncId']) {
       if (record.payload[relation] case final String id) {
         final owner = _nameFor(id, w) ?? _nameFor(id, a);
         if (owner != null) return '${record.kind.name}：$owner';
@@ -780,6 +780,7 @@ class SyncCompareEngine {
       'routineExecutionSyncId',
       'legacyEventSyncId',
       'worldNodeSyncId',
+      'planSyncId',
     };
     if (value is! String || !relations.contains(field)) return null;
     return _nameFor(value, records) ?? value;

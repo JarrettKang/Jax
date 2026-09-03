@@ -22,6 +22,10 @@ void main() {
       hasLength(2),
     );
     expect(
+      snapshot.records.where((r) => r.kind == SyncEntityKind.planReviewNote),
+      hasLength(1),
+    );
+    expect(
       snapshot.lists
           .singleWhere((l) => l.kind == SyncListKind.planItems)
           .itemIds,
@@ -41,6 +45,7 @@ void main() {
     expect(await app.database.query('world_nodes'), isEmpty);
     expect(await app.database.query('plans'), isEmpty);
     expect(await app.database.query('plan_items'), isEmpty);
+    expect(await app.database.query('plan_review_notes'), isEmpty);
   });
 
   test('PlanItem tombstone propagates without deleting its Plan', () async {
@@ -100,6 +105,13 @@ List<SyncMutation> _operations() => [
       'status': 'next',
       'order': 1,
     }),
+  ),
+  SyncMutation.upsertRecord(
+    _record(
+      SyncEntityKind.planReviewNote,
+      '33333333-3333-4333-8333-333333333333',
+      {'planSyncId': 'plan', 'content': '同步复盘'},
+    ),
   ),
   SyncMutation.applyList(
     const SyncList(

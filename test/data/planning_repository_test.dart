@@ -214,60 +214,151 @@ void main() {
     expect(await counts(), before);
   });
 
-  test('whole Plan delete is enforced by execution history and source links', () async {
+  test(
+    'whole Plan delete is enforced by execution history and source links',
+    () async {
+      final node = _node('11111111-1111-4111-8111-111111111111', 'A');
+      await nodes.insertWorldNode(node);
+      final deletable = await plans.createPlan(
+        id: 'deletable',
+        worldNodeId: node.id,
+        now: _time(1),
+      );
+      await plans.createPlanItem(
+        id: 'draft',
+        planId: deletable.id,
+        title: 'Draft',
+        now: _time(2),
+      );
+      await plans.deletePlan(deletable.id);
+      expect(await plans.getPlan(deletable.id), isNull);
+      expect(await plans.getPlanItems(deletable.id), isEmpty);
+      expect(await nodes.getWorldNode(node.id), isNotNull);
+      expect(
+        (await app.database.query('sync_tombstones'))
+            .map((row) => '${row['entity_type']}:${row['entity_id']}'),
+        containsAll(['plan:deletable', 'planItem:draft']),
+      );
+
+      final linked = await plans.createPlan(
+        id: 'linked',
+        worldNodeId: node.id,
+        now: _time(3),
+      );
+      await plans.createPlanItem(
+        id: 'linked-item',
+        planId: linked.id,
+        title: 'Linked',
+        now: _time(4),
+      );
+      await app.database.insert('events', {
+        'id': 'event',
+        'name': 'Event',
+        'status': 'pending',
+        'source_plan_item_id': 'linked-item',
+        'category_id': null,
+        'created_at_utc': 4,
+        'updated_at_utc': 4,
+      });
+      await expectLater(plans.deletePlan(linked.id), throwsA(anything));
+      await app.database.delete(
+        'events',
+        where: 'id = ?',
+        whereArgs: ['event'],
+      );
+      await app.database.update(
+        'plan_items',
+        {'status': 'dispatched'},
+        where: 'id = ?',
+        whereArgs: ['linked-item'],
+      );
+      await expectLater(plans.deletePlan(linked.id), throwsA(anything));
+    },
+  );
+
+  test(
+    'review notes append, edit, and tombstone in every Plan state',
+    () async {
+      final node = _node('11111111-1111-4111-8111-111111111111', 'A');
+      await nodes.insertWorldNode(node);
+      final plan = await plans.createPlan(
+        id: 'plan-review',
+        worldNodeId: node.id,
+        now: _time(1),
+      );
+      final focused = await plans.createPlanReviewNote(
+        id: '11111111-1111-4111-8111-111111111112',
+        planId: plan.id,
+        content: ' focused ',
+        now: _time(2),
+      );
+      await plans.setPlanStatus(plan.id, PlanStatus.waiting, _time(3));
+      await plans.createPlanReviewNote(
+        id: '11111111-1111-4111-8111-111111111113',
+        planId: plan.id,
+        content: 'waiting',
+        now: _time(4),
+      );
+      await plans.setPlanStatus(plan.id, PlanStatus.ended, _time(5));
+      await plans.createPlanReviewNote(
+        id: '11111111-1111-4111-8111-111111111114',
+        planId: plan.id,
+        content: 'ended',
+        now: _time(6),
+      );
+      await plans.editPlanReviewNote(
+        focused.id,
+        content: 'edited',
+        now: _time(7),
+      );
+      final notes = await plans.getPlanReviewNotes(plan.id);
+      expect(notes.map((note) => note.content), ['ended', 'waiting', 'edited']);
+      expect(notes.last.createdAt, _time(2));
+      expect(notes.last.updatedAt, _time(7));
+      await expectLater(
+        plans.createPlanReviewNote(
+          id: '11111111-1111-4111-8111-111111111115',
+          planId: plan.id,
+          content: '   ',
+          now: _time(8),
+        ),
+        throwsA(anything),
+      );
+      await plans.deletePlanReviewNote(notes[1].id);
+      expect(await plans.getPlanReviewNotes(plan.id), hasLength(2));
+      expect(
+        await app.database.query(
+          'sync_tombstones',
+          where: 'entity_type = ? AND entity_id = ?',
+          whereArgs: ['planReviewNote', notes[1].id],
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test('deleting an unexecuted Plan tombstones its review notes', () async {
     final node = _node('11111111-1111-4111-8111-111111111111', 'A');
     await nodes.insertWorldNode(node);
-    final deletable = await plans.createPlan(
-      id: 'deletable',
+    final plan = await plans.createPlan(
+      id: 'plan-with-review',
       worldNodeId: node.id,
       now: _time(1),
     );
-    await plans.createPlanItem(
-      id: 'draft',
-      planId: deletable.id,
-      title: 'Draft',
+    const noteId = '11111111-1111-4111-8111-111111111119';
+    await plans.createPlanReviewNote(
+      id: noteId,
+      planId: plan.id,
+      content: 'retain as tombstone',
       now: _time(2),
     );
-    await plans.deletePlan(deletable.id);
-    expect(await plans.getPlan(deletable.id), isNull);
-    expect(await plans.getPlanItems(deletable.id), isEmpty);
-    expect(await nodes.getWorldNode(node.id), isNotNull);
+    await plans.deletePlan(plan.id);
+    expect(await plans.getPlanReviewNotes(plan.id), isEmpty);
     expect(
-      (await app.database.query('sync_tombstones')).map(
-        (row) => '${row['entity_type']}:${row['entity_id']}',
-      ),
-      containsAll(['plan:deletable', 'planItem:draft']),
+      (await app.database.query('sync_tombstones'))
+          .map((row) => '${row['entity_type']}:${row['entity_id']}'),
+      containsAll(['planReviewNote:$noteId', 'plan:plan-with-review']),
     );
-
-    final linked = await plans.createPlan(
-      id: 'linked',
-      worldNodeId: node.id,
-      now: _time(3),
-    );
-    await plans.createPlanItem(
-      id: 'linked-item',
-      planId: linked.id,
-      title: 'Linked',
-      now: _time(4),
-    );
-    await app.database.insert('events', {
-      'id': 'event',
-      'name': 'Event',
-      'status': 'pending',
-      'source_plan_item_id': 'linked-item',
-      'category_id': null,
-      'created_at_utc': 4,
-      'updated_at_utc': 4,
-    });
-    await expectLater(plans.deletePlan(linked.id), throwsA(anything));
-    await app.database.delete('events', where: 'id = ?', whereArgs: ['event']);
-    await app.database.update(
-      'plan_items',
-      {'status': 'dispatched'},
-      where: 'id = ?',
-      whereArgs: ['linked-item'],
-    );
-    await expectLater(plans.deletePlan(linked.id), throwsA(anything));
   });
 }
 

@@ -23,6 +23,7 @@ class DevelopmentDataReset {
         'event_day_plans',
         'run_segments',
         'events',
+        'plan_review_notes',
         'plan_items',
         'plans',
         'world_nodes',
@@ -37,15 +38,11 @@ class DevelopmentDataReset {
       ]) {
         if (await _tableExists(tx, table)) await tx.delete(table);
       }
-      await tx.insert(
-        'dataset_metadata',
-        {
-          'singleton': 1,
-          'generation': clean,
-          'created_at_utc': DateTime.now().toUtc().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await tx.insert('dataset_metadata', {
+        'singleton': 1,
+        'generation': clean,
+        'created_at_utc': DateTime.now().toUtc().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       final foreignKeys = await tx.rawQuery('PRAGMA foreign_key_check');
       if (foreignKeys.isNotEmpty) {
         throw StateError('Reset foreign-key failure: $foreignKeys');
@@ -60,6 +57,7 @@ class DevelopmentDataReset {
       'world_nodes',
       'plans',
       'plan_items',
+      'plan_review_notes',
       'events',
       'event_day_plans',
       'run_segments',

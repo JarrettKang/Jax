@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 16;
+  static const schemaVersion = 17;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -107,6 +107,10 @@ class AppDatabase {
       await _createSyncTriggers(database);
     }
     if (oldVersion < 16) await _migrateToFlatEvents(database);
+    if (oldVersion < 17) {
+      await _createPlanReviewNotes(database);
+      await _createSyncTriggers(database);
+    }
   }
 
   static Future<void> _createFlatEventTable(
@@ -255,7 +259,18 @@ class AppDatabase {
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL
     )''');
+    await _createPlanReviewNotes(database);
   }
+
+  static Future<void> _createPlanReviewNotes(Database database) =>
+      database.execute('''CREATE TABLE IF NOT EXISTS plan_review_notes (
+      id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+      content TEXT NOT NULL CHECK(length(trim(content)) > 0),
+      created_at_utc INTEGER NOT NULL,
+      updated_at_utc INTEGER NOT NULL,
+      CHECK(updated_at_utc >= created_at_utc)
+    )''');
 
   static Future<void> _migrateToWaitingStatus(Database database) async {
     await database.execute('''CREATE TABLE events_v5 (
@@ -460,6 +475,7 @@ class AppDatabase {
       'legacy_event_world_node_links': 'legacyEventWorldNodeLink',
       'plans': 'plan',
       'plan_items': 'planItem',
+      'plan_review_notes': 'planReviewNote',
     };
     for (final entry in entities.entries) {
       if (!await _tableExists(database, entry.key)) continue;
@@ -519,6 +535,7 @@ class AppDatabase {
       'legacy_event_world_node_links',
       'plans',
       'plan_items',
+      'plan_review_notes',
     ];
     for (final table in timestampTables) {
       final columns = await database.rawQuery('PRAGMA table_info($table)');

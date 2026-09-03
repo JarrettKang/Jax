@@ -12,7 +12,7 @@ void main() {
   const compiler = SyncPlanCompiler();
   const validator = SyncSnapshotValidator();
 
-  test('protocol 2 baseline upgrades to protocol 4 with no invented Plans', () {
+  test('protocol 2 baseline upgrades to current protocol with no invented Plans or reviews', () {
     final old = _snapshot([_node()], protocol: 2);
     final upgraded = SyncSnapshot.fromJson(
       (jsonDecode(old.toJsonString()) as Map).cast<String, Object?>(),
@@ -20,6 +20,10 @@ void main() {
     expect(upgraded.protocolVersion, syncProtocolVersion);
     expect(
       upgraded.records.where((r) => r.kind == SyncEntityKind.plan),
+      isEmpty,
+    );
+    expect(
+      upgraded.records.where((r) => r.kind == SyncEntityKind.planReviewNote),
       isEmpty,
     );
   });
@@ -199,6 +203,75 @@ void main() {
       ),
     );
   });
+
+  test(
+    'PlanReviewNote create, edit, delete, and readiness use three-way sync',
+    () {
+      const noteId = '22222222-2222-4222-8222-222222222222';
+      final baseline = _snapshot([_node(), _plan(), _review(noteId, 'base')]);
+      final windows = _snapshot([_node(), _plan(), _review(noteId, 'windows')]);
+      final android = _snapshot([_node(), _plan(), _review(noteId, 'android')]);
+      final conflict = compare.compare(
+        baseline: baseline,
+        windows: windows,
+        android: android,
+      );
+      expect(
+        conflict.manualConflicts.single.windows?.kind,
+        SyncEntityKind.planReviewNote,
+      );
+      expect(
+        conflict.manualConflicts.single.changedFields.single.field,
+        'content',
+      );
+
+      final created = _snapshot([_node(), _plan(), _review(noteId, 'new')]);
+      final empty = _snapshot([_node(), _plan()]);
+      expect(
+        compare
+            .compare(windows: created, android: empty)
+            .autoMergeable
+            .single
+            .windows
+            ?.kind,
+        SyncEntityKind.planReviewNote,
+      );
+
+      final deleted = SyncRecord(
+        kind: SyncEntityKind.planReviewNote,
+        metadata: SyncMetadata(
+          id: noteId,
+          createdAtUtc: _time,
+          updatedAtUtc: _time,
+          deletedAtUtc: _time,
+        ),
+        payload: const {},
+      );
+      expect(
+        compare
+            .compare(
+              baseline: baseline,
+              windows: _snapshot([_node(), _plan(), deleted]),
+              android: android,
+            )
+            .manualConflicts
+            .single
+            .conflictType,
+        SyncConflictType.deleteModify,
+      );
+
+      expect(
+        validator.validate(_snapshot([_review(noteId, 'valid')])),
+        contains('plan-review-note-plan:$noteId'),
+      );
+      expect(
+        validator.validate(
+          _snapshot([_node(), _plan(), _review(noteId, '  ')]),
+        ),
+        contains('plan-review-note-content:$noteId'),
+      );
+    },
+  );
 }
 
 final _time = DateTime.fromMillisecondsSinceEpoch(100, isUtc: true);
@@ -209,7 +282,7 @@ SyncSnapshot _snapshot(
   int protocol = syncProtocolVersion,
 }) => SyncSnapshot(
   protocolVersion: protocol,
-  schemaVersion: 16,
+  schemaVersion: 17,
   exportedAtUtc: _time,
   records: records,
   lists: lists,
@@ -261,6 +334,12 @@ SyncRecord _plannedEvent(String id, String sourceId) =>
       'firstStartedAtUtc': null,
       'completedAtUtc': null,
     });
+
+SyncRecord _review(String id, String content) => _record(
+  SyncEntityKind.planReviewNote,
+  id,
+  {'planSyncId': 'plan', 'content': content},
+);
 
 SyncList _itemList(List<String> ids) =>
     SyncList(kind: SyncListKind.planItems, scopeId: 'plan', itemIds: ids);

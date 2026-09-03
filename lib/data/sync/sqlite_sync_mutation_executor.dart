@@ -126,6 +126,7 @@ class SqliteSyncMutationExecutor {
       case SyncEntityKind.routine:
       case SyncEntityKind.worldNode:
       case SyncEntityKind.planItem:
+      case SyncEntityKind.planReviewNote:
         row.remove('sort_order');
         break;
       case SyncEntityKind.event:
@@ -192,7 +193,7 @@ class SqliteSyncMutationExecutor {
       id,
     ], index),
     SyncListKind.eventSiblings => throw StateError(
-      'Event hierarchy lists are not supported by sync protocol 4.',
+      'Event hierarchy lists are not supported by sync protocol 5.',
     ),
     SyncListKind.routineCategories => _setOrder(
       db,
@@ -231,7 +232,7 @@ class SqliteSyncMutationExecutor {
         <Object?>[],
       ),
       SyncListKind.eventSiblings => throw StateError(
-        'Event hierarchy lists are not supported by sync protocol 4.',
+        'Event hierarchy lists are not supported by sync protocol 5.',
       ),
       SyncListKind.routineCategories => (
         'routine_categories',
@@ -434,7 +435,7 @@ class SqliteSyncMutationExecutor {
         ...metadata,
       },
       SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
-        'Legacy Event/WorldNode links are not supported by protocol 4.',
+        'Legacy Event/WorldNode links are not supported by protocol 5.',
       ),
       SyncEntityKind.plan => {
         'id': record.metadata.id,
@@ -452,6 +453,12 @@ class SqliteSyncMutationExecutor {
         'note': p['note'],
         'status': p['status'],
         'sort_order': p['order'],
+        ...metadata,
+      },
+      SyncEntityKind.planReviewNote => {
+        'id': record.metadata.id,
+        'plan_id': p['planSyncId'],
+        'content': p['content'],
         ...metadata,
       },
     };
@@ -494,10 +501,13 @@ class SqliteSyncMutationExecutor {
       record.metadata.id,
     ]),
     SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
-      'Legacy Event/WorldNode links are not supported by protocol 4.',
+      'Legacy Event/WorldNode links are not supported by protocol 5.',
     ),
     SyncEntityKind.plan => _SqlTarget('plans', 'id = ?', [record.metadata.id]),
     SyncEntityKind.planItem => _SqlTarget('plan_items', 'id = ?', [
+      record.metadata.id,
+    ]),
+    SyncEntityKind.planReviewNote => _SqlTarget('plan_review_notes', 'id = ?', [
       record.metadata.id,
     ]),
   };
@@ -507,11 +517,12 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.eventRunSegment ||
     SyncEntityKind.routineRunSegment => 0,
     SyncEntityKind.event || SyncEntityKind.routineExecution => 1,
-    SyncEntityKind.planItem || SyncEntityKind.routine => 2,
-    SyncEntityKind.plan => 3,
-    SyncEntityKind.worldNode => 4,
-    SyncEntityKind.routineCategory || SyncEntityKind.eventCategory => 5,
-    SyncEntityKind.legacyEventWorldNodeLink => 6,
+    SyncEntityKind.planReviewNote => 2,
+    SyncEntityKind.planItem || SyncEntityKind.routine => 3,
+    SyncEntityKind.plan => 4,
+    SyncEntityKind.worldNode => 5,
+    SyncEntityKind.routineCategory || SyncEntityKind.eventCategory => 6,
+    SyncEntityKind.legacyEventWorldNodeLink => 7,
   };
   int _upsertRank(SyncEntityKind kind) => switch (kind) {
     SyncEntityKind.eventCategory || SyncEntityKind.routineCategory => 0,
@@ -523,6 +534,7 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.worldNode => 1,
     SyncEntityKind.plan => 2,
     SyncEntityKind.planItem => 3,
+    SyncEntityKind.planReviewNote => 3,
     SyncEntityKind.legacyEventWorldNodeLink => 7,
   };
   String _tombstoneType(SyncEntityKind kind) => switch (kind) {
@@ -538,6 +550,7 @@ class SqliteSyncMutationExecutor {
     SyncEntityKind.legacyEventWorldNodeLink => 'legacyEventWorldNodeLink',
     SyncEntityKind.plan => 'plan',
     SyncEntityKind.planItem => 'planItem',
+    SyncEntityKind.planReviewNote => 'planReviewNote',
   };
 }
 

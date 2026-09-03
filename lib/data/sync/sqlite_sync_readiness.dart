@@ -42,6 +42,7 @@ class SqliteSyncReadiness {
       'world_nodes',
       'plans',
       'plan_items',
+      'plan_review_notes',
     ];
     for (final table in identityTables) {
       final invalid = await db.rawQuery(
@@ -137,6 +138,30 @@ class SqliteSyncReadiness {
     for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
       LEFT JOIN plans p ON p.id = i.plan_id WHERE p.id IS NULL''')) {
       issues.add(SyncReadinessIssue('plan-item-plan', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery('''SELECT n.id FROM plan_review_notes n
+      LEFT JOIN plans p ON p.id = n.plan_id WHERE p.id IS NULL''')) {
+      issues.add(
+        SyncReadinessIssue('plan-review-note-plan', row['id'].toString()),
+      );
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM plan_review_notes
+      WHERE length(trim(content)) = 0''')) {
+      issues.add(
+        SyncReadinessIssue('plan-review-note-content', row['id'].toString()),
+      );
+    }
+    for (final row in await db.rawQuery('''SELECT id FROM plan_review_notes
+      WHERE updated_at_utc < created_at_utc''')) {
+      issues.add(
+        SyncReadinessIssue('plan-review-note-timestamps', row['id'].toString()),
+      );
+    }
+    for (final row in await db.query('plan_review_notes', columns: ['id'])) {
+      final id = row['id']! as String;
+      if (!WorldNodeIds.isValid(id)) {
+        issues.add(SyncReadinessIssue('plan-review-note-invalid-uuid', id));
+      }
     }
     for (final row in await db.rawQuery('''SELECT id FROM plans WHERE
       (status = 'ended' AND ended_at_utc IS NULL) OR

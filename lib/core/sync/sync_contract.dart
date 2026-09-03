@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 4;
+const syncProtocolVersion = 5;
 
 enum SyncEntityKind {
   eventCategory,
@@ -19,6 +19,7 @@ enum SyncEntityKind {
   legacyEventWorldNodeLink,
   plan,
   planItem,
+  planReviewNote,
 }
 
 enum SyncListKind {
@@ -184,9 +185,12 @@ class SyncSnapshot {
     final withPlanning = withWorldNodes.protocolVersion == 2
         ? _upgradeProtocol2Baseline(withWorldNodes)
         : withWorldNodes;
-    return withPlanning.protocolVersion == 3
+    final withFlatEvents = withPlanning.protocolVersion == 3
         ? _upgradeProtocol3Baseline(withPlanning)
         : withPlanning;
+    return withFlatEvents.protocolVersion == 4
+        ? _upgradeProtocol4Baseline(withFlatEvents)
+        : withFlatEvents;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -369,11 +373,15 @@ SyncSnapshot _upgradeProtocol3Baseline(SyncSnapshot source) {
       ..['sourcePlanItemSyncId'] = null
       ..['categorySyncId'] = effectiveCategory(record);
     records.add(
-      SyncRecord(kind: record.kind, metadata: record.metadata, payload: payload),
+      SyncRecord(
+        kind: record.kind,
+        metadata: record.metadata,
+        payload: payload,
+      ),
     );
   }
   return SyncSnapshot(
-    protocolVersion: syncProtocolVersion,
+    protocolVersion: 4,
     schemaVersion: source.schemaVersion,
     datasetGeneration: 'legacy',
     exportedAtUtc: source.exportedAtUtc,
@@ -387,6 +395,19 @@ SyncSnapshot _upgradeProtocol3Baseline(SyncSnapshot source) {
     ],
   );
 }
+
+SyncSnapshot _upgradeProtocol4Baseline(SyncSnapshot source) => SyncSnapshot(
+  protocolVersion: syncProtocolVersion,
+  schemaVersion: source.schemaVersion,
+  datasetGeneration: source.datasetGeneration,
+  exportedAtUtc: source.exportedAtUtc,
+  records: source.records,
+  lists: source.lists,
+  warnings: [
+    ...source.warnings,
+    'baseline-upgraded: sync protocol 4 normalized to protocol 5 PlanReviewNotes',
+  ],
+);
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   final result = <String, Object?>{};

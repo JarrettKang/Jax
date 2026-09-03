@@ -41,6 +41,7 @@ class SqliteSyncSnapshotAdapter {
       ...await _readTable('world_nodes', SyncEntityKind.worldNode),
       ...await _readTable('plans', SyncEntityKind.plan),
       ...await _readTable('plan_items', SyncEntityKind.planItem),
+      ...await _readTable('plan_review_notes', SyncEntityKind.planReviewNote),
     ];
     records.addAll(await _readTombstones(records));
     final generationRows = await database.query(
@@ -228,6 +229,7 @@ class SqliteSyncSnapshotAdapter {
     'legacyEventWorldNodeLink' => SyncEntityKind.legacyEventWorldNodeLink,
     'plan' => SyncEntityKind.plan,
     'planItem' => SyncEntityKind.planItem,
+    'planReviewNote' => SyncEntityKind.planReviewNote,
     _ => throw StateError('Unknown tombstone entity type: $value'),
   };
 }

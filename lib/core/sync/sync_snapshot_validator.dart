@@ -144,6 +144,22 @@ class SyncSnapshotValidator {
           if (p['order'] is! int || (p['order'] as int) < 0) {
             issues.add('plan-item-order:${record.metadata.id}');
           }
+        case SyncEntityKind.planReviewNote:
+          if (!WorldNodeIds.isValid(record.metadata.id)) {
+            issues.add('plan-review-note-invalid-uuid:${record.metadata.id}');
+          }
+          if (!has(SyncEntityKind.plan, p['planSyncId'])) {
+            issues.add('plan-review-note-plan:${record.metadata.id}');
+          }
+          if (p['content'] is! String ||
+              (p['content'] as String).trim().isEmpty) {
+            issues.add('plan-review-note-content:${record.metadata.id}');
+          }
+          if (record.metadata.updatedAtUtc.isBefore(
+            record.metadata.createdAtUtc,
+          )) {
+            issues.add('plan-review-note-timestamps:${record.metadata.id}');
+          }
         case SyncEntityKind.eventCategory || SyncEntityKind.routineCategory:
           break;
       }
@@ -445,6 +461,8 @@ class SyncSnapshotValidator {
             '${SyncListKind.planItems.name}:${record.payload['planSyncId']}',
             id,
           );
+        case SyncEntityKind.planReviewNote:
+          break;
         case SyncEntityKind.eventRunSegment ||
             SyncEntityKind.routineExecution ||
             SyncEntityKind.routineRunSegment:
