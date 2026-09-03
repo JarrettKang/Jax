@@ -94,6 +94,7 @@ class _WorldRepository implements WorldNodeRepository {
         id: '00000000-0000-4000-8000-000000000006',
         name: 'Jax P3',
         status: WorldNodeStatus.inProgress,
+        isFocused: true,
         sortOrder: 0,
         createdAt: now,
         updatedAt: now,
@@ -114,7 +115,7 @@ class _PlanningRepository
     : plan = Plan(
         id: 'plan',
         worldNodeId: '00000000-0000-4000-8000-000000000006',
-        status: PlanStatus.focused,
+        status: PlanStatus.current,
         roundNumber: 1,
         title: 'Dispatch',
         createdAt: now,

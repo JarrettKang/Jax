@@ -50,7 +50,13 @@ class WorldNodeDetailPage extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            Text(node.status == WorldNodeStatus.completed ? '已完成' : '进行中'),
+            Text(
+              node.status == WorldNodeStatus.completed
+                  ? '已完成'
+                  : node.isFocused
+                  ? '进行中 · 关注中'
+                  : '进行中',
+            ),
             const Divider(height: 32),
             const _SectionTitle('当前计划'),
             if (current == null)
@@ -200,7 +206,7 @@ class _CurrentPlanSummary extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           title: Text(plan.displayTitle),
           subtitle: Text(
-            '${plan.status == PlanStatus.focused ? '已关注' : '等待中'} · 第 ${plan.roundNumber} 轮 · '
+            '当前 · 第 ${plan.roundNumber} 轮 · '
             '${count(PlanItemStatus.next)} 下一步 · '
             '${count(PlanItemStatus.dispatched)} 已派发 · '
             '${count(PlanItemStatus.done)} 已完成',

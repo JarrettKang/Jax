@@ -194,9 +194,12 @@ class _WorldPageState extends State<WorldPage> {
 
   String _planningState(WorldNode node) {
     if (node.status == WorldNodeStatus.completed) return '已完成 · 仅可查看历史计划';
-    if (widget.controller.currentPlanFor(node.id) != null) return '已有当前计划';
-    if (widget.controller.hasEndedPlan(node.id)) return '上一轮已结束';
-    return '尚无计划';
+    final attention = node.isFocused ? '关注中 · ' : '';
+    if (widget.controller.currentPlanFor(node.id) != null) {
+      return '$attention已有当前计划';
+    }
+    if (widget.controller.hasEndedPlan(node.id)) return '$attention上一轮已结束';
+    return '$attention尚无计划';
   }
 
   List<PopupMenuEntry<String>> _actionsFor(WorldNode node) {
@@ -211,6 +214,11 @@ class _WorldPageState extends State<WorldPage> {
     final siblings = _siblings(node);
     final index = siblings.indexWhere((value) => value.id == node.id);
     return [
+      if (!completed)
+        PopupMenuItem(
+          value: node.isFocused ? 'unfocus' : 'focus',
+          child: Text(node.isFocused ? '取消关注' : '关注'),
+        ),
       if (node.status == WorldNodeStatus.inProgress && current == null)
         PopupMenuItem(
           value: 'create-plan',
@@ -235,6 +243,11 @@ class _WorldPageState extends State<WorldPage> {
   }
 
   Future<void> _nodeAction(WorldNode node, String action) async {
+    if (action == 'focus' || action == 'unfocus') {
+      return _guard(
+        () => widget.controller.setWorldNodeFocus(node, action == 'focus'),
+      );
+    }
     if (action == 'add-child') return _addNode(parent: node);
     if (action == 'rename') return _renameNode(node);
     if (action == 'move-up' || action == 'move-down') {

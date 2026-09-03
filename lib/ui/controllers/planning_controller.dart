@@ -102,21 +102,20 @@ class PlanningController extends ChangeNotifier {
 
   List<PlanningRecommendationGroup> get recommendationGroups {
     final groups = <PlanningRecommendationGroup>[];
-    for (final plan in plans.where(
-      (value) => value.status == PlanStatus.focused,
-    )) {
+    for (final workspace in focusedWorldNodePlanning) {
+      final plan = workspace.currentPlan;
+      if (plan == null) continue;
       final items =
-          itemsFor(plan.id)
+          workspace.items
               .where((item) => item.status == PlanItemStatus.next)
               .toList()
             ..sort(_itemOrder);
-      final node = nodeFor(plan.worldNodeId);
-      if (items.isEmpty || node == null) continue;
+      if (items.isEmpty) continue;
       groups.add(
         PlanningRecommendationGroup(
           plan: plan,
-          node: node,
-          category: categoryForNode(node),
+          node: workspace.node,
+          category: workspace.category,
           items: items,
         ),
       );
@@ -131,6 +130,32 @@ class PlanningController extends ChangeNotifier {
       return round != 0 ? round : a.plan.id.compareTo(b.plan.id);
     });
     return groups;
+  }
+
+  List<FocusedWorldNodePlanning> get focusedWorldNodePlanning {
+    final result = worldNodes
+        .where(
+          (node) => node.status == WorldNodeStatus.inProgress && node.isFocused,
+        )
+        .map((node) {
+          final plan = currentPlanFor(node.id);
+          return FocusedWorldNodePlanning(
+            node: node,
+            category: categoryForNode(node),
+            currentPlan: plan,
+            items: plan == null ? const [] : itemsFor(plan.id),
+            latestEndedPlan: endedPlansFor(node.id).lastOrNull,
+          );
+        })
+        .toList();
+    result.sort((a, b) {
+      final category = _categoryIndex(a.category)
+          .compareTo(_categoryIndex(b.category));
+      return category != 0
+          ? category
+          : _compareNodeDisplayOrder(a.node, b.node);
+    });
+    return result;
   }
 
   Future<void> dispatchRecommendations(Iterable<String> planItemIds) async {
@@ -338,6 +363,7 @@ class PlanningController extends ChangeNotifier {
         id: newId(),
         name: name,
         status: WorldNodeStatus.inProgress,
+        isFocused: false,
         parentWorldNodeId: parentWorldNodeId,
         categoryId: parentWorldNodeId == null ? categoryId : null,
         sortOrder: siblings.length,
@@ -362,8 +388,13 @@ class PlanningController extends ChangeNotifier {
     WorldNodeStatus status,
   ) async {
     await worldNodeRepository.updateWorldNode(
-      node.copyWith(status: status, updatedAt: now().toUtc()),
+      node.copyWith(status: status, isFocused: false, updatedAt: now().toUtc()),
     );
+    await load();
+  }
+
+  Future<void> setWorldNodeFocus(WorldNode node, bool isFocused) async {
+    await worldNodeRepository.setWorldNodeFocus(node.id, isFocused, now());
     await load();
   }
 
@@ -512,6 +543,22 @@ class PlanningRecommendationGroup {
   final WorldNode node;
   final Category? category;
   final List<PlanItem> items;
+}
+
+class FocusedWorldNodePlanning {
+  const FocusedWorldNodePlanning({
+    required this.node,
+    required this.category,
+    required this.currentPlan,
+    required this.items,
+    required this.latestEndedPlan,
+  });
+
+  final WorldNode node;
+  final Category? category;
+  final Plan? currentPlan;
+  final List<PlanItem> items;
+  final Plan? latestEndedPlan;
 }
 
 String planningEventStatusText(EventStatus status) => switch (status) {

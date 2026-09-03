@@ -41,15 +41,7 @@ class _PlanningPageState extends State<PlanningPage> {
       if (controller.error != null && controller.plans.isEmpty) {
         return Center(child: Text('无法加载规划：${controller.error}'));
       }
-      final focused = controller.plans
-          .where((plan) => plan.status == PlanStatus.focused)
-          .toList();
-      final waiting = controller.plans
-          .where((plan) => plan.status == PlanStatus.waiting)
-          .toList();
-      final ended = controller.plans
-          .where((plan) => plan.status == PlanStatus.ended)
-          .toList();
+      final workspaces = controller.focusedWorldNodePlanning;
       return Scaffold(
         body: ListView(
           key: const ValueKey('planning-overview'),
@@ -68,38 +60,24 @@ class _PlanningPageState extends State<PlanningPage> {
               ],
             ),
             const SizedBox(height: 20),
-            _PlanSection(
-              title: '已关注',
-              emptyText: '还没有正在关注的计划',
-              plans: focused,
-              controller: controller,
-              onOpen: _openPlan,
-            ),
-            if (ended.isNotEmpty) ...[
-              const SizedBox(height: 18),
-              ExpansionTile(
-                key: const ValueKey('ended-plans'),
-                tilePadding: EdgeInsets.zero,
-                title: Text('历史计划 (${ended.length})'),
-                children: [
-                  _PlanSection(
-                    title: '',
-                    emptyText: '',
-                    plans: ended,
-                    controller: controller,
-                    onOpen: _openPlan,
-                  ),
-                ],
+            if (workspaces.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 28),
+                child: Text(
+                  '暂无关注中的世界节点。\n去“世界”中关注你现在想推进的节点。',
+                  key: ValueKey('planning-no-focused-world-nodes'),
+                ),
+              )
+            else
+              ...workspaces.map(
+                (workspace) => _FocusedWorldNodeTile(
+                  workspace: workspace,
+                  onOpen: workspace.currentPlan == null
+                      ? null
+                      : () => _openPlan(workspace.currentPlan!),
+                  onCreate: () => _createPlanFor(workspace.node),
+                ),
               ),
-            ],
-            const SizedBox(height: 24),
-            _PlanSection(
-              title: '等待中',
-              emptyText: '没有暂时等待的计划',
-              plans: waiting,
-              controller: controller,
-              onOpen: _openPlan,
-            ),
           ],
         ),
       );
@@ -120,6 +98,15 @@ class _PlanningPageState extends State<PlanningPage> {
     }
   }
 
+  Future<void> _createPlanFor(WorldNode node) async {
+    try {
+      final plan = await widget.controller.createPlan(node);
+      if (mounted) await _openPlan(plan);
+    } catch (error) {
+      if (mounted) _showError(context, error);
+    }
+  }
+
   Future<void> _openPlan(Plan plan) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -135,64 +122,50 @@ class _PlanningPageState extends State<PlanningPage> {
   }
 }
 
-class _PlanSection extends StatelessWidget {
-  const _PlanSection({
-    required this.title,
-    required this.emptyText,
-    required this.plans,
-    required this.controller,
+class _FocusedWorldNodeTile extends StatelessWidget {
+  const _FocusedWorldNodeTile({
+    required this.workspace,
     required this.onOpen,
+    required this.onCreate,
   });
-  final String title;
-  final String emptyText;
-  final List<Plan> plans;
-  final PlanningController controller;
-  final ValueChanged<Plan> onOpen;
+  final FocusedWorldNodePlanning workspace;
+  final VoidCallback? onOpen;
+  final VoidCallback onCreate;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (title.isNotEmpty) ...[
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-      ],
-      if (plans.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(emptyText, style: Theme.of(context).textTheme.bodySmall),
-        )
-      else
-        ...plans.map((plan) {
-          final node = controller.nodeFor(plan.worldNodeId);
-          final items = controller.itemsFor(plan.id);
-          final next = items
-              .where((item) => item.status == PlanItemStatus.next)
-              .length;
-          final category = node == null
-              ? null
-              : controller.categoryForNode(node);
-          return ListTile(
-            key: ValueKey('plan-${plan.id}'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            leading: Icon(
-              plan.status == PlanStatus.focused
-                  ? Icons.visibility_outlined
-                  : Icons.pause_circle_outline,
-              color: category == null
-                  ? Theme.of(context).colorScheme.outline
-                  : Theme.of(context).colorScheme.primary,
-            ),
-            title: Text(node?.name ?? '未知世界节点'),
-            subtitle: Text(
-              '${plan.displayTitle}  ·  $next 个 next  ·  ${items.length} 个计划项',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => onOpen(plan),
-          );
-        }),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final plan = workspace.currentPlan;
+    int count(PlanItemStatus status) =>
+        workspace.items.where((item) => item.status == status).length;
+    final contextText = [
+      workspace.category?.name ?? '未分类',
+      if (plan == null) '暂无当前计划' else plan.displayTitle,
+    ].join(' · ');
+    return ListTile(
+      key: ValueKey('focused-world-node-${workspace.node.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      leading: const Icon(Icons.visibility_outlined),
+      title: Text(workspace.node.name),
+      subtitle: Text(
+        plan == null
+            ? workspace.latestEndedPlan == null
+                  ? contextText
+                  : '$contextText · 上一轮已结束'
+            : '$contextText\n${count(PlanItemStatus.next)} 个下一步 · '
+                  '${count(PlanItemStatus.dispatched)} 个已派发 · '
+                  '${count(PlanItemStatus.done)} 个已完成',
+      ),
+      isThreeLine: plan != null,
+      trailing: plan == null
+          ? TextButton(
+              key: ValueKey('add-plan-for-${workspace.node.id}'),
+              onPressed: onCreate,
+              child: Text(workspace.latestEndedPlan == null ? '添加计划' : '添加新一轮'),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: onOpen,
+    );
+  }
 }
 
 class _WorldNodeSelector extends StatefulWidget {
@@ -353,24 +326,17 @@ class PlanDetailPage extends StatelessWidget {
         appBar: AppBar(
           title: Text(node?.name ?? '计划'),
           actions: [
-            if (plan.isCurrent)
+            if (plan.isCurrent &&
+                node?.status == WorldNodeStatus.inProgress &&
+                node?.isFocused == false)
               TextButton.icon(
-                key: const ValueKey('toggle-plan-focus'),
+                key: const ValueKey('focus-world-node-from-plan'),
                 onPressed: () => _guard(
                   context,
-                  () => controller.setPlanStatus(
-                    plan,
-                    plan.status == PlanStatus.focused
-                        ? PlanStatus.waiting
-                        : PlanStatus.focused,
-                  ),
+                  () => controller.setWorldNodeFocus(node!, true),
                 ),
-                icon: Icon(
-                  plan.status == PlanStatus.focused
-                      ? Icons.pause_circle_outline
-                      : Icons.visibility_outlined,
-                ),
-                label: Text(plan.status == PlanStatus.focused ? '暂时等待' : '关注'),
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('关注节点'),
               ),
             PopupMenuButton<String>(
               key: const ValueKey('plan-more'),
@@ -951,8 +917,7 @@ void _showError(BuildContext context, Object error) =>
         .showSnackBar(SnackBar(content: Text(error.toString())));
 
 String _planStatusText(PlanStatus status) => switch (status) {
-  PlanStatus.focused => '已关注',
-  PlanStatus.waiting => '等待中',
+  PlanStatus.current => '当前',
   PlanStatus.ended => '已结束',
 };
 

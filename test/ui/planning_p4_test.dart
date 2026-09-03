@@ -37,6 +37,7 @@ void main() {
       id: _nodeId,
       name: 'Jax Project',
       status: WorldNodeStatus.inProgress,
+      isFocused: true,
       sortOrder: 0,
       createdAt: _time(1),
       updatedAt: _time(1),
@@ -122,7 +123,7 @@ void main() {
       PlanItemStatus.next,
       _time(14),
     );
-    await planning.setPlanStatus(current.id, PlanStatus.waiting, _time(15));
+    await planning.setPlanStatus(current.id, PlanStatus.current, _time(15));
     await controller.load();
   });
 
@@ -150,7 +151,7 @@ void main() {
       expect(find.byKey(const ValueKey('world-node-detail')), findsOneWidget);
       expect(find.text('概览'), findsOneWidget);
       expect(find.text('Second round'), findsOneWidget);
-      expect(find.textContaining('等待中 · 第 2 轮'), findsOneWidget);
+      expect(find.textContaining('当前 · 第 2 轮'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('执行历史'),
         250,
@@ -168,34 +169,35 @@ void main() {
     },
   );
 
-  testWidgets('ended Plan offers a multiline review editor on a narrow screen', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(390, 700));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      MaterialApp(
-        home: PlanDetailPage(controller: controller, planId: historical.id),
-      ),
-    );
-    await _pumpFrames(tester);
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('add-review-note')),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const ValueKey('add-review-note')));
-    await _pumpFrames(tester);
-    await tester.enterText(
-      find.byKey(const ValueKey('review-note-content')),
-      'Line one\nLine two',
-    );
-    expect(find.text('Line one\nLine two'), findsOneWidget);
-    expect(find.byKey(const ValueKey('save-review-note')), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await _pumpFrames(tester);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'ended Plan offers a multiline review editor on a narrow screen',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 700));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlanDetailPage(controller: controller, planId: historical.id),
+        ),
+      );
+      await _pumpFrames(tester);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('add-review-note')),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const ValueKey('add-review-note')));
+      await _pumpFrames(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('review-note-content')),
+        'Line one\nLine two',
+      );
+      expect(find.text('Line one\nLine two'), findsOneWidget);
+      expect(find.byKey(const ValueKey('save-review-note')), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await _pumpFrames(tester);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 const _nodeId = '11111111-1111-4111-8111-111111111111';

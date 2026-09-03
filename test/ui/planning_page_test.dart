@@ -11,6 +11,42 @@ import 'package:jax/ui/pages/planning_page.dart';
 import '../support/memory_repository.dart';
 
 void main() {
+  testWidgets('focused WorldNode without a Plan appears in the overview', (
+    tester,
+  ) async {
+    const nodeId = '11111111-1111-4111-8111-111111111111';
+    final controller = PlanningController(
+      planningRepository: _PlanningRepository(),
+      worldNodeRepository: _WorldRepository([
+        WorldNode(
+          id: nodeId,
+          name: 'Only attention',
+          status: WorldNodeStatus.inProgress,
+          isFocused: true,
+          sortOrder: 0,
+          createdAt: _time(1),
+          updatedAt: _time(1),
+        ),
+      ]),
+      eventRepository: MemoryRepository(),
+      newId: () => 'unused',
+      now: () => _time(10),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(home: PlanningPage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('focused-world-node-$nodeId')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('暂无当前计划'), findsOneWidget);
+    expect(find.byKey(const ValueKey('add-plan-for-$nodeId')), findsOneWidget);
+  });
+
   testWidgets('creates Plan and quickly toggles a PlanItem next state', (
     tester,
   ) async {
@@ -19,6 +55,7 @@ void main() {
       id: nodeId,
       name: 'Jax Planning',
       status: WorldNodeStatus.inProgress,
+      isFocused: true,
       sortOrder: 0,
       createdAt: _time(1),
       updatedAt: _time(1),
@@ -40,7 +77,10 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('add-plan')));
     await tester.pumpAndSettle();
-    expect(find.text('Jax Planning'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('select-world-node-$nodeId')),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('select-world-node-$nodeId')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('plan-detail')), findsOneWidget);
@@ -98,7 +138,7 @@ class _PlanningRepository implements PlanningRepository {
     final plan = Plan(
       id: id,
       worldNodeId: worldNodeId,
-      status: PlanStatus.focused,
+      status: PlanStatus.current,
       roundNumber: 1,
       title: title,
       createdAt: now,

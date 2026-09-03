@@ -60,6 +60,7 @@ void main() {
           id: '00000000-0000-4000-8000-000000000001',
           name: '科研节点',
           status: WorldNodeStatus.inProgress,
+          isFocused: false,
           categoryId: 'research',
           sortOrder: 0,
           createdAt: now,
@@ -92,9 +93,7 @@ void main() {
         ),
         findsNothing,
       );
-      await tester.tap(
-        find.byKey(const ValueKey('world-category-research')),
-      );
+      await tester.tap(find.byKey(const ValueKey('world-category-research')));
       await tester.pumpAndSettle();
       expect(
         find.byKey(

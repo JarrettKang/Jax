@@ -39,163 +39,173 @@ void main() {
 
   tearDown(() => controller.dispose());
 
-  testWidgets('picker groups categories, collapses branches, and explains disabled nodes', (
-    tester,
-  ) async {
-    await _seedPickerTree(nodes, plans);
-    await tester.pumpWidget(
-      MaterialApp(home: PlanningPage(controller: controller)),
-    );
-    await _pumpFrames(tester);
-    await tester.tap(find.byKey(const ValueKey('add-plan')));
-    await _pumpFrames(tester);
+  testWidgets(
+    'picker groups categories, collapses branches, and explains disabled nodes',
+    (tester) async {
+      await _seedPickerTree(nodes, plans);
+      await tester.pumpWidget(
+        MaterialApp(home: PlanningPage(controller: controller)),
+      );
+      await _pumpFrames(tester);
+      await tester.tap(find.byKey(const ValueKey('add-plan')));
+      await _pumpFrames(tester);
 
-    expect(find.text('Category A'), findsOneWidget);
-    expect(find.text('Category B'), findsOneWidget);
-    expect(find.text('Child A1'), findsOneWidget);
-    await tester.drag(
-      find.byKey(const ValueKey('planning-world-node-selector')),
-      const Offset(0, -100),
-    );
-    await _pumpFrames(tester);
-    expect(
-      find.byKey(
-        const ValueKey(
-          'select-world-node-66666666-6666-4666-8666-666666666666',
-        ),
-      ),
-      findsOneWidget,
-    );
-    expect(find.textContaining('已完成：只能查看历史'), findsOneWidget);
-    expect(find.textContaining('已有当前计划'), findsOneWidget);
-    expect(
-      tester.widget<ListTile>(
-        find.byKey(
-          const ValueKey(
-            'select-world-node-55555555-5555-4555-8555-555555555555',
-          ),
-        ),
-      ).enabled,
-      isFalse,
-    );
-    expect(
-      tester.widget<ListTile>(
+      expect(find.text('Category A'), findsOneWidget);
+      expect(find.text('Category B'), findsOneWidget);
+      expect(find.text('Child A1'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const ValueKey('planning-world-node-selector')),
+        const Offset(0, -100),
+      );
+      await _pumpFrames(tester);
+      expect(
         find.byKey(
           const ValueKey(
             'select-world-node-66666666-6666-4666-8666-666666666666',
           ),
         ),
-      ).enabled,
-      isFalse,
-    );
+        findsOneWidget,
+      );
+      expect(find.textContaining('已完成：只能查看历史'), findsOneWidget);
+      expect(find.textContaining('已有当前计划'), findsOneWidget);
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(
+                const ValueKey(
+                  'select-world-node-55555555-5555-4555-8555-555555555555',
+                ),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<ListTile>(
+              find.byKey(
+                const ValueKey(
+                  'select-world-node-66666666-6666-4666-8666-666666666666',
+                ),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
 
-    await tester.drag(
-      find.byKey(const ValueKey('planning-world-node-selector')),
-      const Offset(0, 100),
-    );
-    await _pumpFrames(tester);
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(
+      await tester.drag(
+        find.byKey(const ValueKey('planning-world-node-selector')),
+        const Offset(0, 100),
+      );
+      await _pumpFrames(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey(
+              'select-world-node-11111111-1111-4111-8111-111111111111',
+            ),
+          ),
+          matching: find.byType(IconButton),
+        ),
+      );
+      await _pumpFrames(tester);
+      expect(find.text('Child A1'), findsNothing);
+      expect(
+        find.byKey(
           const ValueKey(
-            'select-world-node-11111111-1111-4111-8111-111111111111',
+            'select-world-node-66666666-6666-4666-8666-666666666666',
           ),
         ),
-        matching: find.byType(IconButton),
-      ),
-    );
-    await _pumpFrames(tester);
-    expect(find.text('Child A1'), findsNothing);
-    expect(
-      find.byKey(
-        const ValueKey(
-          'select-world-node-66666666-6666-4666-8666-666666666666',
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('planning-selector-category-a')),
+      );
+      await _pumpFrames(tester);
+      expect(find.text('Root A'), findsNothing);
+      expect(find.text('Root B'), findsNothing);
+      expect(find.text('Root C'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const ValueKey('planning-world-node-selector')),
+        const Offset(0, -400),
+      );
+      await _pumpFrames(tester);
+      expect(find.text('未分类'), findsOneWidget);
+      expect(find.text('Root D'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await _pumpFrames(tester);
+    },
+  );
+
+  testWidgets(
+    'WorldNode More exposes create, current, next round, and history states',
+    (tester) async {
+      final noPlan = _node('11111111-1111-4111-8111-111111111111', 'No plan');
+      final current = _node('22222222-2222-4222-8222-222222222222', 'Current');
+      final history = _node('33333333-3333-4333-8333-333333333333', 'History');
+      final completed = _node(
+        '44444444-4444-4444-8444-444444444444',
+        'Completed',
+        status: WorldNodeStatus.completed,
+      );
+      for (final node in [noPlan, current, history, completed]) {
+        nodes.nodes.add(node);
+      }
+      await plans.createPlan(
+        id: 'current',
+        worldNodeId: current.id,
+        now: _time(2),
+      );
+      final ended = await plans.createPlan(
+        id: 'history',
+        worldNodeId: history.id,
+        now: _time(2),
+      );
+      await plans.setPlanStatus(ended.id, PlanStatus.ended, _time(3));
+      plans.plans.add(
+        Plan(
+          id: 'completed-history',
+          worldNodeId: completed.id,
+          status: PlanStatus.ended,
+          roundNumber: 1,
+          endedAt: _time(3),
+          createdAt: _time(2),
+          updatedAt: _time(3),
         ),
-      ),
-      findsNothing,
-    );
+      );
 
-    await tester.tap(
-      find.byKey(const ValueKey('planning-selector-category-a')),
-    );
-    await _pumpFrames(tester);
-    expect(find.text('Root A'), findsNothing);
-    expect(find.text('Root B'), findsNothing);
-    expect(find.text('Root C'), findsOneWidget);
-    await tester.drag(
-      find.byKey(const ValueKey('planning-world-node-selector')),
-      const Offset(0, -400),
-    );
-    await _pumpFrames(tester);
-    expect(find.text('未分类'), findsOneWidget);
-    expect(find.text('Root D'), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await _pumpFrames(tester);
-  });
-
-  testWidgets('WorldNode More exposes create, current, next round, and history states', (
-    tester,
-  ) async {
-    final noPlan = _node('11111111-1111-4111-8111-111111111111', 'No plan');
-    final current = _node('22222222-2222-4222-8222-222222222222', 'Current');
-    final history = _node('33333333-3333-4333-8333-333333333333', 'History');
-    final completed = _node(
-      '44444444-4444-4444-8444-444444444444',
-      'Completed',
-      status: WorldNodeStatus.completed,
-    );
-    for (final node in [noPlan, current, history, completed]) {
-      nodes.nodes.add(node);
-    }
-    await plans.createPlan(id: 'current', worldNodeId: current.id, now: _time(2));
-    final ended = await plans.createPlan(
-      id: 'history',
-      worldNodeId: history.id,
-      now: _time(2),
-    );
-    await plans.setPlanStatus(ended.id, PlanStatus.ended, _time(3));
-    plans.plans.add(
-      Plan(
-        id: 'completed-history',
-        worldNodeId: completed.id,
-        status: PlanStatus.ended,
-        roundNumber: 1,
-        endedAt: _time(3),
-        createdAt: _time(2),
-        updatedAt: _time(3),
-      ),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: WorldPage(
-          controller: controller,
-          worldCategoryCollapseStore: InMemoryWorldCategoryCollapseStore(),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: InMemoryWorldCategoryCollapseStore(),
+          ),
         ),
-      ),
-    );
-    await _pumpFrames(tester);
+      );
+      await _pumpFrames(tester);
 
-    await _openMenu(tester, noPlan.id);
-    expect(find.text('添加计划'), findsOneWidget);
-    await _dismissMenu(tester);
+      await _openMenu(tester, noPlan.id);
+      expect(find.text('添加计划'), findsOneWidget);
+      await _dismissMenu(tester);
 
-    await _openMenu(tester, current.id);
-    expect(find.text('查看当前计划'), findsOneWidget);
-    expect(find.text('添加计划'), findsNothing);
-    await _dismissMenu(tester);
+      await _openMenu(tester, current.id);
+      expect(find.text('查看当前计划'), findsOneWidget);
+      expect(find.text('添加计划'), findsNothing);
+      await _dismissMenu(tester);
 
-    await _openMenu(tester, history.id);
-    expect(find.text('添加新一轮计划'), findsOneWidget);
-    expect(find.text('查看历史计划'), findsOneWidget);
-    await _dismissMenu(tester);
+      await _openMenu(tester, history.id);
+      expect(find.text('添加新一轮计划'), findsOneWidget);
+      expect(find.text('查看历史计划'), findsOneWidget);
+      await _dismissMenu(tester);
 
-    await _openMenu(tester, completed.id);
-    expect(find.text('查看历史计划'), findsOneWidget);
-    expect(find.text('添加计划'), findsNothing);
-    expect(find.text('添加新一轮计划'), findsNothing);
-    await _dismissMenu(tester);
-  });
+      await _openMenu(tester, completed.id);
+      expect(find.text('查看历史计划'), findsOneWidget);
+      expect(find.text('添加计划'), findsNothing);
+      expect(find.text('添加新一轮计划'), findsNothing);
+      await _dismissMenu(tester);
+    },
+  );
 }
 
 Future<void> _seedPickerTree(
@@ -203,7 +213,11 @@ Future<void> _seedPickerTree(
   _PlanningRepository plans,
 ) async {
   final rootA = _node('11111111-1111-4111-8111-111111111111', 'Root A');
-  final rootB = _node('22222222-2222-4222-8222-222222222222', 'Root B', order: 1);
+  final rootB = _node(
+    '22222222-2222-4222-8222-222222222222',
+    'Root B',
+    order: 1,
+  );
   final rootC = _node(
     '33333333-3333-4333-8333-333333333333',
     'Root C',
@@ -231,7 +245,11 @@ Future<void> _seedPickerTree(
   for (final node in [rootA, rootB, rootC, rootD, childA1, childA2]) {
     nodes.nodes.add(node);
   }
-  await plans.createPlan(id: 'occupied', worldNodeId: childA2.id, now: _time(2));
+  await plans.createPlan(
+    id: 'occupied',
+    worldNodeId: childA2.id,
+    now: _time(2),
+  );
 }
 
 Category _category(String id, String name, int order) => Category(
@@ -250,10 +268,12 @@ WorldNode _node(
   String? categoryId = 'a',
   int order = 0,
   WorldNodeStatus status = WorldNodeStatus.inProgress,
+  bool isFocused = false,
 }) => WorldNode(
   id: id,
   name: name,
   status: status,
+  isFocused: isFocused,
   parentWorldNodeId: parentId,
   categoryId: categoryId,
   sortOrder: order,
@@ -316,7 +336,7 @@ class _PlanningRepository implements PlanningRepository {
       id: id,
       worldNodeId: worldNodeId,
       title: title,
-      status: PlanStatus.focused,
+      status: PlanStatus.current,
       roundNumber: round,
       createdAt: now,
       updatedAt: now,
