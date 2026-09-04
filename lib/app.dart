@@ -8,6 +8,7 @@ import 'dart:ui' show AppExitResponse;
 import 'package:uuid/uuid.dart';
 
 import 'core/repositories/event_repository.dart';
+import 'core/entities/jax_event.dart';
 import 'core/repositories/planning_repository.dart';
 import 'core/repositories/world_node_repository.dart';
 import 'core/preferences/world_category_collapse_store.dart';
@@ -87,6 +88,7 @@ class _JaxAppState extends State<JaxApp> {
   AppLifecycleListener? _lifecycleListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   var _selectedIndex = 0;
+  PlanningOpenRequest? _planningOpenRequest;
   var _saving = false;
 
   @override
@@ -199,6 +201,138 @@ class _JaxAppState extends State<JaxApp> {
         : const Icon(Icons.save_outlined),
   );
 
+  void _openPlanningPlan(String planId, {bool addItem = false}) {
+    setState(() {
+      _planningOpenRequest = PlanningOpenRequest(
+        planId: planId,
+        openAddItem: addItem,
+      );
+      _selectedIndex = 3;
+    });
+  }
+
+  Future<void> _addPlanStepFromRunningEvent(
+    BuildContext dialogContext,
+    JaxEvent event,
+  ) async {
+    final planning = _planningController;
+    final sourceId = event.sourcePlanItemId;
+    if (planning == null || sourceId == null) return;
+    try {
+      final target = await planning.resolvePlanStepRefinement(sourceId);
+      if (!mounted || !dialogContext.mounted) return;
+      switch (target.kind) {
+        case PlanStepRefinementKind.currentSourcePlan:
+          _openPlanningPlan(target.sourcePlan.id, addItem: true);
+          return;
+        case PlanStepRefinementKind.endedSourceWithCurrentPlan:
+          final choice = await _endedPlanChoice(
+            target,
+            dialogContext: dialogContext,
+            hasCurrentPlan: true,
+          );
+          if (!mounted || choice == null) return;
+          if (choice == _PlanStepChoice.currentPlan) {
+            _openPlanningPlan(target.currentPlan!.id, addItem: true);
+          } else if (choice == _PlanStepChoice.sourcePlan) {
+            _openPlanningPlan(target.sourcePlan.id);
+          }
+          return;
+        case PlanStepRefinementKind.endedSourceWithoutCurrentPlan:
+          final choice = await _endedPlanChoice(
+            target,
+            dialogContext: dialogContext,
+            hasCurrentPlan: false,
+          );
+          if (!mounted || choice == null) return;
+          if (choice == _PlanStepChoice.sourcePlan) {
+            _openPlanningPlan(target.sourcePlan.id);
+          } else if (choice == _PlanStepChoice.newRound) {
+            final plan = await planning.createPlan(target.node);
+            if (mounted) _openPlanningPlan(plan.id, addItem: true);
+          }
+          return;
+        case PlanStepRefinementKind.completedWorldNode:
+          final choice = await _completedNodeChoice(target, dialogContext);
+          if (mounted && choice == _PlanStepChoice.sourcePlan) {
+            _openPlanningPlan(target.sourcePlan.id);
+          }
+          return;
+      }
+    } catch (error) {
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
+  }
+
+  Future<_PlanStepChoice?> _endedPlanChoice(
+    PlanStepRefinementTarget target, {
+    required BuildContext dialogContext,
+    required bool hasCurrentPlan,
+  }) {
+    return showDialog<_PlanStepChoice>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('来源计划已经结束'),
+        content: Text(
+          hasCurrentPlan
+              ? '“${target.node.name}”已有新的当前计划。要把步骤补充到当前计划，还是查看原来的来源计划？'
+              : '“${target.node.name}”目前没有当前计划。可以添加新一轮后继续补充，或查看原来的来源计划。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            key: const ValueKey('view-source-plan'),
+            onPressed: () => Navigator.pop(context, _PlanStepChoice.sourcePlan),
+            child: const Text('查看来源计划'),
+          ),
+          FilledButton(
+            key: ValueKey(
+              hasCurrentPlan ? 'add-to-current-plan' : 'create-new-plan-round',
+            ),
+            onPressed: () => Navigator.pop(
+              context,
+              hasCurrentPlan
+                  ? _PlanStepChoice.currentPlan
+                  : _PlanStepChoice.newRound,
+            ),
+            child: Text(hasCurrentPlan ? '补充到当前计划' : '添加新一轮'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_PlanStepChoice?> _completedNodeChoice(
+    PlanStepRefinementTarget target,
+    BuildContext dialogContext,
+  ) {
+    return showDialog<_PlanStepChoice>(
+      context: dialogContext,
+      builder: (context) => AlertDialog(
+        title: const Text('世界节点已经完成'),
+        content: Text(
+          '“${target.node.name}”需要先在“世界”中恢复，才能创建新一轮或补充计划步骤。Jax 不会自动恢复节点。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            key: const ValueKey('view-source-plan'),
+            onPressed: () => Navigator.pop(context, _PlanStepChoice.sourcePlan),
+            child: const Text('查看来源计划'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _lifecycleListener?.dispose();
@@ -214,6 +348,9 @@ class _JaxAppState extends State<JaxApp> {
         controller: _controller,
         now: widget.now,
         onOpenEvents: () => setState(() => _selectedIndex = 1),
+        onAddPlanStep: _planningController == null
+            ? null
+            : _addPlanStepFromRunningEvent,
       ),
       EventsPage(
         controller: _controller,
@@ -231,6 +368,10 @@ class _JaxAppState extends State<JaxApp> {
               controller: _planningController!,
               onAddEventToToday: _controller.addToToday,
               isEventToday: _controller.isPlannedToday,
+              openRequest: _planningOpenRequest,
+              onOpenRequestConsumed: () {
+                if (mounted) setState(() => _planningOpenRequest = null);
+              },
             ),
       RoutinePage(
         controller: _controller,
@@ -399,6 +540,8 @@ class _JaxAppState extends State<JaxApp> {
     );
   }
 }
+
+enum _PlanStepChoice { currentPlan, newRound, sourcePlan }
 
 class _ImmediateSaveService implements SaveService {
   const _ImmediateSaveService();

@@ -587,3 +587,24 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - v1 不提供 notification、alarm、toast、snooze、overdue 或独立推荐中心。
   架构允许未来增加 Location/UserState/Energy/AvailableTime 等 Rule，但不承诺
   或实现其业务模型；未来 UserState 应优先来自用户主动表达，而非自动猜测。
+
+## 24. 执行中快速补充计划步骤
+
+- Home Running Hero 仅在当前对象是 Planned Event（具有合法
+  `sourcePlanItemId`）时，在 More 中提供“补充计划步骤…”。Standalone Event、
+  Scheduled Routine 和 On-demand Routine 不显示该入口。
+- 入口严格沿 `Event.sourcePlanItemId → PlanItem → Plan → WorldNode` 解析来源，
+  不让用户重新选择节点或计划。来源是 current Plan 时，直接进入该 Plan Detail
+  的统一新增步骤编辑器；新增项继续追加到该 Plan 末尾。
+- 来源 Plan 已结束但同一 WorldNode 已有 current Plan 时，用户必须明确选择补充到
+  当前计划或查看来源计划；没有 current Plan 时，可明确创建新一轮或查看来源计划。
+  completed WorldNode 必须先由用户在 World 恢复，Jax 不自动恢复、不自动 focus。
+- 新步骤包含非空名称、可选说明，以及 `draft/next` 初始状态，默认 `draft`。
+  `next` 仍只按既有 focused + inProgress + current Plan 资格进入 Today Planning
+  建议；保存不派发、不创建 Event、不加入 Today，也不开始执行。
+- 快速补充只复用 Planning 的 PlanItem 创建边界。操作期间当前 Event、来源
+  dispatched PlanItem、open RunSegment 的 ID/start/state、Running Hero 计时、Today
+  order 与 Record 均保持不变。取消为零写入。
+- 来源链失效时不猜测替代目标；打开后 Plan ended/deleted 或 WorldNode completed 等
+  stale 变化在保存时由 Data 层拒绝。该功能不新增 schema 或 Sync 字段，新增的
+  PlanItem 继续沿既有 Sync protocol 7 合同同步。

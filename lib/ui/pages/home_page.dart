@@ -17,11 +17,14 @@ class HomePage extends StatefulWidget {
     required this.controller,
     required this.now,
     required this.onOpenEvents,
+    this.onAddPlanStep,
     super.key,
   });
   final EventController controller;
   final Clock now;
   final VoidCallback onOpenEvents;
+  final Future<void> Function(BuildContext context, JaxEvent event)?
+  onAddPlanStep;
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -206,6 +209,8 @@ class _HomePageState extends State<HomePage> {
                 save: (expected, value) => widget.controller
                     .adjustRunningEventStart(event.id, expected, value),
               );
+            case _HeroAction.addPlanStep:
+              widget.onAddPlanStep?.call(context, event);
             case _HeroAction.complete:
               _act(() => widget.controller.complete(event.id));
             case _HeroAction.completeCorrected:
@@ -217,14 +222,22 @@ class _HomePageState extends State<HomePage> {
               _act(() => widget.controller.wait(event.id));
           }
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: _HeroAction.adjustStart, child: Text('修改开始时间…')),
-          PopupMenuItem(
+        itemBuilder: (_) => [
+          if (event.isPlanned && widget.onAddPlanStep != null)
+            const PopupMenuItem(
+              value: _HeroAction.addPlanStep,
+              child: Text('补充计划步骤…'),
+            ),
+          const PopupMenuItem(
+            value: _HeroAction.adjustStart,
+            child: Text('修改开始时间…'),
+          ),
+          const PopupMenuItem(
             value: _HeroAction.completeCorrected,
             child: Text('完成并修改结束时间…'),
           ),
-          PopupMenuItem(value: _HeroAction.wait, child: Text('等待')),
-          PopupMenuItem(value: _HeroAction.complete, child: Text('完成')),
+          const PopupMenuItem(value: _HeroAction.wait, child: Text('等待')),
+          const PopupMenuItem(value: _HeroAction.complete, child: Text('完成')),
         ],
       ),
       progress: _ContextProgress(controller: widget.controller),
@@ -253,6 +266,8 @@ class _HomePageState extends State<HomePage> {
                 save: (expected, value) => widget.controller
                     .adjustRunningRoutineStart(routine, expected, value),
               );
+            case _HeroAction.addPlanStep:
+              break;
             case _HeroAction.complete:
               _act(() => widget.controller.completeRoutine(routine));
             case _HeroAction.completeCorrected:
@@ -970,7 +985,7 @@ class _NextItem {
   final String? reason;
 }
 
-enum _HeroAction { adjustStart, complete, completeCorrected, wait }
+enum _HeroAction { addPlanStep, adjustStart, complete, completeCorrected, wait }
 
 Category? _eventCategory(EventController controller, JaxEvent event) {
   return controller.categories

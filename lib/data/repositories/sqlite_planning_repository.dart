@@ -263,9 +263,14 @@ class SqlitePlanningRepository
     required String planId,
     required String title,
     String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
     required DateTime now,
   }) => _app.database.transaction((tx) async {
     _requireTitle(title);
+    if (initialStatus != PlanItemStatus.draft &&
+        initialStatus != PlanItemStatus.next) {
+      throw const DomainFailure('新计划步骤只能保存为草稿或下一步');
+    }
     await _requireEditablePlan(tx, planId);
     final order = await tx.rawQuery(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 value FROM plan_items WHERE plan_id = ?',
@@ -277,7 +282,7 @@ class SqlitePlanningRepository
       planId: planId,
       title: title.trim(),
       note: _cleanOptional(note),
-      status: PlanItemStatus.draft,
+      status: initialStatus,
       sortOrder: (order.single['value'] as num).toInt(),
       createdAt: utc,
       updatedAt: utc,
@@ -461,16 +466,19 @@ class SqlitePlanningRepository
   }
 
   Future<void> _requireEditablePlan(DatabaseExecutor db, String id) async {
-    final rows = await db.query(
-      'plans',
-      columns: ['status'],
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
+    final rows = await db.rawQuery(
+      '''SELECT plan.status plan_status, node.status node_status
+         FROM plans plan
+         JOIN world_nodes node ON node.id = plan.world_node_id
+         WHERE plan.id = ? LIMIT 1''',
+      [id],
     );
     if (rows.isEmpty) throw const DomainFailure('计划不存在');
-    if (rows.single['status'] == 'ended') {
+    if (rows.single['plan_status'] == 'ended') {
       throw const DomainFailure('已结束的计划不能编辑');
+    }
+    if (rows.single['node_status'] == 'completed') {
+      throw const DomainFailure('世界节点已完成，恢复节点后才能编辑计划');
     }
   }
 

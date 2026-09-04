@@ -23,6 +23,7 @@ abstract interface class PlanningRepository {
     required String planId,
     required String title,
     String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
     required DateTime now,
   });
   Future<void> editPlanItem(

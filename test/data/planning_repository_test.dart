@@ -126,6 +126,100 @@ void main() {
     expect((await plans.getPlanItems(planA.id)).map((i) => i.id), ['b', 'a']);
   });
 
+  test('quick refinement appends atomically as draft or next', () async {
+    final node = _node('11111111-1111-4111-8111-111111111111', 'A');
+    await nodes.insertWorldNode(node);
+    final plan = await plans.createPlan(
+      id: 'plan',
+      worldNodeId: node.id,
+      now: _time(1),
+    );
+    await plans.createPlanItem(
+      id: 'source',
+      planId: plan.id,
+      title: 'Running source',
+      now: _time(2),
+    );
+
+    final draft = await plans.createPlanItem(
+      id: 'draft-refinement',
+      planId: plan.id,
+      title: 'Draft refinement',
+      note: 'note',
+      now: _time(3),
+    );
+    final next = await plans.createPlanItem(
+      id: 'next-refinement',
+      planId: plan.id,
+      title: 'Next refinement',
+      initialStatus: PlanItemStatus.next,
+      now: _time(4),
+    );
+
+    expect(draft.status, PlanItemStatus.draft);
+    expect(next.status, PlanItemStatus.next);
+    expect((await plans.getPlanItems(plan.id)).map((item) => item.id), [
+      'source',
+      'draft-refinement',
+      'next-refinement',
+    ]);
+    await expectLater(
+      plans.createPlanItem(
+        id: 'invalid',
+        planId: plan.id,
+        title: 'Invalid',
+        initialStatus: PlanItemStatus.dispatched,
+        now: _time(5),
+      ),
+      throwsA(anything),
+    );
+  });
+
+  test('stale refinement rejects ended Plan and completed WorldNode', () async {
+    final node = _node('11111111-1111-4111-8111-111111111111', 'A');
+    await nodes.insertWorldNode(node);
+    final ended = await plans.createPlan(
+      id: 'ended',
+      worldNodeId: node.id,
+      now: _time(1),
+    );
+    await plans.setPlanStatus(ended.id, PlanStatus.ended, _time(2));
+    await expectLater(
+      plans.createPlanItem(
+        id: 'late',
+        planId: ended.id,
+        title: 'Late',
+        now: _time(3),
+      ),
+      throwsA(anything),
+    );
+
+    final current = await plans.createPlan(
+      id: 'current',
+      worldNodeId: node.id,
+      now: _time(4),
+    );
+    await plans.setPlanStatus(current.id, PlanStatus.ended, _time(5));
+    await nodes.updateWorldNode(
+      node.copyWith(status: WorldNodeStatus.completed, updatedAt: _time(6)),
+    );
+    await app.database.update(
+      'plans',
+      {'status': PlanStatus.current.name, 'ended_at_utc': null},
+      where: 'id = ?',
+      whereArgs: [current.id],
+    );
+    await expectLater(
+      plans.createPlanItem(
+        id: 'completed-node-late',
+        planId: current.id,
+        title: 'Late',
+        now: _time(7),
+      ),
+      throwsA(anything),
+    );
+  });
+
   test(
     'ending Plan preserves item states and never completes WorldNode',
     () async {

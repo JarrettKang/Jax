@@ -227,6 +227,48 @@ class PlanningController extends ChangeNotifier {
       .where((plan) => plan.worldNodeId == worldNodeId && plan.isCurrent)
       .firstOrNull;
 
+  Future<PlanStepRefinementTarget> resolvePlanStepRefinement(
+    String sourcePlanItemId,
+  ) async {
+    await load();
+    if (error != null) throw DomainFailure('无法读取计划来源：$error');
+    PlanItem? sourceItem;
+    for (final items in _items.values) {
+      sourceItem = items
+          .where((item) => item.id == sourcePlanItemId)
+          .firstOrNull;
+      if (sourceItem != null) break;
+    }
+    if (sourceItem == null) {
+      throw const DomainFailure('找不到事项对应的计划步骤，无法补充计划');
+    }
+    final sourcePlan = plans
+        .where((plan) => plan.id == sourceItem!.planId)
+        .firstOrNull;
+    if (sourcePlan == null) {
+      throw const DomainFailure('找不到事项对应的来源计划，无法补充计划');
+    }
+    final node = nodeFor(sourcePlan.worldNodeId);
+    if (node == null) {
+      throw const DomainFailure('找不到来源计划对应的世界节点，无法补充计划');
+    }
+    final currentPlan = currentPlanFor(node.id);
+    final kind = node.status == WorldNodeStatus.completed
+        ? PlanStepRefinementKind.completedWorldNode
+        : sourcePlan.isCurrent
+        ? PlanStepRefinementKind.currentSourcePlan
+        : currentPlan != null
+        ? PlanStepRefinementKind.endedSourceWithCurrentPlan
+        : PlanStepRefinementKind.endedSourceWithoutCurrentPlan;
+    return PlanStepRefinementTarget(
+      kind: kind,
+      sourceItem: sourceItem,
+      sourcePlan: sourcePlan,
+      currentPlan: currentPlan,
+      node: node,
+    );
+  }
+
   List<Plan> endedPlansFor(String worldNodeId) =>
       plans
           .where(
@@ -454,12 +496,18 @@ class PlanningController extends ChangeNotifier {
     await load();
   }
 
-  Future<void> addItem(Plan plan, String title, String? note) async {
+  Future<void> addItem(
+    Plan plan,
+    String title,
+    String? note, {
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
+  }) async {
     await planningRepository.createPlanItem(
       id: newId(),
       planId: plan.id,
       title: title,
       note: note,
+      initialStatus: initialStatus,
       now: now(),
     );
     await load();
@@ -513,6 +561,29 @@ class PlanningController extends ChangeNotifier {
     await planningRepository.deletePlanReviewNote(note.id);
     await load();
   }
+}
+
+enum PlanStepRefinementKind {
+  currentSourcePlan,
+  endedSourceWithCurrentPlan,
+  endedSourceWithoutCurrentPlan,
+  completedWorldNode,
+}
+
+class PlanStepRefinementTarget {
+  const PlanStepRefinementTarget({
+    required this.kind,
+    required this.sourceItem,
+    required this.sourcePlan,
+    required this.currentPlan,
+    required this.node,
+  });
+
+  final PlanStepRefinementKind kind;
+  final PlanItem sourceItem;
+  final Plan sourcePlan;
+  final Plan? currentPlan;
+  final WorldNode node;
 }
 
 class WorldNodeExecutionHistoryItem {

@@ -49,6 +49,7 @@ void main() {
             controller: controller,
             now: () => now,
             onOpenEvents: () {},
+            onAddPlanStep: (_, _) async {},
           ),
         ),
       ),
@@ -119,12 +120,14 @@ void main() {
             controller: controller,
             now: () => now,
             onOpenEvents: () {},
+            onAddPlanStep: (_, _) async {},
           ),
         ),
       ),
     );
     await tester.tap(find.byKey(const ValueKey('home-running-more')));
     await tester.pumpAndSettle();
+    expect(find.text('补充计划步骤…'), findsNothing);
     await tester.tap(find.text('修改开始时间…'));
     await tester.pumpAndSettle();
 
@@ -195,6 +198,7 @@ void main() {
             controller: controller,
             now: () => now,
             onOpenEvents: () {},
+            onAddPlanStep: (_, _) async {},
           ),
         ),
       ),
@@ -203,6 +207,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('home-running-more')));
     await tester.pumpAndSettle();
+    expect(find.text('补充计划步骤…'), findsNothing);
     await tester.tap(find.text('修改开始时间…'));
     await tester.pumpAndSettle();
     expect(find.text('修改开始时间'), findsOneWidget);

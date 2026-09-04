@@ -154,6 +154,7 @@ class _PlanningRepository implements PlanningRepository {
     required String planId,
     required String title,
     String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
     required DateTime now,
   }) async {
     final item = PlanItem(
@@ -161,7 +162,7 @@ class _PlanningRepository implements PlanningRepository {
       planId: planId,
       title: title,
       note: note,
-      status: PlanItemStatus.draft,
+      status: initialStatus,
       sortOrder: items.length,
       createdAt: now,
       updatedAt: now,

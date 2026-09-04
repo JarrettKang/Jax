@@ -14,21 +14,53 @@ class PlanningPage extends StatefulWidget {
     required this.controller,
     this.onAddEventToToday,
     this.isEventToday,
+    this.openRequest,
+    this.onOpenRequestConsumed,
     super.key,
   });
   final PlanningController controller;
   final Future<String?> Function(String eventId)? onAddEventToToday;
   final bool Function(String eventId)? isEventToday;
+  final PlanningOpenRequest? openRequest;
+  final VoidCallback? onOpenRequestConsumed;
 
   @override
   State<PlanningPage> createState() => _PlanningPageState();
 }
 
 class _PlanningPageState extends State<PlanningPage> {
+  PlanningOpenRequest? _handledRequest;
+
   @override
   void initState() {
     super.initState();
     widget.controller.load();
+    _scheduleOpenRequest();
+  }
+
+  @override
+  void didUpdateWidget(PlanningPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleOpenRequest();
+  }
+
+  void _scheduleOpenRequest() {
+    final request = widget.openRequest;
+    if (request == null || identical(request, _handledRequest)) return;
+    _handledRequest = request;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      widget.onOpenRequestConsumed?.call();
+      await widget.controller.load();
+      if (!mounted) return;
+      final plan = widget.controller.plans
+          .where((value) => value.id == request.planId)
+          .firstOrNull;
+      if (plan == null) {
+        _showError(context, const DomainFailure('目标计划已不存在'));
+        return;
+      }
+      await _openPlan(plan, openAddItem: request.openAddItem);
+    });
   }
 
   @override
@@ -108,12 +140,13 @@ class _PlanningPageState extends State<PlanningPage> {
     }
   }
 
-  Future<void> _openPlan(Plan plan) async {
+  Future<void> _openPlan(Plan plan, {bool openAddItem = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlanDetailPage(
           controller: widget.controller,
           planId: plan.id,
+          openAddItemOnLaunch: openAddItem,
           onAddEventToToday: widget.onAddEventToToday,
           isEventToday: widget.isEventToday,
         ),
@@ -121,6 +154,13 @@ class _PlanningPageState extends State<PlanningPage> {
     );
     await widget.controller.load();
   }
+}
+
+class PlanningOpenRequest {
+  const PlanningOpenRequest({required this.planId, this.openAddItem = false});
+
+  final String planId;
+  final bool openAddItem;
 }
 
 class _FocusedWorldNodeTile extends StatelessWidget {
@@ -211,163 +251,180 @@ class PlanDetailPage extends StatelessWidget {
   const PlanDetailPage({
     required this.controller,
     required this.planId,
+    this.openAddItemOnLaunch = false,
     this.onAddEventToToday,
     this.isEventToday,
     super.key,
   });
   final PlanningController controller;
   final String planId;
+  final bool openAddItemOnLaunch;
   final Future<String?> Function(String eventId)? onAddEventToToday;
   final bool Function(String eventId)? isEventToday;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller,
-    builder: (context, _) {
+  Widget build(BuildContext context) => _InitialPlanItemEditorLauncher(
+    enabled: openAddItemOnLaunch,
+    onOpen: (editorContext) async {
       final plan = controller.plans
           .where((value) => value.id == planId)
           .firstOrNull;
       if (plan == null) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        _showError(editorContext, const DomainFailure('目标计划已不存在'));
+        return;
       }
-      final node = controller.nodeFor(plan.worldNodeId);
-      final items = controller.itemsFor(plan.id);
-      final reviewNotes = controller.reviewNotesFor(plan.id);
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(node?.name ?? '计划'),
-          actions: [
-            if (plan.isCurrent &&
-                node?.status == WorldNodeStatus.inProgress &&
-                node?.isFocused == false)
-              TextButton.icon(
-                key: const ValueKey('focus-world-node-from-plan'),
-                onPressed: () => _guard(
-                  context,
-                  () => controller.setWorldNodeFocus(node!, true),
-                ),
-                icon: const Icon(Icons.visibility_outlined),
-                label: const Text('关注节点'),
-              ),
-            PopupMenuButton<String>(
-              key: const ValueKey('plan-more'),
-              onSelected: (value) {
-                if (value == 'rename') _renamePlan(context, plan);
-                if (value == 'end') _endPlan(context, plan, items);
-                if (value == 'delete') _deletePlan(context, plan);
-              },
-              itemBuilder: (_) => [
-                if (plan.isCurrent)
-                  const PopupMenuItem(value: 'rename', child: Text('修改计划名称')),
-                if (plan.isCurrent)
-                  const PopupMenuItem(value: 'end', child: Text('本轮计划结束')),
-                if (controller.canDeletePlan(plan))
-                  const PopupMenuItem(value: 'delete', child: Text('删除整个计划')),
-              ],
-            ),
-          ],
-        ),
-        body: ListView(
-          key: const ValueKey('plan-detail'),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-          children: [
-            Text(
-              plan.displayTitle,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${_planStatusText(plan.status)} · 第 ${plan.roundNumber} 轮 · 创建于 ${_dateText(plan.createdAt)}'
-              '${plan.endedAt == null ? '' : ' · 结束于 ${_dateText(plan.endedAt!)}'}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const Divider(height: 28),
-            if (items.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('还没有计划项')),
-              )
-            else
-              ...List.generate(
-                items.length,
-                (index) => _PlanItemRow(
-                  item: items[index],
-                  linkedEvent: controller.linkedEventFor(items[index].id),
-                  index: index,
-                  count: items.length,
-                  editable: plan.isCurrent,
-                  onToggle: () => _guard(
-                    context,
-                    () => controller.setItemStatus(
-                      items[index],
-                      items[index].status == PlanItemStatus.next
-                          ? PlanItemStatus.draft
-                          : PlanItemStatus.next,
-                    ),
-                  ),
-                  onMove: (target) => _guard(
-                    context,
-                    () => controller.moveItem(items[index], target),
-                  ),
-                  onAction: (action) =>
-                      _itemAction(context, items[index], action),
-                  onAddToToday: onAddEventToToday == null
-                      ? null
-                      : () => _guard(context, () async {
-                          final event = controller.linkedEventFor(
-                            items[index].id,
-                          );
-                          if (event == null) {
-                            throw const DomainFailure('找不到已派发事项');
-                          }
-                          final error = await onAddEventToToday!(event.id);
-                          if (error != null) throw DomainFailure(error);
-                          await controller.load();
-                        }),
-                  isEventToday: isEventToday,
-                ),
-              ),
-            const Divider(height: 32),
-            Row(
-              children: [
-                Text('复盘', style: Theme.of(context).textTheme.titleMedium),
-                const Spacer(),
-                TextButton.icon(
-                  key: const ValueKey('add-review-note'),
-                  onPressed: () => _editReviewNote(context, plan: plan),
-                  icon: const Icon(Icons.add_comment_outlined),
-                  label: const Text('添加复盘'),
-                ),
-              ],
-            ),
-            if (reviewNotes.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  '还没有复盘记录',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              )
-            else
-              ...reviewNotes.map(
-                (note) => _ReviewNoteRow(
-                  note: note,
-                  onEdit: () => _editReviewNote(context, note: note),
-                  onDelete: () => _deleteReviewNote(context, note),
-                ),
-              ),
-          ],
-        ),
-        floatingActionButton: plan.isCurrent
-            ? FloatingActionButton.extended(
-                key: const ValueKey('add-plan-item'),
-                onPressed: () => _editItem(context, plan: plan),
-                icon: const Icon(Icons.add),
-                label: const Text('添加步骤'),
-              )
-            : null,
-      );
+      await _editItem(editorContext, plan: plan, quickRefinement: true);
     },
+    child: AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final plan = controller.plans
+            .where((value) => value.id == planId)
+            .firstOrNull;
+        if (plan == null) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final node = controller.nodeFor(plan.worldNodeId);
+        final items = controller.itemsFor(plan.id);
+        final reviewNotes = controller.reviewNotesFor(plan.id);
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(node?.name ?? '计划'),
+            actions: [
+              if (plan.isCurrent &&
+                  node?.status == WorldNodeStatus.inProgress &&
+                  node?.isFocused == false)
+                TextButton.icon(
+                  key: const ValueKey('focus-world-node-from-plan'),
+                  onPressed: () => _guard(
+                    context,
+                    () => controller.setWorldNodeFocus(node!, true),
+                  ),
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: const Text('关注节点'),
+                ),
+              PopupMenuButton<String>(
+                key: const ValueKey('plan-more'),
+                onSelected: (value) {
+                  if (value == 'rename') _renamePlan(context, plan);
+                  if (value == 'end') _endPlan(context, plan, items);
+                  if (value == 'delete') _deletePlan(context, plan);
+                },
+                itemBuilder: (_) => [
+                  if (plan.isCurrent)
+                    const PopupMenuItem(value: 'rename', child: Text('修改计划名称')),
+                  if (plan.isCurrent)
+                    const PopupMenuItem(value: 'end', child: Text('本轮计划结束')),
+                  if (controller.canDeletePlan(plan))
+                    const PopupMenuItem(value: 'delete', child: Text('删除整个计划')),
+                ],
+              ),
+            ],
+          ),
+          body: ListView(
+            key: const ValueKey('plan-detail'),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+            children: [
+              Text(
+                plan.displayTitle,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_planStatusText(plan.status)} · 第 ${plan.roundNumber} 轮 · 创建于 ${_dateText(plan.createdAt)}'
+                '${plan.endedAt == null ? '' : ' · 结束于 ${_dateText(plan.endedAt!)}'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const Divider(height: 28),
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text('还没有计划项')),
+                )
+              else
+                ...List.generate(
+                  items.length,
+                  (index) => _PlanItemRow(
+                    item: items[index],
+                    linkedEvent: controller.linkedEventFor(items[index].id),
+                    index: index,
+                    count: items.length,
+                    editable: plan.isCurrent,
+                    onToggle: () => _guard(
+                      context,
+                      () => controller.setItemStatus(
+                        items[index],
+                        items[index].status == PlanItemStatus.next
+                            ? PlanItemStatus.draft
+                            : PlanItemStatus.next,
+                      ),
+                    ),
+                    onMove: (target) => _guard(
+                      context,
+                      () => controller.moveItem(items[index], target),
+                    ),
+                    onAction: (action) =>
+                        _itemAction(context, items[index], action),
+                    onAddToToday: onAddEventToToday == null
+                        ? null
+                        : () => _guard(context, () async {
+                            final event = controller.linkedEventFor(
+                              items[index].id,
+                            );
+                            if (event == null) {
+                              throw const DomainFailure('找不到已派发事项');
+                            }
+                            final error = await onAddEventToToday!(event.id);
+                            if (error != null) throw DomainFailure(error);
+                            await controller.load();
+                          }),
+                    isEventToday: isEventToday,
+                  ),
+                ),
+              const Divider(height: 32),
+              Row(
+                children: [
+                  Text('复盘', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  TextButton.icon(
+                    key: const ValueKey('add-review-note'),
+                    onPressed: () => _editReviewNote(context, plan: plan),
+                    icon: const Icon(Icons.add_comment_outlined),
+                    label: const Text('添加复盘'),
+                  ),
+                ],
+              ),
+              if (reviewNotes.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    '还没有复盘记录',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              else
+                ...reviewNotes.map(
+                  (note) => _ReviewNoteRow(
+                    note: note,
+                    onEdit: () => _editReviewNote(context, note: note),
+                    onDelete: () => _deleteReviewNote(context, note),
+                  ),
+                ),
+            ],
+          ),
+          floatingActionButton: plan.isCurrent
+              ? FloatingActionButton.extended(
+                  key: const ValueKey('add-plan-item'),
+                  onPressed: () => _editItem(context, plan: plan),
+                  icon: const Icon(Icons.add),
+                  label: const Text('添加步骤'),
+                )
+              : null,
+        );
+      },
+    ),
   );
 
   Future<void> _renamePlan(BuildContext context, Plan plan) async {
@@ -471,13 +528,32 @@ class PlanDetailPage extends StatelessWidget {
     BuildContext context, {
     Plan? plan,
     PlanItem? item,
+    bool quickRefinement = false,
   }) async {
-    final result = await _itemDialog(context, item);
+    final targetPlan =
+        plan ??
+        controller.plans.where((value) => value.id == item?.planId).firstOrNull;
+    final node = targetPlan == null
+        ? null
+        : controller.nodeFor(targetPlan.worldNodeId);
+    final result = await _itemDialog(
+      context,
+      item,
+      dialogTitle: quickRefinement ? '补充计划步骤' : null,
+      contextLabel: targetPlan == null
+          ? null
+          : '${node?.name ?? '未知节点'} · ${targetPlan.displayTitle}',
+    );
     if (result == null || !context.mounted) return;
     if (item == null) {
       await _guard(
         context,
-        () => controller.addItem(plan!, result.$1, result.$2),
+        () => controller.addItem(
+          plan!,
+          result.$1,
+          result.$2,
+          initialStatus: result.$3,
+        ),
       );
     } else {
       await _guard(
@@ -528,6 +604,38 @@ class PlanDetailPage extends StatelessWidget {
       await _guard(context, () => controller.deleteReviewNote(note));
     }
   }
+}
+
+class _InitialPlanItemEditorLauncher extends StatefulWidget {
+  const _InitialPlanItemEditorLauncher({
+    required this.enabled,
+    required this.onOpen,
+    required this.child,
+  });
+
+  final bool enabled;
+  final Future<void> Function(BuildContext context) onOpen;
+  final Widget child;
+
+  @override
+  State<_InitialPlanItemEditorLauncher> createState() =>
+      _InitialPlanItemEditorLauncherState();
+}
+
+class _InitialPlanItemEditorLauncherState
+    extends State<_InitialPlanItemEditorLauncher> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onOpen(context);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ReviewNoteRow extends StatelessWidget {
@@ -710,57 +818,95 @@ Future<String?> _textDialog(
   return result;
 }
 
-Future<(String, String?)?> _itemDialog(
+Future<(String, String?, PlanItemStatus)?> _itemDialog(
   BuildContext context,
-  PlanItem? item,
-) async {
+  PlanItem? item, {
+  String? dialogTitle,
+  String? contextLabel,
+}) async {
   final title = TextEditingController(text: item?.title ?? '');
   final note = TextEditingController(text: item?.note ?? '');
-  final result = await showDialog<(String, String?)>(
+  var status = item?.status ?? PlanItemStatus.draft;
+  final result = await showDialog<(String, String?, PlanItemStatus)>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(item == null ? '添加计划项' : '编辑计划项'),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                key: const ValueKey('plan-item-title'),
-                controller: title,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: '步骤'),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('plan-item-note'),
-                controller: note,
-                decoration: const InputDecoration(labelText: '说明（可选）'),
-                minLines: 2,
-                maxLines: 4,
-              ),
-            ],
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text(dialogTitle ?? (item == null ? '添加计划步骤' : '编辑计划步骤')),
+        content: SizedBox(
+          width: 440,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (contextLabel != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      contextLabel,
+                      key: const ValueKey('plan-item-context'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextField(
+                  key: const ValueKey('plan-item-title'),
+                  controller: title,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: '步骤'),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const ValueKey('plan-item-note'),
+                  controller: note,
+                  decoration: const InputDecoration(labelText: '说明（可选）'),
+                  minLines: 2,
+                  maxLines: 4,
+                ),
+                if (item == null) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<PlanItemStatus>(
+                    key: const ValueKey('plan-item-initial-status'),
+                    initialValue: status,
+                    decoration: const InputDecoration(labelText: '初始状态'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: PlanItemStatus.draft,
+                        child: Text('草稿'),
+                      ),
+                      DropdownMenuItem(
+                        value: PlanItemStatus.next,
+                        child: Text('下一步'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => status = value);
+                    },
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (title.text.trim().isEmpty) return;
+              Navigator.pop(context, (
+                title.text,
+                note.text.trim().isEmpty ? null : note.text,
+                status,
+              ));
+            },
+            child: const Text('保存'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (title.text.trim().isEmpty) return;
-            Navigator.pop(context, (
-              title.text,
-              note.text.trim().isEmpty ? null : note.text,
-            ));
-          },
-          child: const Text('保存'),
-        ),
-      ],
     ),
   );
   return result;

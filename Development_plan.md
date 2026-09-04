@@ -828,3 +828,21 @@ UI：
 5. 自动化覆盖普通/跨午夜边界、recurrence miss、paused/completed/running、
    Event no-signal、stable ties、top-3/fallback、reason、SQLite persistence、Sync
    compatibility/conflict 和窄屏 UI。推荐计算不调用 Repository 写接口。
+
+## 18. 执行中快速补充计划步骤（Completed）
+
+1. `PlanningController` 提供只读来源解析，将 running Planned Event 的
+   source PlanItem 精确映射到 source Plan、WorldNode 与同节点 current Plan；缺链即
+   DomainFailure，不做名称或节点猜测。
+2. App shell 用一次性 `PlanningOpenRequest` 切换到 Planning，并直接打开目标
+   Plan Detail；`PlanDetailPage` 复用同一 PlanItem editor，不复制 Home 写入逻辑。
+3. PlanningRepository 的 `createPlanItem` 接受仅限 draft/next 的 atomic initial
+   status，并继续按 Plan scoped sort order 追加。editable guard 同时复核 Plan current
+   与 WorldNode inProgress，覆盖对话框打开后的 stale 状态。
+4. ended source 的 current/new-round/source choice 与 completed-node restore 提示属于
+   UI orchestration；创建新一轮复用既有 `createPlan`，不自动 focus/restore/dispatch。
+5. 自动化覆盖 current/ended/no-current/completed 分支、draft/next、append order、
+   cancel、Standalone/Routine 菜单隔离、stale rejection，以及 Event/open segment
+   零扰动。全量 analyze/test 与 Windows/Android Debug 构建后再提交。
+6. 本功能无 schema migration、无 Sync protocol upgrade、无真实业务 rollout；
+   PlanItem 仍是既有 protocol 7 business entity。
