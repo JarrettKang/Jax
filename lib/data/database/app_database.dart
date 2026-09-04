@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 19;
+  static const schemaVersion = 20;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -116,6 +116,7 @@ class AppDatabase {
     if (oldVersion < 19) {
       await _createJaxDayCarryOverInitializations(database);
     }
+    if (oldVersion < 20) await _migrateToTimeRecommendations(database);
   }
 
   static Future<void> _createFlatEventTable(
@@ -427,9 +428,15 @@ class AppDatabase {
       recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekdays','weekends','selectedWeekdays')),
       weekday_mask INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
+      time_recommendation_enabled INTEGER NOT NULL DEFAULT 0 CHECK(time_recommendation_enabled IN (0,1)),
+      time_recommendation_start_minute INTEGER CHECK(time_recommendation_start_minute BETWEEN 0 AND 1439),
+      time_recommendation_end_minute INTEGER CHECK(time_recommendation_end_minute BETWEEN 0 AND 1439),
+      time_recommendation_reason TEXT CHECK(time_recommendation_reason IS NULL OR length(trim(time_recommendation_reason)) > 0),
       sort_order INTEGER NOT NULL,
       created_at_utc INTEGER NOT NULL,
-      updated_at_utc INTEGER NOT NULL DEFAULT 0
+      updated_at_utc INTEGER NOT NULL DEFAULT 0,
+      CHECK((time_recommendation_enabled = 0 AND time_recommendation_start_minute IS NULL AND time_recommendation_end_minute IS NULL AND time_recommendation_reason IS NULL) OR
+            (time_recommendation_enabled = 1 AND routine_type = 'scheduled' AND time_recommendation_start_minute IS NOT NULL AND time_recommendation_end_minute IS NOT NULL AND time_recommendation_start_minute <> time_recommendation_end_minute))
     )''');
     await database.execute('''CREATE TABLE routine_executions (
       id TEXT PRIMARY KEY,
@@ -448,6 +455,28 @@ class AppDatabase {
       created_at_utc INTEGER NOT NULL,
       updated_at_utc INTEGER NOT NULL DEFAULT 0
     )''');
+  }
+
+  static Future<void> _migrateToTimeRecommendations(Database database) async {
+    if (!await _tableExists(database, 'routines')) return;
+    final columns = await database.rawQuery('PRAGMA table_info(routines)');
+    if (columns.any(
+      (column) => column['name'] == 'time_recommendation_enabled',
+    )) {
+      return;
+    }
+    await database.execute(
+      'ALTER TABLE routines ADD COLUMN time_recommendation_enabled INTEGER NOT NULL DEFAULT 0 CHECK(time_recommendation_enabled IN (0,1))',
+    );
+    await database.execute(
+      'ALTER TABLE routines ADD COLUMN time_recommendation_start_minute INTEGER CHECK(time_recommendation_start_minute BETWEEN 0 AND 1439)',
+    );
+    await database.execute(
+      'ALTER TABLE routines ADD COLUMN time_recommendation_end_minute INTEGER CHECK(time_recommendation_end_minute BETWEEN 0 AND 1439)',
+    );
+    await database.execute(
+      'ALTER TABLE routines ADD COLUMN time_recommendation_reason TEXT',
+    );
   }
 
   static Future<void> _migrateToOnDemandRoutines(Database database) async {
@@ -503,10 +532,12 @@ class AppDatabase {
 
   static Future<void> _createJaxDayCarryOverInitializations(
     Database database,
-  ) => database.execute('''CREATE TABLE IF NOT EXISTS jax_day_carry_over_initializations (
+  ) => database.execute(
+    '''CREATE TABLE IF NOT EXISTS jax_day_carry_over_initializations (
         day_date TEXT PRIMARY KEY,
         initialized_at_utc INTEGER NOT NULL
-      )''');
+      )''',
+  );
 
   static Future<void> _createSyncMetadata(Database database) async {
     await database.execute('''CREATE TABLE sync_tombstones (

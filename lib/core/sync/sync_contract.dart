@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 6;
+const syncProtocolVersion = 7;
 
 enum SyncEntityKind {
   eventCategory,
@@ -191,9 +191,12 @@ class SyncSnapshot {
     final withReviews = withFlatEvents.protocolVersion == 4
         ? _upgradeProtocol4Baseline(withFlatEvents)
         : withFlatEvents;
-    return withReviews.protocolVersion == 5
+    final withAttention = withReviews.protocolVersion == 5
         ? _upgradeProtocol5Baseline(withReviews)
         : withReviews;
+    return withAttention.protocolVersion == 6
+        ? _upgradeProtocol6Baseline(withAttention)
+        : withAttention;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -452,7 +455,7 @@ SyncSnapshot _upgradeProtocol5Baseline(SyncSnapshot source) {
       })
       .toList(growable: false);
   return SyncSnapshot(
-    protocolVersion: syncProtocolVersion,
+    protocolVersion: 6,
     schemaVersion: source.schemaVersion,
     datasetGeneration: source.datasetGeneration,
     exportedAtUtc: source.exportedAtUtc,
@@ -461,6 +464,37 @@ SyncSnapshot _upgradeProtocol5Baseline(SyncSnapshot source) {
     warnings: [
       ...source.warnings,
       'baseline-upgraded: sync protocol 5 normalized Plan attention to WorldNodes',
+    ],
+  );
+}
+
+SyncSnapshot _upgradeProtocol6Baseline(SyncSnapshot source) {
+  final records = source.records
+      .map((record) {
+        if (record.kind != SyncEntityKind.routine || record.isDeleted) {
+          return record;
+        }
+        return SyncRecord(
+          kind: record.kind,
+          metadata: record.metadata,
+          payload: Map<String, Object?>.from(record.payload)
+            ..putIfAbsent('timeRecommendationEnabled', () => 0)
+            ..putIfAbsent('timeRecommendationStartMinute', () => null)
+            ..putIfAbsent('timeRecommendationEndMinute', () => null)
+            ..putIfAbsent('timeRecommendationReason', () => null),
+        );
+      })
+      .toList(growable: false);
+  return SyncSnapshot(
+    protocolVersion: 7,
+    schemaVersion: source.schemaVersion,
+    datasetGeneration: source.datasetGeneration,
+    exportedAtUtc: source.exportedAtUtc,
+    records: records,
+    lists: source.lists,
+    warnings: [
+      ...source.warnings,
+      'baseline-upgraded: sync protocol 6 normalized Routine time recommendations',
     ],
   );
 }

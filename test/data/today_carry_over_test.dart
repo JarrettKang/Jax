@@ -378,7 +378,7 @@ void main() {
             list.kind == SyncListKind.eventDayPlans &&
             list.scopeId == '2026-09-04',
       );
-    expect(rightList.itemIds, leftList.itemIds);
+      expect(rightList.itemIds, leftList.itemIds);
     },
   );
 
@@ -419,7 +419,7 @@ void main() {
       expect(
         (await migrated.database.rawQuery('PRAGMA user_version'))
             .single['user_version'],
-        19,
+        AppDatabase.schemaVersion,
       );
       await migrated.close();
       await dir.delete(recursive: true);

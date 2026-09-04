@@ -118,6 +118,50 @@ void main() {
     );
   });
 
+  test(
+    'protocol 6 baseline gains disabled Routine time recommendation fields',
+    () {
+      final old = _snapshot([_routine()], protocol: 6);
+      final upgraded = SyncSnapshot.fromJsonString(old.toJsonString());
+      final payload = upgraded.records.single.payload;
+      expect(upgraded.protocolVersion, syncProtocolVersion);
+      expect(payload['timeRecommendationEnabled'], 0);
+      expect(payload['timeRecommendationStartMinute'], isNull);
+      expect(payload['timeRecommendationEndMinute'], isNull);
+      expect(payload['timeRecommendationReason'], isNull);
+    },
+  );
+
+  test(
+    'Routine time recommendation configuration uses field-level conflicts',
+    () {
+      SyncRecord configured({required String? reason, int start = 660}) {
+        final record = _routine();
+        return SyncRecord(
+          kind: record.kind,
+          metadata: record.metadata,
+          payload: Map<String, Object?>.from(record.payload)
+            ..['timeRecommendationEnabled'] = 1
+            ..['timeRecommendationStartMinute'] = start
+            ..['timeRecommendationEndMinute'] = 780
+            ..['timeRecommendationReason'] = reason,
+        );
+      }
+
+      final preview = compare.compare(
+        baseline: _snapshot([configured(reason: null)]),
+        windows: _snapshot([configured(reason: 'Windows')]),
+        android: _snapshot([configured(reason: 'Android')]),
+      );
+      expect(
+        preview.manualConflicts.single.changedFields.map(
+          (field) => field.field,
+        ),
+        contains('timeRecommendationReason'),
+      );
+    },
+  );
+
   test('Plan and PlanItem one-side changes merge and stale plans reject', () {
     final baseline = _snapshot([_node()]);
     final current = _snapshot(
@@ -452,6 +496,20 @@ SyncRecord _review(String id, String content) => _record(
   id,
   {'planSyncId': 'plan', 'content': content},
 );
+
+SyncRecord _routine() => _record(SyncEntityKind.routine, 'routine', {
+  'name': 'Routine',
+  'routineCategorySyncId': null,
+  'routineType': 'scheduled',
+  'recurrenceType': 'daily',
+  'weekdayMask': 0,
+  'isActive': 1,
+  'timeRecommendationEnabled': 0,
+  'timeRecommendationStartMinute': null,
+  'timeRecommendationEndMinute': null,
+  'timeRecommendationReason': null,
+  'order': 0,
+});
 
 SyncList _itemList(List<String> ids) =>
     SyncList(kind: SyncListKind.planItems, scopeId: 'plan', itemIds: ids);

@@ -809,3 +809,22 @@ UI：
 5. 自动化覆盖 status/order、Event 与 open segment 不变、Standalone/Planned、
    notFocused/ended Plan、已有 Today、重复初始化、当天移除、completed restore、事务
    rollback、跨 23:00 常驻、foreground resume 与双端 deterministic sync identity。
+
+## 17. Recommendation Engine v1（Completed）
+
+1. Core 提供 `RecommendationContext`、`RecommendationCandidate`、
+   `RecommendationRule/Signal`、`Recommendation` 与统一 Engine；Candidate Provider
+   复用 Home 现有 Today unfinished Event + Scheduled Routine eligibility，不创建执行对象。
+2. `TimeRecommendationRule` 只处理 Scheduled Routine，使用 device-local minute
+   `[start,end)` 并支持跨午夜；recurrence、completed、running 等候选前提与
+   signal 校验分层保持。
+3. Routine editor 只在 scheduled 类型展示低噪音 toggle、时间选择和可选
+   reason；Home 仅将 promoted 项置于“接下来”首选，并将列表限制为
+   1 + 2。Running Hero、Today 完整列表和 on-demand 快捷动作不变。
+4. Schema v20 仅向 `routines` 增加 enabled/start/end/reason 业务配置；
+   Sync protocol 7 将它们纳入 snapshot/fingerprint/3-way compare/apply/readiness，
+   protocol 6 baseline 只读归一为 disabled。Recommendation 结果、ranking 和
+   derived reason 不同步。
+5. 自动化覆盖普通/跨午夜边界、recurrence miss、paused/completed/running、
+   Event no-signal、stable ties、top-3/fallback、reason、SQLite persistence、Sync
+   compatibility/conflict 和窄屏 UI。推荐计算不调用 Repository 写接口。

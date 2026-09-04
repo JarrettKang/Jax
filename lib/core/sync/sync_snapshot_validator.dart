@@ -58,6 +58,26 @@ class SyncSnapshotValidator {
           }.contains(p['recurrenceType'])) {
             issues.add('routine-recurrence:${record.metadata.id}');
           }
+          final enabled = p['timeRecommendationEnabled'];
+          final start = p['timeRecommendationStartMinute'];
+          final end = p['timeRecommendationEndMinute'];
+          final reason = p['timeRecommendationReason'];
+          bool validMinute(Object? value) =>
+              value is int && value >= 0 && value < 1440;
+          if (enabled is! int || !{0, 1}.contains(enabled)) {
+            issues.add('routine-time-enabled:${record.metadata.id}');
+          } else if (enabled == 0) {
+            if (start != null || end != null || reason != null) {
+              issues.add('routine-time-disabled-fields:${record.metadata.id}');
+            }
+          } else if (p['routineType'] != 'scheduled' ||
+              !validMinute(start) ||
+              !validMinute(end) ||
+              start == end ||
+              (reason != null &&
+                  (reason is! String || reason.trim().isEmpty))) {
+            issues.add('routine-time-configuration:${record.metadata.id}');
+          }
         case SyncEntityKind.routineExecution:
           if (!has(SyncEntityKind.routine, p['routineSyncId'])) {
             issues.add('execution-owner:${record.metadata.id}');

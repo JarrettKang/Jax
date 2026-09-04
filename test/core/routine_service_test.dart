@@ -3,6 +3,7 @@ import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/routine.dart';
 import 'package:jax/core/entities/run_segment.dart';
+import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/services/routine_service.dart';
 
 import '../support/memory_repository.dart';
@@ -92,6 +93,44 @@ void main() {
     expect(await repo.getRoutineExecution(r.id, '2026-08-28'), isNull);
     expect(repo.events, isEmpty);
   });
+  test(
+    'time recommendation rejects ambiguous and on-demand configuration',
+    () async {
+      final repo = MemoryRepository();
+      final service = RoutineService(
+        repository: repo,
+        newId: () => 'id',
+        now: () => DateTime(2026, 9, 3, 12),
+      );
+      await expectLater(
+        service.create(
+          'ambiguous',
+          null,
+          RoutineRecurrence.daily,
+          0,
+          timeRecommendation: const RoutineTimeRecommendation(
+            startMinute: 720,
+            endMinute: 720,
+          ),
+        ),
+        throwsA(isA<DomainFailure>()),
+      );
+      await expectLater(
+        service.create(
+          'on-demand',
+          null,
+          RoutineRecurrence.daily,
+          0,
+          type: RoutineType.onDemand,
+          timeRecommendation: const RoutineTimeRecommendation(
+            startMinute: 660,
+            endMinute: 780,
+          ),
+        ),
+        throwsA(isA<DomainFailure>()),
+      );
+    },
+  );
   test(
     'Routine order stays independent from Event and Today plan order',
     () async {

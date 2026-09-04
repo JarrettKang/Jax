@@ -301,15 +301,64 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '整理思路');
     expect(find.text('重复'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('routine-time-recommendation-toggle')),
+      findsOneWidget,
+    );
     await tester.tap(find.text('计划型'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('按需型').last);
     await tester.pumpAndSettle();
     expect(find.text('重复'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('routine-time-recommendation-toggle')),
+      findsNothing,
+    );
     await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(repo.routines.single.type, RoutineType.onDemand);
     expect(find.text('整理思路'), findsOneWidget);
     expect(find.text('按需'), findsOneWidget);
+  });
+
+  testWidgets('scheduled Routine editor saves compact time recommendation UI', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime(2026, 9, 3, 12);
+    var id = 0;
+    final repo = MemoryRepository();
+    await tester.pumpWidget(
+      JaxApp(repository: repo, now: () => now, newId: () => 'id-${id++}'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('日常'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('create-routine')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '吃午饭');
+    await tester.tap(
+      find.byKey(const ValueKey('routine-time-recommendation-toggle')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('routine-time-start')), findsOneWidget);
+    expect(find.byKey(const ValueKey('routine-time-end')), findsOneWidget);
+    expect(find.text('11:00'), findsOneWidget);
+    expect(find.text('13:00'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('routine-time-reason')),
+      '该吃午饭了',
+    );
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    final configuration = repo.routines.single.timeRecommendation;
+    expect(configuration?.startMinute, 660);
+    expect(configuration?.endMinute, 780);
+    expect(configuration?.reason, '该吃午饭了');
+    expect(tester.takeException(), isNull);
   });
 }

@@ -2,6 +2,20 @@ enum RoutineRecurrence { daily, weekdays, weekends, selectedWeekdays }
 
 enum RoutineType { scheduled, onDemand }
 
+class RoutineTimeRecommendation {
+  const RoutineTimeRecommendation({
+    required this.startMinute,
+    required this.endMinute,
+    this.reason,
+  });
+
+  final int startMinute;
+  final int endMinute;
+  final String? reason;
+}
+
+const _unchangedTimeRecommendation = Object();
+
 class Routine {
   const Routine({
     required this.id,
@@ -14,11 +28,13 @@ class Routine {
     required this.updatedAt,
     this.routineCategoryId,
     this.type = RoutineType.scheduled,
+    this.timeRecommendation,
   });
   final String id, name;
   final String? routineCategoryId;
   final RoutineType type;
   final RoutineRecurrence recurrence;
+  final RoutineTimeRecommendation? timeRecommendation;
   final int weekdayMask, sortOrder;
   final bool isActive;
   final DateTime createdAt, updatedAt;
@@ -40,6 +56,7 @@ class Routine {
     int? sortOrder,
     DateTime? updatedAt,
     RoutineType? type,
+    Object? timeRecommendation = _unchangedTimeRecommendation,
   }) => Routine(
     id: id,
     name: name ?? this.name,
@@ -48,6 +65,10 @@ class Routine {
         : routineCategoryId ?? this.routineCategoryId,
     recurrence: recurrence ?? this.recurrence,
     type: type ?? this.type,
+    timeRecommendation:
+        identical(timeRecommendation, _unchangedTimeRecommendation)
+        ? this.timeRecommendation
+        : timeRecommendation as RoutineTimeRecommendation?,
     weekdayMask: weekdayMask ?? this.weekdayMask,
     isActive: isActive ?? this.isActive,
     sortOrder: sortOrder ?? this.sortOrder,

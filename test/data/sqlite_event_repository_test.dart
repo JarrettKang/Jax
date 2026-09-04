@@ -102,6 +102,35 @@ void main() {
     expect((await repository.getRoutineCategories()).single.colorKey, 7);
   });
 
+  test(
+    'persists scheduled Routine local time recommendation configuration',
+    () async {
+      final timestamp = DateTime.utc(2026, 9, 3, 12);
+      await repository.insertRoutine(
+        Routine(
+          id: 'lunch',
+          name: '吃午饭',
+          recurrence: RoutineRecurrence.daily,
+          weekdayMask: 0,
+          isActive: true,
+          sortOrder: 0,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          timeRecommendation: const RoutineTimeRecommendation(
+            startMinute: 660,
+            endMinute: 780,
+            reason: '该吃午饭了',
+          ),
+        ),
+      );
+
+      final loaded = (await repository.getRoutines()).single;
+      expect(loaded.timeRecommendation?.startMinute, 660);
+      expect(loaded.timeRecommendation?.endMinute, 780);
+      expect(loaded.timeRecommendation?.reason, '该吃午饭了');
+    },
+  );
+
   test('persists direct Category for standalone Events', () async {
     final createdAt = DateTime.utc(2026, 8, 24, 12);
     await repository.insertCategory(

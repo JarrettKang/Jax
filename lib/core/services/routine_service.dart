@@ -21,6 +21,7 @@ class RoutineService {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType type = RoutineType.scheduled,
+    RoutineTimeRecommendation? timeRecommendation,
   }) async {
     final clean = name.trim();
     if (clean.isEmpty) throw const DomainFailure('日常名称不能为空');
@@ -29,6 +30,7 @@ class RoutineService {
         mask == 0) {
       throw const DomainFailure('请至少选择一天');
     }
+    _validateTimeRecommendation(type, timeRecommendation);
     final t = now().toUtc();
     final all = (await repository.getRoutines())
         .where((r) => r.routineCategoryId == routineCategoryId)
@@ -46,6 +48,9 @@ class RoutineService {
         routineCategoryId: routineCategoryId,
         recurrence: recurrence,
         type: type,
+        timeRecommendation: type == RoutineType.scheduled
+            ? timeRecommendation
+            : null,
         weekdayMask: mask,
         isActive: true,
         sortOrder: nextOrder,
@@ -62,6 +67,8 @@ class RoutineService {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType? type,
+    RoutineTimeRecommendation? timeRecommendation,
+    bool updateTimeRecommendation = false,
   }) async {
     final clean = name.trim();
     if (clean.isEmpty) throw const DomainFailure('日常名称不能为空');
@@ -71,6 +78,12 @@ class RoutineService {
         mask == 0) {
       throw const DomainFailure('请至少选择一天');
     }
+    final nextTimeRecommendation = nextType == RoutineType.onDemand
+        ? null
+        : updateTimeRecommendation
+        ? timeRecommendation
+        : routine.timeRecommendation;
+    _validateTimeRecommendation(nextType, nextTimeRecommendation);
     if (nextType != routine.type &&
         await repository.getUnfinishedRoutineExecution(routine.id) != null) {
       throw const DomainFailure('请先完成当前日常执行，再切换类型');
@@ -96,10 +109,30 @@ class RoutineService {
         sortOrder: destination,
         recurrence: recurrence,
         type: nextType,
+        timeRecommendation: nextTimeRecommendation,
         weekdayMask: mask,
         updatedAt: now().toUtc(),
       ),
     );
+  }
+
+  void _validateTimeRecommendation(
+    RoutineType type,
+    RoutineTimeRecommendation? configuration,
+  ) {
+    if (configuration == null) return;
+    if (type != RoutineType.scheduled) {
+      throw const DomainFailure('只有计划型日常支持按时间推荐');
+    }
+    if (configuration.startMinute < 0 ||
+        configuration.startMinute >= 1440 ||
+        configuration.endMinute < 0 ||
+        configuration.endMinute >= 1440) {
+      throw const DomainFailure('推荐时间无效');
+    }
+    if (configuration.startMinute == configuration.endMinute) {
+      throw const DomainFailure('推荐开始和结束时间不能相同');
+    }
   }
 
   Future<void> setActive(Routine r, bool active) => repository.updateRoutine(

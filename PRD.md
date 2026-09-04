@@ -419,7 +419,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 主导航提供“规划”。Planning 是所有 focused + inProgress WorldNode 的工作台；WorldNode 可以有 current Plan，也可以没有。没有 current Plan 时仍显示该节点并允许“添加计划”；全局创建入口使用保留 Category/层级/顺序的 WorldNode selector，completed 或已有 current Plan 的节点禁用。
 - detail 中 draft↔next 是行内高频操作，上下移仅显示合法方向，edit/drop/delete/restore/end 放 More。有未完成 item 仍可结束，但必须明确确认。
 - WorldNode 存在 current Plan 时不得 completed；需先结束当前 Plan。Plan ended 不会反向完成 WorldNode。
-- P2 当时将 Plan/PlanItem 与 tombstone 引入 Sync protocol 3；当前 Sync protocol 6 已把 attention 迁移到 WorldNode，并继续同步 Plan/PlanItem。PlanItem order 使用 `planItems:<planId>` full-list conflict。
+- P2 当时将 Plan/PlanItem 与 tombstone 引入 Sync protocol 3；protocol 6 把 attention 迁移到 WorldNode，当前 protocol 7 继续同步 WorldNode/Plan/PlanItem。PlanItem order 使用 `planItems:<planId>` full-list conflict。
 - P2 milestone 本身没有创建 Event/EventDayPlan/RunSegment，也没有从 legacy Event 推导 Plan；后续 P3 已实现基于 WorldNode attention 的 next item 推荐、用户确认派发 Event 与完成联动。
 
 ## 17. Planning 重构 Phase P2.5：Flat Event 与正式 WorldNode
@@ -559,3 +559,31 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - Routine 继续使用自己的 recurrence / RoutineExecution 语义，不参与 Event 延续。
   自动创建的 `EventDayPlan` 使用既有 `eventUUID@JaxDay` sync identity 与 Today list
   conflict 规则，不新增 sync entity 或 LWW 规则。
+
+## 23. Recommendation Engine v1
+
+- Recommendation Engine 是 Home 的纯读“建议层”，以
+  `RecommendationContext → Candidate Provider → RecommendationRule signal →
+  Recommendation Engine` 组织。Rule 不得创造 Candidate，不得修改
+  Today、Planning、execution 或 Record。Home 只消费统一 Recommendation，
+  不理解具体 Rule。
+- v1 只实现 Scheduled Routine 的 `TimeRecommendationRule`。Routine 必须先是
+  active、recurrence 命中 current JaxDay、已进入现有 Today candidate 语义，
+  且 execution 未完成、非 running；TimeRule 只在此基础上提供
+  `promoted` signal。Paused 按现有可恢复语义仍可推荐。Event 和
+  On-demand Routine 不产生 TimeRule signal。
+- 时间窗口保存本地午夜起的 minute，按 `[start,end)` 匹配。
+  `start > end` 表示跨午夜；`start == end` 在 v1 禁止。配置同步的是
+  local wall-clock 数值，不携带 timezone identity，各设备用自身 local clock
+  解释，不改变 23:00 边界的 RoutineExecution JaxDay 归属。
+- 可选自定义 reason 优先展示；为空时派生“当前处于推荐时间
+  HH:mm–HH:mm”。Reason 不是 execution 状态，不进入 Record。窗口结束只失去
+  boost，Routine 仍可作普通 Candidate；completed 或 running 则立即从
+  “接下来”排除。
+- Home 保留 Running Hero 为最高层，只重排原“接下来”。最多展示
+  1 个 promoted 首选 + 2 个其他可做；同 tier 保留原 Today/Home
+  稳定顺序。无 promoted 时完全回退到原 deterministic order，最多 3 个。
+  推荐排名不回写 Today order。
+- v1 不提供 notification、alarm、toast、snooze、overdue 或独立推荐中心。
+  架构允许未来增加 Location/UserState/Energy/AvailableTime 等 Rule，但不承诺
+  或实现其业务模型；未来 UserState 应优先来自用户主动表达，而非自动猜测。

@@ -299,6 +299,24 @@ class SqliteSyncReadiness {
       );
     }
 
+    for (final row in await db.rawQuery('''SELECT id FROM routines WHERE
+      time_recommendation_enabled NOT IN (0,1) OR
+      (time_recommendation_enabled = 0 AND
+        (time_recommendation_start_minute IS NOT NULL OR
+         time_recommendation_end_minute IS NOT NULL OR
+         time_recommendation_reason IS NOT NULL)) OR
+      (time_recommendation_enabled = 1 AND
+        (routine_type != 'scheduled' OR
+         time_recommendation_start_minute NOT BETWEEN 0 AND 1439 OR
+         time_recommendation_end_minute NOT BETWEEN 0 AND 1439 OR
+         time_recommendation_start_minute = time_recommendation_end_minute OR
+         (time_recommendation_reason IS NOT NULL AND
+          length(trim(time_recommendation_reason)) = 0)))''')) {
+      issues.add(
+        SyncReadinessIssue('routine-time-configuration', row['id'].toString()),
+      );
+    }
+
     final overlaps = await db.rawQuery('''WITH all_segments AS (
       SELECT 'event:' || id identity, started_at_utc started,
         COALESCE(ended_at_utc, 9223372036854775807) ended FROM run_segments

@@ -6,6 +6,7 @@ import '../../core/entities/category.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/entities/routine.dart';
+import '../../core/recommendation/recommendation_engine.dart';
 import '../../core/services/greeting_resolver.dart';
 import '../../core/use_cases/create_event.dart';
 import '../controllers/event_controller.dart';
@@ -45,7 +46,13 @@ class _HomePageState extends State<HomePage> {
   void _scheduleGreeting() {
     _timer?.cancel();
     final now = widget.now();
-    final delay = _greeting.nextChangeAfter(now).difference(now.toLocal());
+    final local = now.toLocal();
+    final greetingDelay = _greeting.nextChangeAfter(now).difference(local);
+    final minuteDelay = Duration(
+      seconds: 60 - local.second,
+      milliseconds: -local.millisecond,
+    );
+    final delay = greetingDelay < minuteDelay ? greetingDelay : minuteDelay;
     _timer = Timer(delay.isNegative ? Duration.zero : delay, () {
       if (!mounted) return;
       setState(() {});
@@ -72,7 +79,13 @@ class _HomePageState extends State<HomePage> {
       final visibleWaiting = _showAllWaiting
           ? waiting
           : waiting.take(_waitingPreviewLimit).toList(growable: false);
-      final next = _nextItems(event, routine);
+      final recommendations = widget.controller.homeRecommendations
+          .take(3)
+          .toList(growable: false);
+      final next = recommendations.map(_nextItem).toList(growable: false);
+      final hasPrimary =
+          recommendations.firstOrNull?.strength ==
+          RecommendationStrength.promoted;
       final quickActions = _quickActions(routine);
       return SafeArea(
         child: SingleChildScrollView(
@@ -125,7 +138,23 @@ class _HomePageState extends State<HomePage> {
                   _Title(event == null && routine == null ? '接下来可以做' : '接下来'),
                   if (next.isEmpty)
                     _EmptyNext(onOpenEvents: widget.onOpenEvents)
-                  else
+                  else if (hasPrimary) ...[
+                    const _RecommendationLabel('首选'),
+                    _NextRow(
+                      key: ValueKey('home-next-${next.first.id}'),
+                      item: next.first,
+                      onStart: () => _start(next.first),
+                    ),
+                    if (next.length > 1) ...[
+                      const _RecommendationLabel('其他可做'),
+                      for (final item in next.skip(1))
+                        _NextRow(
+                          key: ValueKey('home-next-${item.id}'),
+                          item: item,
+                          onStart: () => _start(item),
+                        ),
+                    ],
+                  ] else
                     for (final item in next)
                       _NextRow(
                         key: ValueKey('home-next-${item.id}'),
@@ -248,39 +277,28 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  List<_NextItem> _nextItems(JaxEvent? runningEvent, Routine? runningRoutine) {
-    final result = <_NextItem>[];
-    for (final event in widget.controller.todayEvents) {
-      if (event.id == runningEvent?.id ||
-          event.status == EventStatus.completed ||
-          event.status == EventStatus.waiting) {
-        continue;
-      }
+  _NextItem _nextItem(Recommendation recommendation) {
+    final candidate = recommendation.candidate;
+    final event = candidate.event;
+    if (event != null) {
       final category = _eventCategory(widget.controller, event);
-      result.add(
-        _NextItem.event(event, category?.name ?? '未分类', category?.colorKey),
+      return _NextItem.event(
+        event,
+        category?.name ?? '未分类',
+        category?.colorKey,
+        reason: recommendation.reason,
       );
-      if (result.length == 3) return result;
     }
-    for (final routine in widget.controller.todayRoutines) {
-      final execution = widget.controller.executionFor(routine);
-      if (routine.id == runningRoutine?.id ||
-          execution?.status == RoutineExecutionStatus.completed) {
-        continue;
-      }
-      final category = widget.controller.routineCategories
-          .where((c) => c.id == routine.routineCategoryId)
-          .firstOrNull;
-      result.add(
-        _NextItem.routine(
-          routine,
-          '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
-          category?.colorKey,
-        ),
-      );
-      if (result.length == 3) break;
-    }
-    return result;
+    final routine = candidate.routine!;
+    final category = widget.controller.routineCategories
+        .where((c) => c.id == routine.routineCategoryId)
+        .firstOrNull;
+    return _NextItem.routine(
+      routine,
+      '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
+      category?.colorKey,
+      reason: recommendation.reason,
+    );
   }
 
   List<_NextItem> _quickActions(Routine? runningRoutine) => widget
@@ -753,6 +771,20 @@ class _Title extends StatelessWidget {
   );
 }
 
+class _RecommendationLabel extends StatelessWidget {
+  const _RecommendationLabel(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 5, bottom: 1),
+    child: Text(
+      text,
+      style: Theme.of(context).textTheme.labelSmall
+          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
+  );
+}
+
 class _NextRow extends StatelessWidget {
   const _NextRow({
     required this.item,
@@ -794,6 +826,16 @@ class _NextRow extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (item.reason != null)
+                  Text(
+                    item.reason!,
+                    key: ValueKey('home-next-reason-${item.id}'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -899,15 +941,33 @@ class _NextItem {
     this.colorKey, {
     this.event,
     this.routine,
+    this.reason,
   });
-  factory _NextItem.event(JaxEvent e, String secondary, int? colorKey) =>
-      _NextItem._(e.id, e.name, secondary, colorKey, event: e);
-  factory _NextItem.routine(Routine r, String secondary, int? colorKey) =>
-      _NextItem._(r.id, r.name, secondary, colorKey, routine: r);
+  factory _NextItem.event(
+    JaxEvent e,
+    String secondary,
+    int? colorKey, {
+    String? reason,
+  }) =>
+      _NextItem._(e.id, e.name, secondary, colorKey, event: e, reason: reason);
+  factory _NextItem.routine(
+    Routine r,
+    String secondary,
+    int? colorKey, {
+    String? reason,
+  }) => _NextItem._(
+    r.id,
+    r.name,
+    secondary,
+    colorKey,
+    routine: r,
+    reason: reason,
+  );
   final String id, name, secondary;
   final int? colorKey;
   final JaxEvent? event;
   final Routine? routine;
+  final String? reason;
 }
 
 enum _HeroAction { adjustStart, complete, completeCorrected, wait }

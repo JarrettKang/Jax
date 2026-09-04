@@ -167,6 +167,10 @@ void main() {
           'recurrenceType',
           'weekdayMask',
           'isActive',
+          'timeRecommendationEnabled',
+          'timeRecommendationStartMinute',
+          'timeRecommendationEndMinute',
+          'timeRecommendationReason',
           'order',
         },
       );

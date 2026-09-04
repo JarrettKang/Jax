@@ -462,24 +462,34 @@ class _RoutineEditDialog extends StatefulWidget {
 }
 
 class _RoutineEditDialogState extends State<_RoutineEditDialog> {
-  late final TextEditingController name;
+  late final TextEditingController name, recommendationReason;
   late RoutineRecurrence recurrence;
   late RoutineType type;
-  late int mask;
+  late int mask, recommendationStart, recommendationEnd;
+  late bool timeRecommendationEnabled;
   String? category, error;
   @override
   void initState() {
     super.initState();
     name = TextEditingController(text: widget.routine?.name);
+    recommendationReason = TextEditingController(
+      text: widget.routine?.timeRecommendation?.reason,
+    );
     recurrence = widget.routine?.recurrence ?? RoutineRecurrence.daily;
     type = widget.routine?.type ?? RoutineType.scheduled;
     mask = widget.routine?.weekdayMask ?? 0;
     category = widget.routine?.routineCategoryId;
+    timeRecommendationEnabled = widget.routine?.timeRecommendation != null;
+    recommendationStart =
+        widget.routine?.timeRecommendation?.startMinute ?? 11 * 60;
+    recommendationEnd =
+        widget.routine?.timeRecommendation?.endMinute ?? 13 * 60;
   }
 
   @override
   void dispose() {
     name.dispose();
+    recommendationReason.dispose();
     super.dispose();
   }
 
@@ -554,6 +564,48 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                     ),
                 ],
               ),
+            if (type == RoutineType.scheduled) ...[
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const ValueKey('routine-time-recommendation-toggle'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('按时间推荐'),
+                value: timeRecommendationEnabled,
+                onChanged: (value) =>
+                    setState(() => timeRecommendationEnabled = value),
+              ),
+              if (timeRecommendationEnabled) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('推荐时间', style: Theme.of(c).textTheme.labelMedium),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    OutlinedButton(
+                      key: const ValueKey('routine-time-start'),
+                      onPressed: () => _pickTime(start: true),
+                      child: Text(_minuteLabel(recommendationStart)),
+                    ),
+                    const Text('—'),
+                    OutlinedButton(
+                      key: const ValueKey('routine-time-end'),
+                      onPressed: () => _pickTime(start: false),
+                      child: Text(_minuteLabel(recommendationEnd)),
+                    ),
+                  ],
+                ),
+                TextField(
+                  key: const ValueKey('routine-time-reason'),
+                  controller: recommendationReason,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: '推荐理由（可选）'),
+                ),
+              ],
+            ],
             if (error != null)
               Text(
                 error!,
@@ -573,6 +625,15 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
   );
   Future<void> _save() async {
     final r = widget.routine;
+    final cleanReason = recommendationReason.text.trim();
+    final timeRecommendation =
+        type == RoutineType.scheduled && timeRecommendationEnabled
+        ? RoutineTimeRecommendation(
+            startMinute: recommendationStart,
+            endMinute: recommendationEnd,
+            reason: cleanReason.isEmpty ? null : cleanReason,
+          )
+        : null;
     final result = r == null
         ? await widget.controller.createRoutine(
             name.text,
@@ -580,6 +641,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             recurrence,
             mask,
             type: type,
+            timeRecommendation: timeRecommendation,
           )
         : await widget.controller.updateRoutine(
             r,
@@ -588,6 +650,8 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             recurrence,
             mask,
             type: type,
+            timeRecommendation: timeRecommendation,
+            updateTimeRecommendation: true,
           );
     if (!mounted) return;
     if (result == null) {
@@ -596,6 +660,27 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
       setState(() => error = result);
     }
   }
+
+  Future<void> _pickTime({required bool start}) async {
+    final minute = start ? recommendationStart : recommendationEnd;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      final value = picked.hour * 60 + picked.minute;
+      if (start) {
+        recommendationStart = value;
+      } else {
+        recommendationEnd = value;
+      }
+    });
+  }
+
+  String _minuteLabel(int minute) =>
+      '${(minute ~/ 60).toString().padLeft(2, '0')}:'
+      '${(minute % 60).toString().padLeft(2, '0')}';
 }
 
 class _OnDemandAction extends StatelessWidget {

@@ -1,6 +1,6 @@
 # Jax 当前数据模型（Planning P3.5 attention + P4）
 
-当前 SQLite schema version 为 `19`。时间字段均保存为 UTC Unix 毫秒，UI
+当前 SQLite schema version 为 `20`。时间字段均保存为 UTC Unix 毫秒，UI
 显示时转换为设备本地时间。业务层级与执行事实严格分离：
 
 `WorldNode → Plan → PlanItem → Event → RunSegment`
@@ -65,6 +65,9 @@ expected snapshot 校验中作为 `duplicate-event-plan-item` 拒绝。
 - `run_segments`：Event 执行事实。Record、Daily/Weekly 与时间轴只从 segment
   读取；planned Event 的历史 Category 继续使用当前 WorldNode 动态归属。
 - `routines`、`routine_executions`、`routine_run_segments`：独立重复行为体系。
+  Scheduled Routine 可保存 optional local wall-clock time recommendation：enabled、
+  start/end minute 和 optional reason。该配置是 Sync business state；当前推荐结果是
+  根据设备本地时间派生的纯读 view，不存表、不同步。
 
 Event 与 RoutineExecution 共用全局 one-running/open-segment invariant。开始或
 恢复另一对象会原子暂停旧对象；waiting 不占 running、不累计时间；完成不自动
@@ -75,13 +78,15 @@ Event 与 RoutineExecution 共用全局 one-running/open-segment invariant。开
 Schema v16 增加单例 `dataset_metadata.generation`。Schema v17 只新增空的
 `plan_review_notes` 表及同步触发器。Schema v18 把旧 Plan attention 归一到
 `world_nodes.is_focused`，并把 Plan active 状态统一为 `current`。Schema v19 只新增
-device-local 的 JaxDay carry-over marker，不进入 Sync。Sync protocol 6 的 snapshot、
+device-local 的 JaxDay carry-over marker，不进入 Sync。Schema v20 只新增 Routine
+time recommendation configuration。Sync protocol 7 的 snapshot、
 fingerprint、compare、compile 与 apply 均携带 generation；不同 generation 明确
 拒绝，避免 Development Data Reset 后旧 baseline/plan 复活旧业务世界。
 
-Protocol 1–5 只在反序列化兼容层中升级；protocol 4 baseline 升级时不发明复盘记录；
+Protocol 1–6 只在反序列化兼容层中升级；protocol 4 baseline 升级时不发明复盘记录；
 protocol 5 的 focused/waiting Plan 显式归一为 WorldNode attention + current Plan，
-并保留 generation。当前 snapshot 不输出 legacy Event hierarchy、Event sibling
+并保留 generation。protocol 6 Routine 读取时仅补齐 disabled 时间推荐配置。
+当前 snapshot 不输出 legacy Event hierarchy、Event sibling
 list 或 LegacyEventWorldNodeLink。
 
 Development Data Reset 清空所有业务实体、执行事实、tombstone 与绑定已删除实体

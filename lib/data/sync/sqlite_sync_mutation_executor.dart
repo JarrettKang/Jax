@@ -401,6 +401,10 @@ class SqliteSyncMutationExecutor {
         'recurrence_type': p['recurrenceType'],
         'weekday_mask': p['weekdayMask'],
         'is_active': p['isActive'],
+        'time_recommendation_enabled': p['timeRecommendationEnabled'],
+        'time_recommendation_start_minute': p['timeRecommendationStartMinute'],
+        'time_recommendation_end_minute': p['timeRecommendationEndMinute'],
+        'time_recommendation_reason': p['timeRecommendationReason'],
         'sort_order': p['order'],
         ...metadata,
       },
@@ -436,7 +440,7 @@ class SqliteSyncMutationExecutor {
         ...metadata,
       },
       SyncEntityKind.legacyEventWorldNodeLink => throw StateError(
-        'Legacy Event/WorldNode links are not supported by protocol 6.',
+        'Legacy Event/WorldNode links are not supported by protocol 7.',
       ),
       SyncEntityKind.plan => {
         'id': record.metadata.id,

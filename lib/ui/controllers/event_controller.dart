@@ -18,6 +18,7 @@ import '../../core/entities/daily_execution_segment.dart';
 import '../../core/entities/available_time_gap.dart';
 import '../../core/services/execution_segment_service.dart';
 import '../../core/entities/routine.dart';
+import '../../core/recommendation/recommendation_engine.dart';
 import '../../core/entities/routine_category.dart';
 import '../../core/repositories/routine_repository.dart';
 import '../../core/services/routine_service.dart';
@@ -192,6 +193,22 @@ class EventController extends ChangeNotifier {
     return e == null
         ? null
         : _routines.where((r) => r.id == e.routineId).firstOrNull;
+  }
+
+  List<Recommendation> get homeRecommendations {
+    final localNow = _now().toLocal();
+    final context = RecommendationContext(
+      currentLocalDateTime: localNow,
+      currentJaxDay: JaxDay.containing(localNow),
+      todayEvents: todayEvents,
+      todayScheduledRoutines: todayRoutines,
+      routineExecutions: Map.unmodifiable(_todayExecutions),
+      runningEventId: runningEvent?.id,
+      runningRoutineId: runningRoutine?.id,
+    );
+    const provider = HomeCandidateProvider();
+    const engine = RecommendationEngine(rules: [TimeRecommendationRule()]);
+    return engine.recommend(context, provider.provide(context));
   }
 
   bool get loading => _loading;
@@ -447,8 +464,16 @@ class EventController extends ChangeNotifier {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType type = RoutineType.scheduled,
+    RoutineTimeRecommendation? timeRecommendation,
   }) => _change(
-    () => _routineService!.create(name, category, recurrence, mask, type: type),
+    () => _routineService!.create(
+      name,
+      category,
+      recurrence,
+      mask,
+      type: type,
+      timeRecommendation: timeRecommendation,
+    ),
   );
   Future<String?> updateRoutine(
     Routine r,
@@ -457,6 +482,8 @@ class EventController extends ChangeNotifier {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType? type,
+    RoutineTimeRecommendation? timeRecommendation,
+    bool updateTimeRecommendation = false,
   }) => _change(
     () => _routineService!.update(
       r,
@@ -465,6 +492,8 @@ class EventController extends ChangeNotifier {
       recurrence,
       mask,
       type: type,
+      timeRecommendation: timeRecommendation,
+      updateTimeRecommendation: updateTimeRecommendation,
     ),
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>

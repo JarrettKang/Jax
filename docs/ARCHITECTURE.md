@@ -36,7 +36,7 @@ WorldNode 同时拥有独立 lifecycle（`inProgress/completed`）和 attention
 投影以 focused + inProgress WorldNode 为主体；current Plan 可以为空。关注切换只写
 WorldNode，不结束 Plan、不修改 PlanItem 或任何执行事实。
 
-Sync protocol 6 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
+Sync protocol 7 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
 读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
 拒绝 legacy Event hierarchy mutation。
 
@@ -54,6 +54,11 @@ dispatch 事实。
 PlanReviewNote 是 Plan 下独立的 appendable 业务实体。它不改变 Plan 状态、
 PlanItem、Event 或 Record，只通过 PlanningRepository 写入；同步使用三方字段比较，
 delete 产生 tombstone，apply 依赖顺序为 WorldNode → Plan → PlanReviewNote。
+
+Recommendation Engine 位于 Core 的纯读派生层。Candidate Provider 从 Home 已有合法
+Today Event/Scheduled Routine 投影生成稳定候选，Rule 只返回 signal，Engine
+聚合为 Home 消费的 Recommendation。v1 TimeRule 只读 Routine 同步配置和
+device-local clock；计算不触发 Repository 写入，不存储或同步推荐结果。
 
 WorldNode Detail 是只读聚合层：当前/历史计划由 Plan 状态派生，执行历史只沿
 `Event.sourcePlanItemId → PlanItem → Plan → exact WorldNode` 反查。它不聚合子节点，
