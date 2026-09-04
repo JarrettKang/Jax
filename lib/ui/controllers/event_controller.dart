@@ -223,7 +223,13 @@ class EventController extends ChangeNotifier {
       _effectiveCategoryIds[event.id] = await _repository
           .getEffectiveCategoryId(event.id);
     }
-    final dayKey = currentJaxDay.key;
+    final currentDay = JaxDay.containing(_now());
+    final dayKey = currentDay.key;
+    await _dayPlans?.initializeDayFromPrevious(
+      previousDayKey: currentDay.previous.key,
+      currentDayKey: dayKey,
+      initializedAt: _now().toUtc(),
+    );
     final runningEventNow = _worldEvents
         .where((event) => event.status == EventStatus.running)
         .firstOrNull;
@@ -248,7 +254,7 @@ class EventController extends ChangeNotifier {
       _routines = await _routineRepository.getRoutines();
       _todayExecutions.clear();
       _routineSegments.clear();
-      final day = currentJaxDay.key;
+      final day = dayKey;
       for (final r in _routines) {
         final e = r.isScheduled
             ? await _routineRepository.getRoutineExecution(r.id, day)

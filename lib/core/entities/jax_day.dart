@@ -12,6 +12,10 @@ class JaxDay {
   String get key =>
       '${displayDate.year.toString().padLeft(4, '0')}-${displayDate.month.toString().padLeft(2, '0')}-${displayDate.day.toString().padLeft(2, '0')}';
 
+  JaxDay get previous => JaxDay.forDisplayDate(
+    DateTime(displayDate.year, displayDate.month, displayDate.day - 1),
+  );
+
   static JaxDay containing(DateTime instant) {
     final local = instant.toLocal();
     final calendarDate = DateTime(local.year, local.month, local.day);

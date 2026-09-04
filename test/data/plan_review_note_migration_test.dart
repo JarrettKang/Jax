@@ -158,7 +158,11 @@ void main() {
             .single
             .values
             .single,
-        18,
+        AppDatabase.schemaVersion,
+      );
+      expect(
+        await app.database.query('jax_day_carry_over_initializations'),
+        isEmpty,
       );
       final nodes = await app.database.query('world_nodes', orderBy: 'id');
       expect(nodes.map((row) => row['is_focused']), [1, 0, 0]);

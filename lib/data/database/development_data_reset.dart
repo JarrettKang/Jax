@@ -20,6 +20,7 @@ class DevelopmentDataReset {
         await tx.delete('legacy_event_world_node_links');
       }
       for (final table in const [
+        'jax_day_carry_over_initializations',
         'event_day_plans',
         'run_segments',
         'events',

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const expectedSchemaVersion = 18;
+const expectedSchemaVersion = 19;
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty ||

@@ -650,6 +650,67 @@ class SqliteEventRepository
   }
 
   @override
+  Future<void> initializeDayFromPrevious({
+    required String previousDayKey,
+    required String currentDayKey,
+    required DateTime initializedAt,
+  }) async {
+    if (previousDayKey == currentDayKey) {
+      throw ArgumentError('Previous and current JaxDay must differ');
+    }
+    await _appDatabase.database.transaction((tx) async {
+      final initialized = await tx.query(
+        'jax_day_carry_over_initializations',
+        columns: const ['day_date'],
+        where: 'day_date = ?',
+        whereArgs: [currentDayKey],
+        limit: 1,
+      );
+      if (initialized.isNotEmpty) return;
+
+      final previous = await tx.rawQuery(
+        '''SELECT p.*
+        FROM event_day_plans p
+        INNER JOIN events e ON e.id = p.event_id
+        WHERE p.day_date = ? AND e.status <> 'completed'
+        ORDER BY p.order_index ASC, p.created_at_utc ASC, p.event_id ASC''',
+        [previousDayKey],
+      );
+      final current = await tx.query(
+        'event_day_plans',
+        where: 'day_date = ?',
+        whereArgs: [currentDayKey],
+        orderBy: 'order_index ASC, created_at_utc ASC, event_id ASC',
+      );
+      final existingIds = current
+          .map((row) => row['event_id']! as String)
+          .toSet();
+      var nextOrder = current.fold<int>(
+        0,
+        (next, row) => ((row['order_index']! as num).toInt() >= next)
+            ? (row['order_index']! as num).toInt() + 1
+            : next,
+      );
+      final timestamp = initializedAt.toUtc().millisecondsSinceEpoch;
+      for (final row in previous) {
+        final eventId = row['event_id']! as String;
+        if (!existingIds.add(eventId)) continue;
+        await tx.insert('event_day_plans', {
+          'event_id': eventId,
+          'day_date': currentDayKey,
+          'order_index': nextOrder++,
+          'created_at_utc': timestamp,
+          'updated_at_utc': timestamp,
+        });
+      }
+      await tx.insert('jax_day_carry_over_initializations', {
+        'day_date': currentDayKey,
+        'initialized_at_utc': timestamp,
+      });
+    });
+  }
+
+  @override
   Future<void> removeEventDayPlan(String eventId, String dayKey) async =>
       _appDatabase.database.delete(
         'event_day_plans',

@@ -25,6 +25,7 @@ class MemoryRepository
   final List<RoutineExecution> routineExecutions = [];
   final List<RoutineRunSegment> routineSegments = [];
   final List<EventDayPlan> eventDayPlans = [];
+  final Set<String> initializedCarryOverDays = {};
   @override
   Future<void> insertEvent(JaxEvent event) async => events.add(event);
 
@@ -251,6 +252,42 @@ class MemoryRepository
     for (final plan in plans) {
       await addEventDayPlan(plan);
     }
+  }
+
+  @override
+  Future<void> initializeDayFromPrevious({
+    required String previousDayKey,
+    required String currentDayKey,
+    required DateTime initializedAt,
+  }) async {
+    if (autoPlanSeedEvents ||
+        initializedCarryOverDays.contains(currentDayKey)) {
+      return;
+    }
+    final current = await getEventDayPlans(currentDayKey);
+    final existing = current.map((plan) => plan.eventId).toSet();
+    var nextOrder = current.fold<int>(
+      0,
+      (next, plan) => plan.order >= next ? plan.order + 1 : next,
+    );
+    final previous = await getEventDayPlans(previousDayKey);
+    for (final plan in previous) {
+      final event = events.where((item) => item.id == plan.eventId).firstOrNull;
+      if (event == null ||
+          event.status == EventStatus.completed ||
+          !existing.add(event.id)) {
+        continue;
+      }
+      eventDayPlans.add(
+        EventDayPlan(
+          eventId: event.id,
+          dayKey: currentDayKey,
+          order: nextOrder++,
+          createdAt: initializedAt.toUtc(),
+        ),
+      );
+    }
+    initializedCarryOverDays.add(currentDayKey);
   }
 
   @override

@@ -7,6 +7,7 @@ void main() {
     expect(JaxDay.containing(DateTime(2026, 8, 27, 23)).key, '2026-08-28');
     expect(JaxDay.containing(DateTime(2026, 8, 27, 23, 1)).key, '2026-08-28');
     final day = JaxDay.forDisplayDate(DateTime(2026, 8, 27));
+    expect(day.previous.key, '2026-08-26');
     expect(day.start, DateTime(2026, 8, 26, 23));
     expect(day.end, DateTime(2026, 8, 27, 23));
   });

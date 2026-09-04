@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 18;
+  static const schemaVersion = 19;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -48,6 +48,7 @@ class AppDatabase {
     await _createRoutineCategoryTables(database);
     await _createRoutineTables(database);
     await _createEventDayPlans(database);
+    await _createJaxDayCarryOverInitializations(database);
     await _createWorldCategoryCollapsePreferences(database);
     await _createSyncMetadata(database);
     await _createDatasetMetadata(database);
@@ -112,6 +113,9 @@ class AppDatabase {
       await _createSyncTriggers(database);
     }
     if (oldVersion < 18) await _migratePlanningAttention(database);
+    if (oldVersion < 19) {
+      await _createJaxDayCarryOverInitializations(database);
+    }
   }
 
   static Future<void> _createFlatEventTable(
@@ -495,6 +499,13 @@ class AppDatabase {
         created_at_utc INTEGER NOT NULL,
         updated_at_utc INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(event_id, day_date)
+      )''');
+
+  static Future<void> _createJaxDayCarryOverInitializations(
+    Database database,
+  ) => database.execute('''CREATE TABLE IF NOT EXISTS jax_day_carry_over_initializations (
+        day_date TEXT PRIMARY KEY,
+        initialized_at_utc INTEGER NOT NULL
       )''');
 
   static Future<void> _createSyncMetadata(Database database) async {

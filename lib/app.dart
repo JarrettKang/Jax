@@ -112,12 +112,16 @@ class _JaxAppState extends State<JaxApp> {
         now: widget.now,
       );
     }
-    if (Platform.isWindows) {
-      _lifecycleListener = AppLifecycleListener(
-        onExitRequested: _handleExitRequest,
-      );
-    }
+    _lifecycleListener = AppLifecycleListener(
+      onResume: _handleResume,
+      onExitRequested: Platform.isWindows ? _handleExitRequest : null,
+    );
     _controller.load();
+  }
+
+  void _handleResume() {
+    _controller.load();
+    _planningController?.load();
   }
 
   Future<void> _save() async {

@@ -537,3 +537,25 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - completed WorldNode 的完整历史仍可读，但必须先恢复节点才能创建新 Plan。
 - Schema v17 新增 `plan_review_notes`；P3.5 后 Sync protocol 6 继续将其作为三方同步
   业务实体，不采用 LWW。旧 protocol 4 baseline 兼容升级且复盘为空。
+
+## 22. Today 跨 JaxDay 延续未完成 Event
+
+- current JaxDay 第一次初始化时，以 previous JaxDay 最终的有序
+  `EventDayPlan` 列表为唯一来源，只把当前仍为 pending、paused、waiting 或
+  running 的 Event 延续到 Today；completed 不延续，也不扫描全部 unfinished Event
+  或更早历史日期。
+- 延续只为同一个 Event 新建 current-day `EventDayPlan`。Event UUID、status、
+  PlanItem/Plan、WorldNode、Category、RunSegment 和 Record 均不改变；running Event
+  保留同一 open segment 与 startedAt。Standalone 与 Planned Event 规则相同，
+  WorldNode attention 和 Plan 是否 ended 都不影响已经接受过的执行事项。
+- current Today 为空时，延续项按昨日最终相对顺序成为初始列表，之后手动创建、
+  已有事项或 Planning 派发继续追加。current Today 已有用户或同步数据时，保留其
+  完整顺序，只把缺失延续项按昨日相对顺序追加，绝不重排已有项。
+- 每个设备为 current JaxDay 原子记录一次 device-local 初始化状态，即使没有符合项
+  也记录。重复启动、刷新和恢复均为 no-op；延续后用户当天主动移除的 Event 不会被
+  自动加回，初始化时为 completed 而之后恢复的 Event 也需用户手动加入 Today。
+- JaxDay 继续以设备本地 23:00 为边界。启动、跨 23:00 的 controller refresh 与
+  foreground resume 共用同一 Core/Data 初始化入口；打开 Today 页面不是触发前提。
+- Routine 继续使用自己的 recurrence / RoutineExecution 语义，不参与 Event 延续。
+  自动创建的 `EventDayPlan` 使用既有 `eventUUID@JaxDay` sync identity 与 Today list
+  conflict 规则，不新增 sync entity 或 LWW 规则。

@@ -1,6 +1,6 @@
 # Jax 当前数据模型（Planning P3.5 attention + P4）
 
-当前 SQLite schema version 为 `18`。时间字段均保存为 UTC Unix 毫秒，UI
+当前 SQLite schema version 为 `19`。时间字段均保存为 UTC Unix 毫秒，UI
 显示时转换为设备本地时间。业务层级与执行事实严格分离：
 
 `WorldNode → Plan → PlanItem → Event → RunSegment`
@@ -59,6 +59,9 @@ expected snapshot 校验中作为 `duplicate-event-plan-item` 拒绝。
 ## Today、执行与 Record
 
 - `event_day_plans`：Event 与 JaxDay 的独立、有序关联；不修改 Event 本体。
+- `jax_day_carry_over_initializations`：device-local 的每 JaxDay 一次性初始化标记；
+  不属于业务同步实体。初始化事务只从 previous JaxDay 的最终 Today 关系中追加当前仍
+  unfinished 的同一 Event，防止重复、当天移除后复活及 completed restore 延迟补入。
 - `run_segments`：Event 执行事实。Record、Daily/Weekly 与时间轴只从 segment
   读取；planned Event 的历史 Category 继续使用当前 WorldNode 动态归属。
 - `routines`、`routine_executions`、`routine_run_segments`：独立重复行为体系。
@@ -71,7 +74,8 @@ Event 与 RoutineExecution 共用全局 one-running/open-segment invariant。开
 
 Schema v16 增加单例 `dataset_metadata.generation`。Schema v17 只新增空的
 `plan_review_notes` 表及同步触发器。Schema v18 把旧 Plan attention 归一到
-`world_nodes.is_focused`，并把 Plan active 状态统一为 `current`。Sync protocol 6 的 snapshot、
+`world_nodes.is_focused`，并把 Plan active 状态统一为 `current`。Schema v19 只新增
+device-local 的 JaxDay carry-over marker，不进入 Sync。Sync protocol 6 的 snapshot、
 fingerprint、compare、compile 与 apply 均携带 generation；不同 generation 明确
 拒绝，避免 Development Data Reset 后旧 baseline/plan 复活旧业务世界。
 

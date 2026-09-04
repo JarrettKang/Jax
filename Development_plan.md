@@ -791,3 +791,21 @@ UI：
   不内联最新 Review；current Plan summary 未显示 draft/dropped count；execution
   history 不逐 RunSegment 展开；Record 尚未显示 WorldNode/Plan/PlanItem context。
 - 上述项目不是 roadmap commitment，不在文档清理阶段形成新产品决策。
+
+## 16. Today 跨 JaxDay 延续未完成 Event（Completed）
+
+1. `JaxDay.previous` 统一解析 23:00 边界；app bootstrap、既有 day-boundary timer 与
+   foreground resume 都调用同一个 repository 初始化操作，UI 只读取结果。
+2. Repository 在一个 SQLite transaction 中先检查 current-day marker，再读取
+   previous-day `EventDayPlan` ordered list、按 Event 当前 status 排除 completed，
+   向 current Today 末尾追加缺失关系，最后写入 marker；任一步失败全部回滚。
+3. Schema v19 新增 device-local
+   `jax_day_carry_over_initializations(day_date, initialized_at_utc)`。它只防止重复初始化、
+   当天移除 resurrection 和 completed-restore 延迟补入，不进入 business snapshot、
+   fingerprint、sync apply 或 Last Successful Sync Baseline；Sync protocol 保持 6。
+4. carry-over 不复制或修改 Event、PlanItem、Plan、WorldNode、RunSegment、Routine 或
+   Record。current Today 已有关系时保留原顺序，仅安全追加缺失项；正常空列表路径保持
+   previous Today 中 unfinished Event 的相对顺序。
+5. 自动化覆盖 status/order、Event 与 open segment 不变、Standalone/Planned、
+   notFocused/ended Plan、已有 Today、重复初始化、当天移除、completed restore、事务
+   rollback、跨 23:00 常驻、foreground resume 与双端 deterministic sync identity。
