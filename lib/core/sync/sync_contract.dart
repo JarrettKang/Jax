@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 7;
+const syncProtocolVersion = 8;
 
 enum SyncEntityKind {
   eventCategory,
@@ -194,9 +194,12 @@ class SyncSnapshot {
     final withAttention = withReviews.protocolVersion == 5
         ? _upgradeProtocol5Baseline(withReviews)
         : withReviews;
-    return withAttention.protocolVersion == 6
+    final withTime = withAttention.protocolVersion == 6
         ? _upgradeProtocol6Baseline(withAttention)
         : withAttention;
+    return withTime.protocolVersion == 7
+        ? _upgradeProtocol7Baseline(withTime)
+        : withTime;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -498,6 +501,25 @@ SyncSnapshot _upgradeProtocol6Baseline(SyncSnapshot source) {
     ],
   );
 }
+
+SyncSnapshot _upgradeProtocol7Baseline(SyncSnapshot source) => SyncSnapshot(
+  protocolVersion: 8,
+  schemaVersion: source.schemaVersion,
+  datasetGeneration: source.datasetGeneration,
+  exportedAtUtc: source.exportedAtUtc,
+  records: source.records.map((record) =>
+      record.kind != SyncEntityKind.routine || record.isDeleted
+          ? record
+          : SyncRecord(
+              kind: record.kind,
+              metadata: record.metadata,
+              payload: Map<String, Object?>.from(record.payload)
+                ..putIfAbsent('showInHomeQuickActions', () => 0),
+            )),
+  lists: source.lists,
+  warnings: [...source.warnings,
+    'baseline-upgraded: sync protocol 7 normalized Routine home quick actions'],
+);
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   final result = <String, Object?>{};

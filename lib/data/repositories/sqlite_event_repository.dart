@@ -1257,6 +1257,7 @@ class SqliteEventRepository
     'weekday_mask': r.weekdayMask,
     'is_active': r.isActive ? 1 : 0,
     'time_recommendation_enabled': r.timeRecommendation == null ? 0 : 1,
+    'show_in_home_quick_actions': r.showInHomeQuickActions ? 1 : 0,
     'time_recommendation_start_minute': r.timeRecommendation?.startMinute,
     'time_recommendation_end_minute': r.timeRecommendation?.endMinute,
     'time_recommendation_reason': r.timeRecommendation?.reason,
@@ -1272,6 +1273,7 @@ class SqliteEventRepository
     recurrence: RoutineRecurrence.values.byName(r['recurrence_type'] as String),
     weekdayMask: r['weekday_mask'] as int,
     isActive: (r['is_active'] as int) == 1,
+    showInHomeQuickActions: r['show_in_home_quick_actions'] == 1,
     timeRecommendation: (r['time_recommendation_enabled'] as int) == 1
         ? RoutineTimeRecommendation(
             startMinute: r['time_recommendation_start_minute'] as int,

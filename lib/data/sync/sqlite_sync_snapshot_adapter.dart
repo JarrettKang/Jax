@@ -203,6 +203,7 @@ class SqliteSyncSnapshotAdapter {
     'weekday_mask' => 'weekdayMask',
     'is_active' => 'isActive',
     'time_recommendation_enabled' => 'timeRecommendationEnabled',
+    'show_in_home_quick_actions' => 'showInHomeQuickActions',
     'time_recommendation_start_minute' => 'timeRecommendationStartMinute',
     'time_recommendation_end_minute' => 'timeRecommendationEndMinute',
     'time_recommendation_reason' => 'timeRecommendationReason',

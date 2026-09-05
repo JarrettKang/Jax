@@ -317,6 +317,13 @@ class SqliteSyncReadiness {
       );
     }
 
+    for (final row in await db.rawQuery('''SELECT id FROM routines WHERE
+      show_in_home_quick_actions IS NULL OR
+      show_in_home_quick_actions NOT IN (0,1) OR
+      (show_in_home_quick_actions = 1 AND routine_type != 'onDemand')''')) {
+      issues.add(SyncReadinessIssue('routine-home-quick-action', row['id'].toString()));
+    }
+
     final overlaps = await db.rawQuery('''WITH all_segments AS (
       SELECT 'event:' || id identity, started_at_utc started,
         COALESCE(ended_at_utc, 9223372036854775807) ended FROM run_segments

@@ -402,6 +402,7 @@ class SqliteSyncMutationExecutor {
         'weekday_mask': p['weekdayMask'],
         'is_active': p['isActive'],
         'time_recommendation_enabled': p['timeRecommendationEnabled'],
+        'show_in_home_quick_actions': p['showInHomeQuickActions'],
         'time_recommendation_start_minute': p['timeRecommendationStartMinute'],
         'time_recommendation_end_minute': p['timeRecommendationEndMinute'],
         'time_recommendation_reason': p['timeRecommendationReason'],

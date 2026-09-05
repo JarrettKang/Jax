@@ -419,7 +419,7 @@ F2 验收须覆盖任意深度、无环、移动与解除、候选范围、层�
 - 主导航提供“规划”。Planning 是所有 focused + inProgress WorldNode 的工作台；WorldNode 可以有 current Plan，也可以没有。没有 current Plan 时仍显示该节点并允许“添加计划”；全局创建入口使用保留 Category/层级/顺序的 WorldNode selector，completed 或已有 current Plan 的节点禁用。
 - detail 中 draft↔next 是行内高频操作，上下移仅显示合法方向，edit/drop/delete/restore/end 放 More。有未完成 item 仍可结束，但必须明确确认。
 - WorldNode 存在 current Plan 时不得 completed；需先结束当前 Plan。Plan ended 不会反向完成 WorldNode。
-- P2 当时将 Plan/PlanItem 与 tombstone 引入 Sync protocol 3；protocol 6 把 attention 迁移到 WorldNode，当前 protocol 7 继续同步 WorldNode/Plan/PlanItem。PlanItem order 使用 `planItems:<planId>` full-list conflict。
+- P2 当时将 Plan/PlanItem 与 tombstone 引入 Sync protocol 3；protocol 6 把 attention 迁移到 WorldNode，当前 protocol 8 继续同步 WorldNode/Plan/PlanItem。PlanItem order 使用 `planItems:<planId>` full-list conflict。
 - P2 milestone 本身没有创建 Event/EventDayPlan/RunSegment，也没有从 legacy Event 推导 Plan；后续 P3 已实现基于 WorldNode attention 的 next item 推荐、用户确认派发 Event 与完成联动。
 
 ## 17. Planning 重构 Phase P2.5：Flat Event 与正式 WorldNode
@@ -607,4 +607,25 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   order 与 Record 均保持不变。取消为零写入。
 - 来源链失效时不猜测替代目标；打开后 Plan ended/deleted 或 WorldNode completed 等
   stale 变化在保存时由 Data 层拒绝。该功能不新增 schema 或 Sync 字段，新增的
-  PlanItem 继续沿既有 Sync protocol 7 合同同步。
+  PlanItem 继续沿既有 Sync 合同同步。
+
+## 25. 按需日常：首页快捷
+
+- Routine 业务配置 `showInHomeQuickActions` 默认 false；升级已有数据也全部 false。
+  只有按需型创建/编辑页显示“首页快捷 / 显示在首页快捷动作”开关，计划型隐藏。
+- Home 快捷动作仅来自 active + onDemand + 标记为 true 的 Routine，排除当前
+  running，沿用 Routine scoped order 和最多 4 项限制，不引入独立排序或实体。
+  辅助信息使用 Routine Category · 按需。未固定的按需日常仍可从日常页开始。
+- Quick Action ≠ Recommendation：前者是用户主动固定的入口，后者由 Context/Rule
+  动态推荐。两者保持独立 section，不把快捷标记传给 TimeRule，不显示推荐理由。
+- 开始/恢复沿用既有 RoutineExecution：无 unfinished 时新建；paused 时恢复同一个；
+  completed 后下次新建，允许同一天多次。global one-running、每个按需日常最多
+  一个 unfinished 不变。不自动生成 Today obligation；Record 仍以 execution/segment 为事实。
+- 关闭开关不删除 Routine 或历史；inactive 保留配置并隐藏，重新启用后恢复显示。
+  删除 Routine 后入口自然消失。切换到 scheduled 清除标记，切回 onDemand 默认 false。
+- “添加执行记录”的按需候选与 Home 共用此标记，要求 active、onDemand、true、
+  not running，不受 Home 展示数量上限影响。
+- schema 21 新增 `show_in_home_quick_actions INTEGER NOT NULL DEFAULT 0`，仅允许
+  0/1 且 scheduled 必须为 0。Sync protocol 8 同步配置并纳入 fingerprint、compare、
+  apply、readiness；沿用 3-way conflict，不使用 LWW。旧 baseline 只在读取时补 false，
+  不自动覆盖 Last Successful Sync Baseline。快捷展示结果不持久化或同步。

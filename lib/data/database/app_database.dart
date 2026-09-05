@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 20;
+  static const schemaVersion = 21;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -117,6 +117,16 @@ class AppDatabase {
       await _createJaxDayCarryOverInitializations(database);
     }
     if (oldVersion < 20) await _migrateToTimeRecommendations(database);
+    if (oldVersion < 21) {
+      final columns = await database.rawQuery('PRAGMA table_info(routines)');
+      if (columns.isNotEmpty &&
+          !columns.any((column) => column['name'] == 'show_in_home_quick_actions')) {
+        await database.execute('ALTER TABLE routines ADD COLUMN '
+            'show_in_home_quick_actions INTEGER NOT NULL DEFAULT 0 '
+            'CHECK(show_in_home_quick_actions IN (0,1) AND '
+            "(show_in_home_quick_actions = 0 OR routine_type = 'onDemand'))");
+      }
+    }
   }
 
   static Future<void> _createFlatEventTable(
@@ -429,6 +439,7 @@ class AppDatabase {
       weekday_mask INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL CHECK(is_active IN (0,1)),
       time_recommendation_enabled INTEGER NOT NULL DEFAULT 0 CHECK(time_recommendation_enabled IN (0,1)),
+      show_in_home_quick_actions INTEGER NOT NULL DEFAULT 0 CHECK(show_in_home_quick_actions IN (0,1) AND (show_in_home_quick_actions = 0 OR routine_type = 'onDemand')),
       time_recommendation_start_minute INTEGER CHECK(time_recommendation_start_minute BETWEEN 0 AND 1439),
       time_recommendation_end_minute INTEGER CHECK(time_recommendation_end_minute BETWEEN 0 AND 1439),
       time_recommendation_reason TEXT CHECK(time_recommendation_reason IS NULL OR length(trim(time_recommendation_reason)) > 0),

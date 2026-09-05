@@ -108,6 +108,7 @@ void main() {
       String id, {
       RoutineType type = RoutineType.scheduled,
       bool active = true,
+      bool quick = false,
       RoutineRecurrence recurrence = RoutineRecurrence.daily,
     }) => Routine(
       id: id,
@@ -116,6 +117,7 @@ void main() {
       recurrence: recurrence,
       weekdayMask: 0,
       isActive: active,
+      showInHomeQuickActions: quick,
       sortOrder: 0,
       createdAt: now,
       updatedAt: now,
@@ -162,10 +164,10 @@ void main() {
               'scheduled-not-today',
               recurrence: RoutineRecurrence.weekends,
             ),
-            routine('quick', type: RoutineType.onDemand),
-            routine('not-shortcut', type: RoutineType.onDemand, active: false),
-            routine('quick-running', type: RoutineType.onDemand),
-            routine('quick-paused', type: RoutineType.onDemand),
+            routine('quick', type: RoutineType.onDemand, quick: true),
+            routine('not-shortcut', type: RoutineType.onDemand),
+            routine('quick-running', type: RoutineType.onDemand, quick: true),
+            routine('quick-paused', type: RoutineType.onDemand, quick: true),
           ])
           ..routineExecutions.addAll([
             for (final pair in [

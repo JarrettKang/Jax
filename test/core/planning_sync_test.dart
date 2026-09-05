@@ -162,6 +162,28 @@ void main() {
     },
   );
 
+  test('quick action configuration uses existing three-way conflicts and validation', () {
+    SyncRecord quick({int enabled = 0, String name = 'Quick'}) {
+      final source = _routine();
+      return SyncRecord(
+        kind: source.kind,
+        metadata: source.metadata,
+        payload: Map<String, Object?>.from(source.payload)
+          ..['routineType'] = 'onDemand'
+          ..['showInHomeQuickActions'] = enabled
+          ..['name'] = name,
+      );
+    }
+    final baseline = _snapshot([quick()]);
+    final changed = _snapshot([quick(enabled: 1)]);
+    final oneSide = compare.compare(baseline: baseline, windows: changed, android: baseline);
+    expect(oneSide.manualConflicts, isEmpty);
+    expect(oneSide.autoMergeable, isNotEmpty);
+    final both = compare.compare(baseline: baseline, windows: changed, android: _snapshot([quick(name: 'Android')]));
+    expect(both.manualConflicts.single.changedFields.map((f) => f.field), contains('showInHomeQuickActions'));
+    expect(validator.validate(_snapshot([quick(enabled: 2)])), contains('routine-home-quick-action:routine'));
+  });
+
   test('Plan and PlanItem one-side changes merge and stale plans reject', () {
     final baseline = _snapshot([_node()]);
     final current = _snapshot(
@@ -505,6 +527,7 @@ SyncRecord _routine() => _record(SyncEntityKind.routine, 'routine', {
   'weekdayMask': 0,
   'isActive': 1,
   'timeRecommendationEnabled': 0,
+  'showInHomeQuickActions': 0,
   'timeRecommendationStartMinute': null,
   'timeRecommendationEndMinute': null,
   'timeRecommendationReason': null,

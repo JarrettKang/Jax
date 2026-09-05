@@ -160,6 +160,10 @@ class EventController extends ChangeNotifier {
       .where((routine) => routine.isActive && !routine.isScheduled)
       .toList(growable: false);
 
+  List<Routine> get homeQuickActionRoutines => _routines
+      .where((routine) => routine.isHomeQuickAction)
+      .toList(growable: false);
+
   List<JaxEvent> get historicalEventCandidates => todayEvents
       .where(
         (event) =>
@@ -177,7 +181,7 @@ class EventController extends ChangeNotifier {
       .toList(growable: false);
 
   List<Routine> get historicalOnDemandRoutineCandidates =>
-      activeOnDemandRoutines
+      homeQuickActionRoutines
           .where(
             (routine) =>
                 executionFor(routine)?.status != RoutineExecutionStatus.running,
@@ -464,6 +468,7 @@ class EventController extends ChangeNotifier {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType type = RoutineType.scheduled,
+    bool showInHomeQuickActions = false,
     RoutineTimeRecommendation? timeRecommendation,
   }) => _change(
     () => _routineService!.create(
@@ -472,6 +477,7 @@ class EventController extends ChangeNotifier {
       recurrence,
       mask,
       type: type,
+      showInHomeQuickActions: showInHomeQuickActions,
       timeRecommendation: timeRecommendation,
     ),
   );
@@ -482,6 +488,7 @@ class EventController extends ChangeNotifier {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType? type,
+    bool? showInHomeQuickActions,
     RoutineTimeRecommendation? timeRecommendation,
     bool updateTimeRecommendation = false,
   }) => _change(
@@ -494,6 +501,7 @@ class EventController extends ChangeNotifier {
       type: type,
       timeRecommendation: timeRecommendation,
       updateTimeRecommendation: updateTimeRecommendation,
+      showInHomeQuickActions: showInHomeQuickActions,
     ),
   );
   Future<String?> setRoutineActive(Routine r, bool active) =>

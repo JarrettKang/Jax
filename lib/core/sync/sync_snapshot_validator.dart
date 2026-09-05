@@ -59,6 +59,11 @@ class SyncSnapshotValidator {
             issues.add('routine-recurrence:${record.metadata.id}');
           }
           final enabled = p['timeRecommendationEnabled'];
+          final quickAction = p['showInHomeQuickActions'];
+          if (quickAction is! int || !{0, 1}.contains(quickAction) ||
+              (quickAction == 1 && p['routineType'] != 'onDemand')) {
+            issues.add('routine-home-quick-action:${record.metadata.id}');
+          }
           final start = p['timeRecommendationStartMinute'];
           final end = p['timeRecommendationEndMinute'];
           final reason = p['timeRecommendationReason'];

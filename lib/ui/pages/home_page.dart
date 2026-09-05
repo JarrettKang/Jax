@@ -318,7 +318,7 @@ class _HomePageState extends State<HomePage> {
 
   List<_NextItem> _quickActions(Routine? runningRoutine) => widget
       .controller
-      .activeOnDemandRoutines
+      .homeQuickActionRoutines
       .where((routine) => routine.id != runningRoutine?.id)
       .take(4)
       .map((routine) {

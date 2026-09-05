@@ -6,9 +6,15 @@
 - 对应需求基线：`PRD.md`
 - 目标平台：Windows、Android
 - 文档状态：当前开发与验证基线
-- 更新日期：2026-09-03
+- 更新日期：2026-09-05
 
 ## 2. 当前状态
+
+- On-demand 首页快捷：Routine 单字段配置，Home 和补录候选共用 eligibility，
+  不增加 shortcut subsystem，不修改 Recommendation Engine；schema 21 / protocol 8。
+  迁移默认全部 false，停用保留配置，类型切换清除；执行生命周期与 Record 不变。
+  双端真实 rollout 必须在 Windows/Android DB 与成功同步 baseline 备份后进行，
+  检查 migration facts、FK/integrity/readiness、no-op launch diff；不修改真实快捷偏好。
 
 - Completed：P1 WorldNode foundation、P2 Planning Core、P2.5 Flat Event / World
   switch / data reset、P3 Planning → Today dispatch、Planning Attention Model

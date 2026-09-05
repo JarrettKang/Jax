@@ -168,6 +168,7 @@ void main() {
           'weekdayMask',
           'isActive',
           'timeRecommendationEnabled',
+          'showInHomeQuickActions',
           'timeRecommendationStartMinute',
           'timeRecommendationEndMinute',
           'timeRecommendationReason',

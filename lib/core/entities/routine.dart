@@ -29,6 +29,7 @@ class Routine {
     this.routineCategoryId,
     this.type = RoutineType.scheduled,
     this.timeRecommendation,
+    this.showInHomeQuickActions = false,
   });
   final String id, name;
   final String? routineCategoryId;
@@ -37,6 +38,9 @@ class Routine {
   final RoutineTimeRecommendation? timeRecommendation;
   final int weekdayMask, sortOrder;
   final bool isActive;
+  final bool showInHomeQuickActions;
+  bool get isHomeQuickAction =>
+      isActive && !isScheduled && showInHomeQuickActions;
   final DateTime createdAt, updatedAt;
   bool appliesTo(DateTime date) => switch (recurrence) {
     RoutineRecurrence.daily => true,
@@ -53,6 +57,7 @@ class Routine {
     RoutineRecurrence? recurrence,
     int? weekdayMask,
     bool? isActive,
+    bool? showInHomeQuickActions,
     int? sortOrder,
     DateTime? updatedAt,
     RoutineType? type,
@@ -71,6 +76,8 @@ class Routine {
         : timeRecommendation as RoutineTimeRecommendation?,
     weekdayMask: weekdayMask ?? this.weekdayMask,
     isActive: isActive ?? this.isActive,
+    showInHomeQuickActions:
+        showInHomeQuickActions ?? this.showInHomeQuickActions,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,

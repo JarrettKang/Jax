@@ -288,6 +288,10 @@ void main() {
   testWidgets('Routine editor selects on-demand type and hides recurrence', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final now = DateTime(2026, 8, 29, 10);
     var id = 0;
     final repo = MemoryRepository();
@@ -301,6 +305,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '整理思路');
     expect(find.text('重复'), findsOneWidget);
+    expect(find.byKey(const ValueKey('routine-home-quick-action-toggle')), findsNothing);
     expect(
       find.byKey(const ValueKey('routine-time-recommendation-toggle')),
       findsOneWidget,
@@ -314,11 +319,22 @@ void main() {
       find.byKey(const ValueKey('routine-time-recommendation-toggle')),
       findsNothing,
     );
+    final quickToggle = find.byKey(const ValueKey('routine-home-quick-action-toggle'));
+    expect(tester.widget<SwitchListTile>(quickToggle).value, isFalse);
+    await tester.tap(quickToggle);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(repo.routines.single.type, RoutineType.onDemand);
+    expect(repo.routines.single.showInHomeQuickActions, isTrue);
     expect(find.text('整理思路'), findsOneWidget);
     expect(find.text('按需'), findsOneWidget);
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('快捷动作'), findsOneWidget);
+    expect(find.text('整理思路'), findsOneWidget);
+    expect(find.text('未分类 · 按需'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('scheduled Routine editor saves compact time recommendation UI', (

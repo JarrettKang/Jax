@@ -21,6 +21,7 @@ class RoutineService {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType type = RoutineType.scheduled,
+    bool showInHomeQuickActions = false,
     RoutineTimeRecommendation? timeRecommendation,
   }) async {
     final clean = name.trim();
@@ -48,6 +49,8 @@ class RoutineService {
         routineCategoryId: routineCategoryId,
         recurrence: recurrence,
         type: type,
+        showInHomeQuickActions:
+            type == RoutineType.onDemand && showInHomeQuickActions,
         timeRecommendation: type == RoutineType.scheduled
             ? timeRecommendation
             : null,
@@ -67,6 +70,7 @@ class RoutineService {
     RoutineRecurrence recurrence,
     int mask, {
     RoutineType? type,
+    bool? showInHomeQuickActions,
     RoutineTimeRecommendation? timeRecommendation,
     bool updateTimeRecommendation = false,
   }) async {
@@ -109,6 +113,9 @@ class RoutineService {
         sortOrder: destination,
         recurrence: recurrence,
         type: nextType,
+        showInHomeQuickActions: nextType == RoutineType.onDemand &&
+            (showInHomeQuickActions ??
+                (routine.type == nextType && routine.showInHomeQuickActions)),
         timeRecommendation: nextTimeRecommendation,
         weekdayMask: mask,
         updatedAt: now().toUtc(),

@@ -36,7 +36,7 @@ WorldNode 同时拥有独立 lifecycle（`inProgress/completed`）和 attention
 投影以 focused + inProgress WorldNode 为主体；current Plan 可以为空。关注切换只写
 WorldNode，不结束 Plan、不修改 PlanItem 或任何执行事实。
 
-Sync protocol 7 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
+Sync protocol 8 使用 dataset generation 隔离数据时代。旧协议层级字段只存在于
 读取 protocol 1–3 baseline 的兼容转换中，转换后立即扁平化，当前 snapshot/apply
 拒绝 legacy Event hierarchy mutation。
 

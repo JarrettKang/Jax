@@ -467,6 +467,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
   late RoutineType type;
   late int mask, recommendationStart, recommendationEnd;
   late bool timeRecommendationEnabled;
+  late bool showInHomeQuickActions;
   String? category, error;
   @override
   void initState() {
@@ -477,6 +478,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
     );
     recurrence = widget.routine?.recurrence ?? RoutineRecurrence.daily;
     type = widget.routine?.type ?? RoutineType.scheduled;
+    showInHomeQuickActions = widget.routine?.showInHomeQuickActions ?? false;
     mask = widget.routine?.weekdayMask ?? 0;
     category = widget.routine?.routineCategoryId;
     timeRecommendationEnabled = widget.routine?.timeRecommendation != null;
@@ -534,8 +536,21 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                   child: Text('按需型'),
                 ),
               ],
-              onChanged: (value) => setState(() => type = value!),
+              onChanged: (value) => setState(() {
+                if (type != value) showInHomeQuickActions = false;
+                type = value!;
+              }),
             ),
+            if (type == RoutineType.onDemand)
+              SwitchListTile(
+                key: const ValueKey('routine-home-quick-action-toggle'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('首页快捷'),
+                subtitle: const Text('显示在首页快捷动作'),
+                value: showInHomeQuickActions,
+                onChanged: (value) =>
+                    setState(() => showInHomeQuickActions = value),
+              ),
             if (type == RoutineType.scheduled)
               DropdownButtonFormField<RoutineRecurrence>(
                 initialValue: recurrence,
@@ -642,6 +657,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             mask,
             type: type,
             timeRecommendation: timeRecommendation,
+            showInHomeQuickActions: showInHomeQuickActions,
           )
         : await widget.controller.updateRoutine(
             r,
@@ -652,6 +668,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
             type: type,
             timeRecommendation: timeRecommendation,
             updateTimeRecommendation: true,
+            showInHomeQuickActions: showInHomeQuickActions,
           );
     if (!mounted) return;
     if (result == null) {
