@@ -1,6 +1,6 @@
 # On-demand 首页快捷：实现与验收
 
-日期：2026-09-05。代码和 Debug 构建完成；真实双端 rollout 等待 Android USB 调试授权。
+Private device/data evidence omitted; engineering behavior is described separately.
 
 ## 产品与实现
 
@@ -33,6 +33,10 @@
 Private device/data evidence omitted; engineering behavior is described separately.
 
 ## 备份与离线迁移
+
+Private device rollout evidence omitted from this historical version.
+
+## 真实双端 rollout
 
 Private device rollout evidence omitted from this historical version.
 
