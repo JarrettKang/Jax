@@ -76,3 +76,8 @@ Home running-event and ended-history invariants remain covered by the automated
 regressions; they were not exercised against real user records on the phone.
 Desktop native mouse navigation and keyboard checks used the isolated temporary
 fixture database; no real Windows business data was used or changed.
+
+## Formal Android rollout (2026-09-08)
+
+Private device rollout evidence omitted from this historical version.
+
