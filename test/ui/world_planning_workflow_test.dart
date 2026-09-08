@@ -47,7 +47,7 @@ void main() {
       ),
     );
     await _pumpFrames(tester);
-    final parentRow = find.byKey(ValueKey('world-node-${root.id}'));
+    final parentRow = find.byKey(ValueKey('world-node-main-${root.id}'));
     expect(tester.getSemantics(parentRow).hintOverrides?.onTapHint, '折叠下级');
     for (final action in ['关注', '取消关注', '下移', '完成节点']) {
       await _openMenu(tester, root.id);
@@ -58,6 +58,13 @@ void main() {
     }
     expect(controller.nodeFor(root.id)!.status, WorldNodeStatus.completed);
     await tester.tap(find.text('Parent'));
+    await tester.pump(const Duration(milliseconds: 110));
+    expect(find.text('Leaf'), findsOneWidget);
+    await tester.tap(find.text('Parent'));
+    await _pumpFrames(tester);
+    expect(find.text('Leaf'), findsOneWidget);
+    expect(controller.nodeFor(root.id)!.isFocused, isFalse);
+    await tester.tap(find.text('Parent'));
     await _pumpFrames(tester);
     expect(find.text('Leaf'), findsNothing);
     expect(tester.getSemantics(parentRow).hintOverrides?.onTapHint, '展开下级');
@@ -66,7 +73,7 @@ void main() {
     expect(find.text('Leaf'), findsOneWidget);
     expect(
       tester
-          .getSemantics(find.byKey(ValueKey('world-node-${child.id}')))
+          .getSemantics(find.byKey(ValueKey('world-node-main-${child.id}')))
           .hintOverrides
           ?.onTapHint,
       isNull,
@@ -194,7 +201,7 @@ void main() {
   );
 
   testWidgets(
-    'WorldNode More exposes create, current, next round, and history states',
+    'WorldNode More keeps create and history but omits current Plan navigation',
     (tester) async {
       final noPlan = _node('11111111-1111-4111-8111-111111111111', 'No plan');
       final current = _node('22222222-2222-4222-8222-222222222222', 'Current');
@@ -245,7 +252,8 @@ void main() {
       await _dismissMenu(tester);
 
       await _openMenu(tester, current.id);
-      expect(find.text('查看当前计划'), findsOneWidget);
+      expect(find.text('查看当前计划'), findsNothing);
+      expect(find.text('查看详情'), findsOneWidget);
       expect(find.text('添加计划'), findsNothing);
       await _dismissMenu(tester);
 

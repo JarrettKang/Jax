@@ -10,9 +10,10 @@
 
 ## 2. 当前状态
 
-- World tree interaction priority adjustment：高频 expand/collapse 使用有 children
-  的主行及 chevron，共用持久化 toggle；leaf 主行无操作。低频 open detail 移到
-  More 第一项“查看详情”，复用既有 Detail；Category 与 picker 交互保持不变。
+- World Tree interaction：single tap = browse hierarchy（leaf no-op），double tap =
+  inProgress attention toggle（包含 leaf），More = management。主内容使用默认手势
+  仲裁，chevron/More 分区；More 保留查看详情、显式关注和添加计划，删除查看当前计划。
+  共用已有 focus API 与 collapse persistence；Category、picker、Detail 和业务语义不变。
 
 - World density/hierarchy redesign：Category section、48dp 起步的 compact rows、
   父子连续 connector、按需 current Plan 摘要；branch 折叠复用 device-local preference。

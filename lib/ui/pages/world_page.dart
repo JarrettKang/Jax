@@ -7,6 +7,7 @@ import '../../core/entities/world_node.dart';
 import '../../core/preferences/world_category_collapse_store.dart';
 import '../controllers/planning_controller.dart';
 import '../widgets/world_node_tree_guide.dart';
+import '../widgets/world_node_browsing_row.dart';
 import '../widgets/world_node_tree_picker.dart';
 import '../widgets/category_color_picker.dart';
 import 'planning_page.dart';
@@ -29,6 +30,7 @@ class WorldPage extends StatefulWidget {
 class _WorldPageState extends State<WorldPage> {
   final Set<String> _collapsedBranches = {};
   Set<String> _collapsedCategories = {};
+  final Set<String> _updatingAttention = {};
 
   @override
   void initState() {
@@ -200,125 +202,120 @@ class _WorldPageState extends State<WorldPage> {
           baseIndent: baseIndent,
           nodeLeadingWidth: leadingWidth,
           hasExpandedChildren: !collapsed && children.isNotEmpty,
-          child: Semantics(
-            onTapHint: children.isEmpty ? null : (collapsed ? '展开下级' : '折叠下级'),
-            child: ListTile(
-              key: ValueKey('world-node-${node.id}'),
-              contentPadding: EdgeInsets.only(
-                left: visualContext.contentIndent(
-                  baseIndent: baseIndent,
-                  levelIndent: levelIndent,
-                ),
-                right: 0,
-              ),
-              dense: true,
-              minTileHeight: 48,
-              minVerticalPadding: 0,
-              horizontalTitleGap: 0,
-              minLeadingWidth: leadingWidth,
-              leading: children.isEmpty
-                  ? SizedBox(
+          child: WorldNodeBrowsingRow(
+            key: ValueKey('world-node-${node.id}'),
+            mainKey: ValueKey('world-node-main-${node.id}'),
+            browseHint: children.isEmpty ? null : (collapsed ? '展开下级' : '折叠下级'),
+            hasChildren: children.isNotEmpty,
+            indent: visualContext.contentIndent(
+              baseIndent: baseIndent,
+              levelIndent: levelIndent,
+            ),
+            leading: children.isEmpty
+                ? SizedBox(
+                    width: leadingWidth,
+                    height: 48,
+                    child: Icon(
+                      completed
+                          ? Icons.check_circle_outline
+                          : Icons.circle_outlined,
+                      size: completed ? 16 : 8,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  )
+                : IconButton(
+                    key: ValueKey('world-node-branch-${node.id}'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
                       width: leadingWidth,
                       height: 48,
-                      child: Icon(
-                        completed
-                            ? Icons.check_circle_outline
-                            : Icons.circle_outlined,
-                        size: completed ? 16 : 8,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    )
-                  : IconButton(
-                      key: ValueKey('world-node-branch-${node.id}'),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: leadingWidth,
-                        height: 48,
-                      ),
-                      tooltip: collapsed ? '展开下级' : '折叠下级',
-                      onPressed: () => _toggleBranch(node.id),
-                      icon: Icon(
-                        collapsed ? Icons.chevron_right : Icons.expand_more,
-                      ),
                     ),
-              title: LayoutBuilder(
-                builder: (context, constraints) {
-                  final name = Row(
-                    children: [
-                      if (node.isFocused)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Tooltip(
-                            message: '关注中',
-                            child: Icon(
-                              Icons.center_focus_strong,
-                              size: 12,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                          ),
-                        ),
-                      Expanded(
-                        child: Text(
-                          node.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: children.isNotEmpty
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                            color: completed
-                                ? Theme.of(context).colorScheme.outline
-                                : null,
-                            decoration: completed
-                                ? TextDecoration.lineThrough
-                                : null,
+                    tooltip: collapsed ? '展开下级' : '折叠下级',
+                    onPressed: () => _toggleBranch(node.id),
+                    icon: Icon(
+                      collapsed ? Icons.chevron_right : Icons.expand_more,
+                    ),
+                  ),
+            title: LayoutBuilder(
+              builder: (context, constraints) {
+                final name = Row(
+                  children: [
+                    if (node.isFocused)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Tooltip(
+                          message: '关注中',
+                          child: Icon(
+                            Icons.center_focus_strong,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.outline,
                           ),
                         ),
                       ),
-                    ],
-                  );
-                  if (summary == null) return name;
-                  final label = Text(
-                    summary,
-                    key: ValueKey('world-node-summary-${node.id}'),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    Expanded(
+                      child: Text(
+                        node.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: children.isNotEmpty
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: completed
+                              ? Theme.of(context).colorScheme.outline
+                              : null,
+                          decoration: completed
+                              ? TextDecoration.lineThrough
+                              : null,
+                        ),
+                      ),
                     ),
-                  );
-                  return constraints.maxWidth >= 260
-                      ? Row(
-                          children: [
-                            Expanded(child: name),
-                            const SizedBox(width: 12),
-                            label,
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [name, label],
-                        );
-                },
-              ),
-              trailing: PopupMenuButton<String>(
-                key: ValueKey('world-node-more-${node.id}'),
-                tooltip: '更多操作',
-                constraints: const BoxConstraints(minWidth: 160),
-                icon: Icon(
-                  Icons.more_vert,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  padding: EdgeInsets.zero,
-                  tapTargetSize: MaterialTapTargetSize.padded,
-                ),
-                onSelected: (action) => _nodeAction(node, action),
-                itemBuilder: (_) => _actionsFor(node),
-              ),
-              onTap: children.isEmpty ? null : () => _toggleBranch(node.id),
+                  ],
+                );
+                if (summary == null) return name;
+                final label = Text(
+                  summary,
+                  key: ValueKey('world-node-summary-${node.id}'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                );
+                return constraints.maxWidth >= 260
+                    ? Row(
+                        children: [
+                          Expanded(child: name),
+                          const SizedBox(width: 12),
+                          label,
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [name, label],
+                      );
+              },
             ),
+            more: PopupMenuButton<String>(
+              key: ValueKey('world-node-more-${node.id}'),
+              tooltip: '更多操作',
+              constraints: const BoxConstraints(minWidth: 160),
+              icon: Icon(
+                Icons.more_vert,
+                size: 18,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+              onSelected: (action) => _nodeAction(node, action),
+              itemBuilder: (_) => _actionsFor(node),
+            ),
+            onBrowse: children.isEmpty ? null : () => _toggleBranch(node.id),
+            // Keep double-tap recognition for completed parents too: it is
+            // a no-op, not two single taps that would shake the tree.
+            onAttention: () => _changeAttention(node.id),
           ),
         ),
         if (!collapsed)
@@ -342,6 +339,25 @@ class _WorldPageState extends State<WorldPage> {
       WorldCategoryCollapseStore.branchKey(nodeId),
       collapsed,
     );
+  }
+
+  Future<void> _changeAttention(String nodeId, {bool? focused}) async {
+    final node = widget.controller.nodeFor(nodeId);
+    if (node == null ||
+        node.status != WorldNodeStatus.inProgress ||
+        !_updatingAttention.add(nodeId)) {
+      return;
+    }
+    try {
+      await _guard(
+        () => widget.controller.setWorldNodeFocus(
+          node,
+          focused ?? !node.isFocused,
+        ),
+      );
+    } finally {
+      _updatingAttention.remove(nodeId);
+    }
   }
 
   String? _planningState(WorldNode node) {
@@ -377,8 +393,6 @@ class _WorldPageState extends State<WorldPage> {
           value: 'create-plan',
           child: Text(ended.isEmpty ? '添加计划' : '添加新一轮计划'),
         ),
-      if (current != null)
-        const PopupMenuItem(value: 'open-current', child: Text('查看当前计划')),
       if (ended.isNotEmpty)
         const PopupMenuItem(value: 'open-history', child: Text('查看历史计划')),
       const PopupMenuDivider(),
@@ -388,6 +402,7 @@ class _WorldPageState extends State<WorldPage> {
       if (index >= 0 && index < siblings.length - 1)
         const PopupMenuItem(value: 'move-down', child: Text('下移')),
       const PopupMenuItem(value: 'reparent', child: Text('移动到…')),
+      const PopupMenuDivider(),
       PopupMenuItem(
         value: completed ? 'restore' : 'complete',
         child: Text(completed ? '恢复节点' : '完成节点'),
@@ -398,9 +413,7 @@ class _WorldPageState extends State<WorldPage> {
   Future<void> _nodeAction(WorldNode node, String action) async {
     if (action == 'open-detail') return _openNodeDetail(node);
     if (action == 'focus' || action == 'unfocus') {
-      return _guard(
-        () => widget.controller.setWorldNodeFocus(node, action == 'focus'),
-      );
+      return _changeAttention(node.id, focused: action == 'focus');
     }
     if (action == 'add-child') return _addNode(parent: node);
     if (action == 'rename') return _renameNode(node);
@@ -430,11 +443,6 @@ class _WorldPageState extends State<WorldPage> {
         final plan = await widget.controller.createPlan(node);
         if (mounted) await _openPlan(plan);
       });
-      return;
-    }
-    if (action == 'open-current') {
-      final plan = widget.controller.currentPlanFor(node.id);
-      if (plan != null) await _openPlan(plan);
       return;
     }
     if (action == 'open-history') {

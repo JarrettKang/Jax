@@ -443,7 +443,8 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - 从未产生 dispatched/done/linked Event 的 Plan 可物理删除并产生正常 tombstone；
   一旦产生执行历史只能结束该轮，不能把 delete 偷换成 ended。
 - World 正式管理 Category 与 WorldNode tree。WorldNode More 按状态提供“添加计划”、
-  “查看当前计划”、“添加新一轮计划”和“查看历史计划”；completed 节点必须先恢复，
+  “添加新一轮计划”和“查看历史计划”；查看/编辑 current Plan 主要进入 Planning，
+  World More 不再提供“查看当前计划”，Detail 内的 current Plan 入口保留。completed 节点必须先恢复，
   不能因创建计划自动恢复。
 - Planning picker 按 Category（含虚拟未分类）分区，各分区及 WorldNode branch 可
   折叠，并保留 hierarchy/sibling order。completed 与已有 current Plan 的节点可见
@@ -645,8 +646,15 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - Category 保留固定 palette 小色点、根节点计数、添加、More、折叠，采用单行 header
   与分隔线。branch 用 `world-branch:<nodeId>` namespace 复用既有 device-local
   collapse preference 表，Category 旧 key 不变；重启恢复折叠，改名/reparent 不改变 identity。
-- 高频 tree browsing 使用整行大点击区域：有 children 的主行与 chevron 共用展开/折叠，
-  leaf 主行无操作、不导航；读屏动作提示展开/折叠，桌面键盘沿用标准行激活。
+- 高频 tree browsing 使用主内容大点击区域：有 children 的主行单击与 chevron 共用展开/折叠，
+  leaf 单击无操作、不导航；读屏动作提示展开/折叠，桌面键盘沿用标准行激活。
+  inProgress 节点主内容双击切换关注，包括 leaf；completed 双击无操作，不自动恢复。
+  单击/双击采用 Flutter 默认手势仲裁，双击不执行单击、不改变折叠，滚动取消行手势。
+  chevron 与 More 在主内容手势区之外；快速双击 chevron 只执行两次折叠切换，不关注。
+  focus indicator 继续沿用当前图标；双击与 More 显式关注共用现有 attention API，
+  仅更新既有 isFocused/更新时间，不创建 Plan、不改变已派发 Event 或 PlanItem。
+  Planning 与未派发 next recommendation 沿用原有 attention eligibility 实时刷新。
+  无障碍激活只执行浏览动作，不映射到指针双击；focus 可经 More 由键盘/读屏访问。
   More 第一项“查看详情”复用 WorldNodeDetailPage，返回保持滚动及分类/分支折叠状态。
   chevron 与 More 独立处理点击，一次点击不重复 toggle；菜单中的 focus/排序等动作
   不触发折叠。展开继续复用 device-local preference，connector 随可见子树立即刷新。

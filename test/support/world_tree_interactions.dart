@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/preferences/world_category_collapse_store.dart';
 import 'package:jax/ui/pages/world_node_detail_page.dart';
 import 'package:jax/ui/widgets/world_node_tree_guide.dart';
+import 'package:jax/ui/widgets/world_node_browsing_row.dart';
 
 import 'world_map_fixture.dart';
 
@@ -23,6 +24,9 @@ Future<void> exerciseWorldTreeBrowsing(
     await tester.tap(
       find.descendant(of: row(id), matching: find.byType(Text)).first,
     );
+    // These SQLite/native scenarios run with real async timers. Allow Flutter's
+    // default double-tap arbitration to resolve the single pointer tap.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
     expect(find.byType(WorldNodeDetailPage), findsNothing);
   }
@@ -56,7 +60,7 @@ Future<void> exerciseWorldTreeBrowsing(
   await tapName(2);
   expect(await store.loadCollapsedSectionKeys(), beforeLeaf);
   expect(row(4), findsNothing);
-  expect(tester.widget<ListTile>(row(2)).onTap, isNull);
+  expect(tester.widget<WorldNodeBrowsingRow>(row(2)).onBrowse, isNull);
 
   await tester.ensureVisible(row(1));
   await tester.pumpAndSettle();
@@ -122,7 +126,7 @@ Future<void> exerciseWorldTreeBrowsing(
     await tester.ensureVisible(row(1));
     await tester.pumpAndSettle();
     final ink = find
-        .descendant(of: row(1), matching: find.byType(InkWell))
+        .descendant(of: action('main', 1), matching: find.byType(InkWell))
         .first;
     final focusChild = find
         .descendant(of: ink, matching: find.byType(GestureDetector))
