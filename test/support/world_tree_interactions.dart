@@ -24,8 +24,7 @@ Future<void> exerciseWorldTreeBrowsing(
     await tester.tap(
       find.descendant(of: row(id), matching: find.byType(Text)).first,
     );
-    // These SQLite/native scenarios run with real async timers. Allow Flutter's
-    // default double-tap arbitration to resolve the single pointer tap.
+    // Allow the asynchronous SQLite leaf mutation to complete.
     await Future<void>.delayed(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
     expect(find.byType(WorldNodeDetailPage), findsNothing);
@@ -58,6 +57,7 @@ Future<void> exerciseWorldTreeBrowsing(
   expect(row(4), findsNothing);
   final beforeLeaf = await store.loadCollapsedSectionKeys();
   await tapName(2);
+  await tapName(2); // Restore attention after the leaf shortcut round-trip.
   expect(await store.loadCollapsedSectionKeys(), beforeLeaf);
   expect(row(4), findsNothing);
   expect(tester.widget<WorldNodeBrowsingRow>(row(2)).onBrowse, isNull);
@@ -91,6 +91,7 @@ Future<void> exerciseWorldTreeBrowsing(
   expect(row(14), findsOneWidget);
   await tester.ensureVisible(row(14));
   await tester.pumpAndSettle();
+  await tapName(14);
   await tapName(14);
   final scroll = tester
       .state<ScrollableState>(

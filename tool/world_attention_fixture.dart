@@ -17,10 +17,10 @@ import '../test/support/world_map_fixture.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final directory = await Directory.systemTemp.createTemp('world-qa-');
-  final app = await AppDatabase.openWithFactory(
-    '${directory.path}/fixture.db',
-    databaseFactory,
-  );
+  final file = '${directory.path}/fixture.db';
+  final app = Platform.isAndroid
+      ? await AppDatabase.openWithFactory(file, databaseFactory)
+      : await AppDatabase.open(file);
   await seedWorldMapFixture(app);
   final controller = PlanningController(
     planningRepository: SqlitePlanningRepository(app),
@@ -36,7 +36,9 @@ Future<void> main() async {
   });
   runApp(
     MaterialApp(
-      theme: buildJaxTheme(TargetPlatform.android),
+      theme: buildJaxTheme(
+        Platform.isWindows ? TargetPlatform.windows : TargetPlatform.android,
+      ),
       home: Scaffold(
         appBar: AppBar(title: const Text('World 手势验收 · 隔离数据')),
         body: WorldPage(

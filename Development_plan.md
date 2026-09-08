@@ -17,9 +17,10 @@
 
 ## 2. 当前状态
 
-- World Tree interaction：single tap = browse hierarchy（leaf no-op），double tap =
-  inProgress attention toggle（包含 leaf），More = management。主内容使用默认手势
-  仲裁，chevron/More 分区；More 保留查看详情、显式关注和添加计划，删除查看当前计划。
+- World gesture simplification：Parent tap = browse，inProgress Leaf tap = attention，
+  More = explicit management。移除原 single/double tap arbitration，消除树浏览等待。
+  completed parent 仍可浏览，completed leaf no-op；chevron/More 分区。
+  More 保留查看详情、所有节点显式关注和添加计划，不含查看当前计划。
   共用已有 focus API 与 collapse persistence；Category、picker、Detail 和业务语义不变。
 
 - World density/hierarchy redesign：Category section、48dp 起步的 compact rows、

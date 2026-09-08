@@ -84,10 +84,8 @@ void main() {
         ),
       );
       await settleWorldAttention(tester);
-      await doubleTapWorld(
-        tester,
-        find.byKey(ValueKey('world-node-main-${mapNodeId(0)}')),
-      );
+      await tester.tap(find.byKey(ValueKey('world-node-main-${mapNodeId(0)}')));
+      await settleWorldAttention(tester);
       expect(controller.nodeFor(mapNodeId(0))!.isFocused, isFalse);
       expect(find.textContaining('attention write failed'), findsOneWidget);
       expect(await store.loadCollapsedSectionKeys(), isEmpty);

@@ -58,8 +58,8 @@ void main() {
     }
     expect(controller.nodeFor(root.id)!.status, WorldNodeStatus.completed);
     await tester.tap(find.text('Parent'));
-    await tester.pump(const Duration(milliseconds: 110));
-    expect(find.text('Leaf'), findsOneWidget);
+    await tester.pump();
+    expect(find.text('Leaf'), findsNothing);
     await tester.tap(find.text('Parent'));
     await _pumpFrames(tester);
     expect(find.text('Leaf'), findsOneWidget);
@@ -76,7 +76,7 @@ void main() {
           .getSemantics(find.byKey(ValueKey('world-node-main-${child.id}')))
           .hintOverrides
           ?.onTapHint,
-      isNull,
+      '关注',
     );
     semantics.dispose();
   });

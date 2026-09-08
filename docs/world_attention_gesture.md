@@ -1,48 +1,53 @@
-# World quick attention gesture
+# World parent browse / leaf attention
 
-2026-09-08
+Current main-tree interaction:
 
-## Interaction
+- Parent tap toggles hierarchy immediately, including completed parents, without
+  changing attention. Chevron calls the same browse action.
+- An inProgress leaf tap toggles attention using the existing Core/Data API.
+  Its indicator, name and planning summary share the target; completed leaf is
+  a no-op and may only be restored through the explicit lifecycle menu.
+- Every eligible parent and leaf retains More focus/unfocus. Parent attention
+  remains fully supported; this is a UI shortcut, not a leaf-only domain rule.
+- More and parent chevron are siblings of the main InkWell. They cannot invoke
+  its callback. Detail remains in More; View Current Plan remains removed.
+- The main tree registers only onTap. No custom timing window or timer exists.
+  The former combined tap recognizers delayed browse while deciding the gesture;
+  this implementation removes that source of latency.
+- Standard tap/drag arbitration cancels attention when scrolling. Existing focus
+  indicator refreshes after successful writes; failures use the existing error
+  feedback, without an optimistic mutation or success notification.
+- Semantics and keyboard activation use the same parent browse / leaf attention
+  action. More remains discoverable. TalkBack's own activation gesture has no
+  competing custom business recognizer.
 
-- Parent main content: single click/tap browses the hierarchy. Leaf single tap is
-  a no-op. Neither navigates to Detail.
-- An inProgress node's main content double tap toggles attention, including
-  leaves. Completed double tap is a no-op (including completed parents), with
-  no restore, attention write, navigation or collapse.
-- `WorldNodeBrowsingRow` uses the framework's InkWell single/double-tap
-  arbitration and default threshold. No application timer or immediate first
-  tap mutation is used. A recognized double tap suppresses both single taps.
-  The normal single-pointer action waits for Flutter's double-tap timeout;
-  chevron and keyboard/accessibility activation do not wait for this arbitration.
-- Chevron and More are sibling regions outside that InkWell. Two quick chevron
-  taps only toggle twice; they cannot enter the attention recognizer. Scrolling
-  wins the normal ListView gesture arena and cancels row actions.
-- The existing focus marker remains a status indicator, not an extra button.
-  Double tap and explicit More focus/unfocus call `_changeAttention`, then the
-  existing controller/repository attention API. No optimistic field edits occur.
-  While an attention write is pending, duplicate writes for that node are ignored.
-  Repository failure keeps the old visual and uses the existing error snackbar.
-- More: Detail first, explicit focus/unfocus, contextual Add Plan/new round,
-  history, structural management, then lifecycle actions. Only World More's
-  View Current Plan is removed. Detail/current Plan navigation elsewhere remains.
-- Planning and Today recommendation reuse the shared PlanningController's
-  existing eligibility. No Plan is auto-created; dispatched execution facts are
-  unaffected. Schema remains 21 and Sync protocol remains 8.
-
-## Accessibility
-
-Pointer double tap is excluded from automatic InkWell semantics. The main
-Semantics node explicitly exposes only the parent browse action. Screen-reader
-activation therefore browses; a leaf does not expose a fake tap/focus action.
-More retains discoverable focus/unfocus for screen readers and keyboard users.
-Tests perform semantic activation and verify parent collapse without focus,
-leaf's absent tap action, and desktop keyboard access to More. Existing
-Enter/Space browsing regression also passes. TalkBack was not enabled on the
-physical device; these are semantics tests, not a claim of spoken TalkBack QA.
+Planning and next-item recommendation eligibility still use existing attention
+logic. Dispatched Event, EventDayPlan, RunSegment, PlanItem, and tombstones are
+compared as complete rows in SQLite regression tests; schema21/protocol8 and
+all Domain, Sync, hierarchy and tree-renderer code remain unchanged.
 
 ## Verification
 
+The shared mouse/touch suite checks next-frame parent expansion without advancing
+an arbitration timeout, focused parents, completed parents/leaves, leaf toggle,
+no-plan Planning entries, plan recommendation eligibility, More equivalence,
+independent controls, leaf drag cancellation, accessibility and write failure.
+Old business-gesture tests have been replaced by the current tap rules.
+
+2026-09-08 validation: all 293 Flutter tests pass; analyze reports no issues.
+Ordinary main-entry Windows Debug and Android Debug builds both succeed.
+Windows mouse checks verified focused-parent collapse/expand without attention
+changes, leaf focus/unfocus, and parent More attention without collapsing.
+<device-model> touch checks verified parent collapse in the immediate post-tap capture
+(no added wait), re-expansion, leaf focus/unfocus, dragging from a leaf scrolls
+without focus, completed-leaf no-op and More isolation. This is observable
+response verification plus a next-frame widget assertion, not a millisecond
+latency benchmark. TalkBack was not enabled; semantics activation is tested.
+Android screenshots are retained locally in `.debug_backups/world_tap_20260908/`.
+
 Private device/data evidence omitted; engineering behavior is described separately.
+
+## Historical incident record
 
 Private device/data evidence omitted; engineering behavior is described separately.
 

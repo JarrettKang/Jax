@@ -22,7 +22,7 @@ class WorldNodeBrowsingRow extends StatelessWidget {
   final Widget more;
   final double indent;
   final VoidCallback? onBrowse;
-  final VoidCallback onAttention;
+  final VoidCallback? onAttention;
   final String? browseHint;
 
   @override
@@ -31,19 +31,16 @@ class WorldNodeBrowsingRow extends StatelessWidget {
     child: Row(
       children: [
         // These controls are siblings of the recognizer, never descendants.
-        // Even two fast chevron taps cannot join the attention gesture arena.
         if (hasChildren) leading,
         Expanded(
           child: Semantics(
             key: mainKey,
             container: true,
-            onTap: onBrowse,
+            onTap: hasChildren ? onBrowse : onAttention,
             onTapHint: browseHint,
             child: InkWell(
-              onTap: onBrowse,
-              onDoubleTap: onAttention,
-              // TalkBack activation must browse, not invoke the pointer-only
-              // double-tap shortcut. Attention remains accessible via More.
+              onTap: hasChildren ? onBrowse : onAttention,
+              // One action shared by pointer, keyboard and accessibility.
               excludeFromSemantics: true,
               child: ListTile(
                 dense: true,

@@ -647,16 +647,16 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   与分隔线。branch 用 `world-branch:<nodeId>` namespace 复用既有 device-local
   collapse preference 表，Category 旧 key 不变；重启恢复折叠，改名/reparent 不改变 identity。
 - 高频 tree browsing 使用主内容大点击区域：有 children 的主行单击与 chevron 共用展开/折叠，
-  leaf 单击无操作、不导航；读屏动作提示展开/折叠，桌面键盘沿用标准行激活。
-  inProgress 节点主内容双击切换关注，包括 leaf；completed 双击无操作，不自动恢复。
-  单击/双击采用 Flutter 默认手势仲裁，双击不执行单击、不改变折叠，滚动取消行手势。
-  chevron 与 More 在主内容手势区之外；快速双击 chevron 只执行两次折叠切换，不关注。
-  focus indicator 继续沿用当前图标；双击与 More 显式关注共用现有 attention API，
+  completed parent 同样可以浏览；inProgress leaf 单击切换关注，completed leaf 单击无操作。
+  主树仅使用标准单击，无额外识别窗口或延迟 timer；拖动滚动取消行点击。
+  leaf indicator、名称和摘要属于主点击区域，chevron 与 More 独立处理点击。
+  Parent/Leaf 均保留 More 显式关注入口，attention 不限于叶子节点。
+  focus indicator 继续沿用当前图标；leaf 单击与 More 显式关注共用现有 attention API，
   仅更新既有 isFocused/更新时间，不创建 Plan、不改变已派发 Event 或 PlanItem。
   Planning 与未派发 next recommendation 沿用原有 attention eligibility 实时刷新。
-  无障碍激活只执行浏览动作，不映射到指针双击；focus 可经 More 由键盘/读屏访问。
+  无障碍与键盘激活对应相同的 parent 浏览 / leaf 关注动作；More 显式入口同样可访问。
   More 第一项“查看详情”复用 WorldNodeDetailPage，返回保持滚动及分类/分支折叠状态。
   chevron 与 More 独立处理点击，一次点击不重复 toggle；菜单中的 focus/排序等动作
   不触发折叠。展开继续复用 device-local preference，connector 随可见子树立即刷新。
   Category header 点击语义不变。Planning / Move picker 复用同一 connector
-  painter，保留各自候选资格、提示和布局。所有展开、滚动、查看均零业务写入。
+  painter，保留各自候选资格、提示和布局。展开、滚动、查看均零业务写入；叶子单击只修改 attention。

@@ -205,7 +205,11 @@ class _WorldPageState extends State<WorldPage> {
           child: WorldNodeBrowsingRow(
             key: ValueKey('world-node-${node.id}'),
             mainKey: ValueKey('world-node-main-${node.id}'),
-            browseHint: children.isEmpty ? null : (collapsed ? '展开下级' : '折叠下级'),
+            browseHint: children.isNotEmpty
+                ? (collapsed ? '展开下级' : '折叠下级')
+                : node.status == WorldNodeStatus.inProgress
+                ? (node.isFocused ? '取消关注' : '关注')
+                : null,
             hasChildren: children.isNotEmpty,
             indent: visualContext.contentIndent(
               baseIndent: baseIndent,
@@ -313,9 +317,9 @@ class _WorldPageState extends State<WorldPage> {
               itemBuilder: (_) => _actionsFor(node),
             ),
             onBrowse: children.isEmpty ? null : () => _toggleBranch(node.id),
-            // Keep double-tap recognition for completed parents too: it is
-            // a no-op, not two single taps that would shake the tree.
-            onAttention: () => _changeAttention(node.id),
+            onAttention: node.status == WorldNodeStatus.inProgress
+                ? () => _changeAttention(node.id)
+                : null,
           ),
         ),
         if (!collapsed)
