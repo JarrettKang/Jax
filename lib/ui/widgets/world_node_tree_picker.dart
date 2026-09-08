@@ -124,6 +124,7 @@ class _WorldNodeTreePickerState extends State<WorldNodeTreePicker> {
         WorldNodeTreeGuideFrame(
           key: ValueKey('${widget.nodeKeyPrefix}guide-${node.id}'),
           visualContext: visualContext,
+          hasExpandedChildren: expanded && children.isNotEmpty,
           child: ListTile(
             key: ValueKey('${widget.nodeKeyPrefix}${node.id}'),
             contentPadding: EdgeInsets.only(

@@ -48,6 +48,8 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
     this.baseIndent = 12,
     this.levelIndent = 18,
     this.maximumVisualDepth = 7,
+    this.nodeLeadingWidth = 40,
+    this.hasExpandedChildren = false,
     super.key,
   });
 
@@ -56,11 +58,13 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
   final double baseIndent;
   final double levelIndent;
   final int maximumVisualDepth;
+  final double nodeLeadingWidth;
+  final bool hasExpandedChildren;
 
   @override
   Widget build(BuildContext context) => Stack(
     children: [
-      if (visualContext.depth > 0)
+      if (visualContext.depth > 0 || hasExpandedChildren)
         Positioned.fill(
           child: ExcludeSemantics(
             child: IgnorePointer(
@@ -68,10 +72,12 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
                 painter: _WorldNodeTreeGuidePainter(
                   visualContext: visualContext,
                   color: Theme.of(context).colorScheme.outlineVariant
-                      .withValues(alpha: 0.58),
+                      .withValues(alpha: 0.9),
                   baseIndent: baseIndent,
                   levelIndent: levelIndent,
                   maximumVisualDepth: maximumVisualDepth,
+                  nodeLeadingWidth: nodeLeadingWidth,
+                  hasExpandedChildren: hasExpandedChildren,
                 ),
               ),
             ),
@@ -89,6 +95,8 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
     required this.baseIndent,
     required this.levelIndent,
     required this.maximumVisualDepth,
+    required this.nodeLeadingWidth,
+    required this.hasExpandedChildren,
   });
 
   final WorldNodeTreeVisualContext visualContext;
@@ -96,6 +104,8 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
   final double baseIndent;
   final double levelIndent;
   final int maximumVisualDepth;
+  final double nodeLeadingWidth;
+  final bool hasExpandedChildren;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -109,26 +119,35 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
     );
     for (var index = 0; index < priorColumns; index++) {
       if (!visualContext.ancestorHasNextSibling[index]) continue;
-      final x = baseIndent + (index + .5) * levelIndent;
+      final x = baseIndent + nodeLeadingWidth / 2 + index * levelIndent;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }
 
-    final currentColumn = math.min(
-      visualContext.depth - 1,
-      maximumVisualDepth - 1,
-    );
-    final x = baseIndent + (currentColumn + .5) * levelIndent;
     final middle = size.height / 2;
-    canvas.drawLine(
-      Offset(x, 0),
-      Offset(x, visualContext.isLastSibling ? middle : size.height),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(x, middle),
-      Offset(baseIndent + (currentColumn + 1) * levelIndent, middle),
-      paint,
-    );
+    // The parent axis is the centre of its leading control, not an arbitrary
+    // midpoint in the indent. This joins the parent's outgoing stem exactly.
+    if (visualContext.depth > 0) {
+      final currentColumn = math.min(
+        visualContext.depth - 1,
+        maximumVisualDepth - 1,
+      );
+      final x = baseIndent + nodeLeadingWidth / 2 + currentColumn * levelIndent;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, visualContext.isLastSibling ? middle : size.height),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(x, middle),
+        Offset(x + levelIndent - 5, middle),
+        paint,
+      );
+    }
+    if (hasExpandedChildren && visualContext.depth < maximumVisualDepth) {
+      final x =
+          baseIndent + nodeLeadingWidth / 2 + visualContext.depth * levelIndent;
+      canvas.drawLine(Offset(x, middle + 9), Offset(x, size.height), paint);
+    }
   }
 
   @override
@@ -142,7 +161,9 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
       oldDelegate.color != color ||
       oldDelegate.baseIndent != baseIndent ||
       oldDelegate.levelIndent != levelIndent ||
-      oldDelegate.maximumVisualDepth != maximumVisualDepth;
+      oldDelegate.maximumVisualDepth != maximumVisualDepth ||
+      oldDelegate.nodeLeadingWidth != nodeLeadingWidth ||
+      oldDelegate.hasExpandedChildren != hasExpandedChildren;
 
   static bool _sameContinuations(List<bool> left, List<bool> right) {
     if (left.length != right.length) return false;

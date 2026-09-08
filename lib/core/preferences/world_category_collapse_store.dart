@@ -5,6 +5,8 @@
 /// does not belong to the Event or Category domain models.
 abstract interface class WorldCategoryCollapseStore {
   static const unclassifiedKey = 'world-category:unclassified';
+  // A separate key namespace in the existing device-local presentation store.
+  static String branchKey(String nodeId) => 'world-branch:$nodeId';
 
   static String sectionKey(String? categoryId) =>
       categoryId == null ? unclassifiedKey : 'world-category:$categoryId';

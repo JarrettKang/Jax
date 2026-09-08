@@ -629,3 +629,21 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   0/1 且 scheduled 必须为 0。Sync protocol 8 同步配置并纳入 fingerprint、compare、
   apply、readiness；沿用 3-way conflict，不使用 LWW。旧 baseline 只在读取时补 false，
   不自动覆盖 Last Successful Sync Baseline。快捷展示结果不持久化或同步。
+
+## 26. World：高密度长期结构地图
+
+- World 第一层是 high-density hierarchical map：轻量 Category section + 可折叠
+  WorldNode tree，而不是任务 Card 列表。Detail 继续承担 current Plan、历史与 review。
+- 以真实 sibling structure 绘制中性竖向 continuation、横向 connector 和父节点
+  outgoing stem；最后 sibling 收尾，Category 不是 parent，root 不画 parent connector。
+  完成节点不截断真实连接；连线纯装饰，不接收点击或加入读屏语义。
+- 普通节点不再固定两行，默认隐藏“尚无计划”和无 current Plan 的重复状态文案。
+  有 current Plan 时显示“当前计划”或“N 个下一步”；宽屏内联，窄屏按需辅助行。
+- 节点名保持 16sp、最多两行省略，parent 仅略加字重；focus 图标及 More 弱化。
+  More/expand 保留 48dp 触控区域，leaf 使用相同 leading 列，行高最低 48dp。
+  每层缩进 16dp，前七层保持区分，更深层仅视觉缩进封顶，不改变真实 depth。
+- Category 保留固定 palette 小色点、根节点计数、添加、More、折叠，采用单行 header
+  与分隔线。branch 用 `world-branch:<nodeId>` namespace 复用既有 device-local
+  collapse preference 表，Category 旧 key 不变；重启恢复折叠，改名/reparent 不改变 identity。
+- 主行进入 Detail，展开/More 各自处理点击。Planning / Move picker 复用同一 connector
+  painter，保留各自候选资格、提示和布局。所有展开、滚动、查看均零业务写入。

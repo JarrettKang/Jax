@@ -412,6 +412,133 @@ void main() {
   );
 
   testWidgets(
+    'compact map persists branch state, shows useful summary and increases density',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final fixtures = [
+        for (var i = 0; i < 20; i++)
+          _node(
+            '20000000-0000-4000-8000-${i.toString().padLeft(12, '0')}',
+            '研究方向 $i',
+            order: i,
+          ),
+      ];
+      // The previous World row: two-line ListTile, 20px leading, 8px right
+      // padding. Same viewport, text scale and font; no golden infrastructure.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              children: [
+                for (final node in fixtures)
+                  ListTile(
+                    key: ValueKey('old-${node.id}'),
+                    leading: const Icon(Icons.circle_outlined, size: 20),
+                    title: Text(node.name, maxLines: 2),
+                    subtitle: const Text('尚无计划'),
+                    trailing: PopupMenuButton(
+                      itemBuilder: (_) => const <PopupMenuEntry>[],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+      final oldHeight = tester
+          .getSize(find.byKey(ValueKey('old-${fixtures.first.id}')))
+          .height;
+      nodes.nodes.addAll(fixtures);
+      final store = InMemoryWorldCategoryCollapseStore();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: store,
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+      final newHeight = tester
+          .getSize(find.byKey(ValueKey('world-node-${fixtures.first.id}')))
+          .height;
+      expect(oldHeight / newHeight, greaterThanOrEqualTo(1.5));
+      expect(newHeight, greaterThanOrEqualTo(48));
+      expect(find.text('尚无计划'), findsNothing);
+      expect(find.byType(Card), findsNothing);
+      expect(
+        tester
+            .getSize(
+              find.byKey(ValueKey('world-node-more-${fixtures.first.id}')),
+            )
+            .height,
+        greaterThanOrEqualTo(48),
+      );
+      // ignore: avoid_print
+      print(
+        'WORLD_DENSITY oldRow=$oldHeight newRow=$newHeight ratio=${oldHeight / newHeight}',
+      );
+
+      final root = fixtures.first;
+      final child = _node(
+        '30000000-0000-4000-8000-000000000000',
+        'WCA粒子',
+        parentId: root.id,
+        categoryId: null,
+      );
+      final leaf = _node(
+        '30000000-0000-4000-8000-000000000001',
+        '看分层倾斜角',
+        parentId: child.id,
+        categoryId: null,
+      );
+      nodes.nodes.addAll([child, leaf]);
+      await plans.createPlan(
+        id: 'map-plan',
+        worldNodeId: child.id,
+        now: _time(1),
+      );
+      await controller.load();
+      await _pumpFrames(tester);
+      expect(find.text('当前计划'), findsOneWidget);
+      expect(
+        tester
+            .widget<WorldNodeTreeGuideFrame>(
+              find.byKey(ValueKey('world-node-guide-${child.id}')),
+            )
+            .hasExpandedChildren,
+        isTrue,
+      );
+      await tester.tap(find.byKey(ValueKey('world-node-branch-${child.id}')));
+      await _pumpFrames(tester);
+      expect(find.text('看分层倾斜角'), findsNothing);
+      expect(
+        await store.loadCollapsedSectionKeys(),
+        contains(WorldCategoryCollapseStore.branchKey(child.id)),
+      );
+      final facts = List.of(nodes.nodes);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorldPage(
+            controller: controller,
+            worldCategoryCollapseStore: store,
+          ),
+        ),
+      );
+      await _pumpFrames(tester);
+      expect(find.text('看分层倾斜角'), findsNothing);
+      await tester.tap(find.byKey(ValueKey('world-node-branch-${child.id}')));
+      await _pumpFrames(tester);
+      expect(find.text('看分层倾斜角'), findsOneWidget);
+      expect(nodes.nodes, facts);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'World tree guides track ancestor continuation, branch ends, and roots',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));

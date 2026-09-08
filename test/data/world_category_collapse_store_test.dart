@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/preferences/sqlite_world_category_collapse_store.dart';
 import 'package:jax/core/preferences/world_category_collapse_store.dart';
+import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
@@ -34,14 +35,24 @@ void main() {
       final path = '${dir.path}/jax.db';
       final first = await AppDatabase.open(path);
       final store = SqliteWorldCategoryCollapseStore(first);
+      final before = await SqliteSyncSnapshotAdapter(first.database).read();
       await store.setCollapsed('world-category:research', true);
+      await store.setCollapsed(
+        WorldCategoryCollapseStore.branchKey('node'),
+        true,
+      );
+      final after = await SqliteSyncSnapshotAdapter(first.database).read();
+      expect(after.businessFingerprint, before.businessFingerprint);
       await first.close();
 
       final reopened = await AppDatabase.open(path);
       expect(
         await SqliteWorldCategoryCollapseStore(reopened)
             .loadCollapsedSectionKeys(),
-        {'world-category:research'},
+        {
+          'world-category:research',
+          WorldCategoryCollapseStore.branchKey('node'),
+        },
       );
       await reopened.close();
       await dir.delete(recursive: true);

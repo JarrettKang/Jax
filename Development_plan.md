@@ -6,9 +6,14 @@
 - 对应需求基线：`PRD.md`
 - 目标平台：Windows、Android
 - 文档状态：当前开发与验证基线
-- 更新日期：2026-09-05
+- 更新日期：2026-09-08
 
 ## 2. 当前状态
+
+- World density/hierarchy redesign：Category section、48dp 起步的 compact rows、
+  父子连续 connector、按需 current Plan 摘要；branch 折叠复用 device-local preference。
+  主树与 Planning/Move picker 共享 guide，不改业务模型、schema 21 或 Sync protocol 8。
+  覆盖真实多层结构、六层长名称、reparent、折叠恢复、无业务写入及原生 UI 验收。
 
 - On-demand 首页快捷：Routine 单字段配置，Home 和补录候选共用 eligibility，
   不增加 shortcut subsystem，不修改 Recommendation Engine；schema 21 / protocol 8。
