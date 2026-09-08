@@ -4,6 +4,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Fixture builds must never share the real-data app's package/data directory.
+val entryTarget = providers.gradleProperty("target").orNull.orEmpty().replace('\\', '/')
+val worldFixture = entryTarget.endsWith("tool/world_attention_fixture.dart") ||
+    entryTarget.endsWith("integration_test/world_attention_gesture_test.dart")
+check(!worldFixture || gradle.startParameter.taskNames.none { it.contains("release", ignoreCase = true) }) {
+    "World fixture entry points are Debug-only; never publish a fixture as Jax."
+}
+
 android {
     namespace = "com.example.jax"
     compileSdk = flutter.compileSdkVersion
@@ -17,6 +25,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.jax"
+        manifestPlaceholders["jaxAppLabel"] = "jax"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -30,6 +39,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (worldFixture) {
+                applicationIdSuffix = ".worldfixture"
+                manifestPlaceholders["jaxAppLabel"] = "Jax World QA"
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.

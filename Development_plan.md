@@ -1,5 +1,12 @@
 # Jax 开发计划
 
+## 真机安装硬规则：NO_AUTO_UNINSTALL_REAL_DATA
+
+真实数据设备禁止自动 uninstall / clear data，包括安装失败后的 fallback。
+安装失败立即停止并报告；只有用户明确授权“允许卸载并清除 App Data”才可卸载。
+使用单次 `adb install -r` 的保护脚本，禁止 Flutter runner 向真实数据包执行安装。
+流程与脚本见 [Android 真实数据 rollout](docs/android_real_data_rollout.md)。
+
 ## 1. 文档信息
 
 - 产品：Jax（我的电子管家）
