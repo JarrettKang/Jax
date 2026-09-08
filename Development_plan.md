@@ -17,6 +17,11 @@
 
 ## 2. 当前状态
 
+- Planning Flow Redesign：World 关注成功后短暂显示“开始规划”，直接定位 WorldNode workspace。
+  PlanDetailPage 是 World / Planning Overview / Home refinement 共用工作区；节点名优先，
+  Quick Add 默认 draft，Enter 连续添加并保持输入焦点；初次提交首步原子创建 Plan+Item。
+  仅历史轮次时明确开始新一轮，导航/取消零写入，schema21/protocol8 不变。
+
 - World gesture simplification：Parent tap = browse，inProgress Leaf tap = attention，
   More = explicit management。移除原 single/double tap arbitration，消除树浏览等待。
   completed parent 仍可浏览，completed leaf no-op；chevron/More 分区。

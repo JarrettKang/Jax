@@ -2,6 +2,19 @@ import '../entities/plan.dart';
 import '../entities/plan_item.dart';
 import '../entities/plan_review_note.dart';
 
+/// Compose existing Plan and PlanItem creation in one transaction.
+abstract interface class FirstPlanningStepRepository {
+  Future<Plan> createFirstPlanningStep({
+    required String planId,
+    required String itemId,
+    required String worldNodeId,
+    required String title,
+    String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    required DateTime now,
+  });
+}
+
 abstract interface class PlanningRepository {
   Future<List<Plan>> getPlans();
   Future<Plan?> getPlan(String id);

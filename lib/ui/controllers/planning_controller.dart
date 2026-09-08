@@ -475,6 +475,30 @@ class PlanningController extends ChangeNotifier {
     return plan;
   }
 
+  Future<Plan> createFirstStep(
+    WorldNode node,
+    String title,
+    String? note,
+    PlanItemStatus status,
+  ) async {
+    final repository = planningRepository;
+    if (repository is! FirstPlanningStepRepository) {
+      throw const DomainFailure('当前存储不支持原子创建首个步骤');
+    }
+    final plan = await (repository as FirstPlanningStepRepository)
+        .createFirstPlanningStep(
+          planId: newId(),
+          itemId: newId(),
+          worldNodeId: node.id,
+          title: title,
+          note: note,
+          initialStatus: status,
+          now: now(),
+        );
+    await load();
+    return plan;
+  }
+
   Future<void> renamePlan(Plan plan, String? title) async {
     await planningRepository.renamePlan(plan.id, title, now());
     await load();

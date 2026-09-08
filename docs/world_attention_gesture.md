@@ -16,7 +16,8 @@ Current main-tree interaction:
   this implementation removes that source of latency.
 - Standard tap/drag arbitration cancels attention when scrolling. Existing focus
   indicator refreshes after successful writes; failures use the existing error
-  feedback, without an optimistic mutation or success notification.
+  feedback, without an optimistic mutation. Newly focused nodes now show a short
+  optional “开始规划” action; attention itself neither creates a Plan nor navigates.
 - Semantics and keyboard activation use the same parent browse / leaf attention
   action. More remains discoverable. TalkBack's own activation gesture has no
   competing custom business recognizer.

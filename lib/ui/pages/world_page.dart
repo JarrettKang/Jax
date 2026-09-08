@@ -353,12 +353,40 @@ class _WorldPageState extends State<WorldPage> {
       return;
     }
     try {
-      await _guard(
-        () => widget.controller.setWorldNodeFocus(
-          node,
-          focused ?? !node.isFocused,
-        ),
-      );
+      final target = focused ?? !node.isFocused;
+      await widget.controller.setWorldNodeFocus(node, target);
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        if (target && !node.isFocused) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('已关注 ${node.name}'),
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: '开始规划',
+                onPressed: () async {
+                  await widget.controller.load();
+                  if (!mounted) return;
+                  await Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PlanDetailPage(
+                        controller: widget.controller,
+                        worldNodeId: node.id,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       _updatingAttention.remove(nodeId);
     }

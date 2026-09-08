@@ -91,7 +91,7 @@ void main() {
       find.byKey(const ValueKey('plan-item-title')),
       '设计 schema',
     );
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byKey(const ValueKey('add-plan-item')));
     await tester.pumpAndSettle();
     expect(find.text('设计 schema'), findsOneWidget);
     expect(plans.items.single.status, PlanItemStatus.draft);

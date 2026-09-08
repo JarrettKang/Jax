@@ -591,12 +591,30 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 
 ## 24. 执行中快速补充计划步骤
 
+### Planning 工作流
+
+- WorldNode 首次从未关注变为关注后，用短暂的“已关注 · 开始规划”操作提供直达入口；
+  不强制导航、不自动创建 Plan，也不增加每个节点的永久行高。
+- “开始规划”直达该 WorldNode 的工作区：有 current Plan 则原样打开；完全无历史时
+  显示首步输入，提交首步时以同一 transaction 创建 Plan 和 PlanItem。仅打开、输入、
+  空标题提交或取消均不写业务数据。已有 ended history 时必须明确点击“开始新一轮计划”。
+- 工作区第一视觉是 WorldNode 名称，轻量 hierarchy breadcrumb 与 current/ended round
+  为辅助信息。空 Plan 引导用户先写第一件事，之后可随时补充、调整或删除。
+- Plan round 表示思路迭代，不是编辑次数。Plan 保持可修改的草稿式工作空间。
+- 新增 PlanItem 的唯一主路径是列表末尾 inline Quick Add，默认 draft，可显式选择 next；
+  Enter / Android Done / 可见添加按钮提交，保存后清空并保持键盘焦点，允许同名步骤。
+  空标题仅轻量提示，失败保留输入。可选说明在行内展开；现有步骤的详细编辑暂保留弹窗。
+- next 不自动 dispatch。PlanItem scoped order 保持用户顺序，不因状态重排；已有步骤、
+  执行状态、复盘和历史入口仍可见。Windows 内容宽度限制820，Android自然滚动并避让键盘。
+- Overview 保留 focused WorldNode 工作台，显示轮次、数量及前两个 next 摘要，不展开完整计划。
+  没有 current Plan 的节点同样可直接开始规划。Home 补充路径共用此工作区并聚焦 Quick Add。
+
 - Home Running Hero 仅在当前对象是 Planned Event（具有合法
   `sourcePlanItemId`）时，在 More 中提供“补充计划步骤…”。Standalone Event、
   Scheduled Routine 和 On-demand Routine 不显示该入口。
 - 入口严格沿 `Event.sourcePlanItemId → PlanItem → Plan → WorldNode` 解析来源，
   不让用户重新选择节点或计划。来源是 current Plan 时，直接进入该 Plan Detail
-  的统一新增步骤编辑器；新增项继续追加到该 Plan 末尾。
+  的统一 inline Quick Add，并滚动聚焦输入；新增项继续追加到该 Plan 末尾。
 - 来源 Plan 已结束但同一 WorldNode 已有 current Plan 时，用户必须明确选择补充到
   当前计划或查看来源计划；没有 current Plan 时，可明确创建新一轮或查看来源计划。
   completed WorldNode 必须先由用户在 World 恢复，Jax 不自动恢复、不自动 focus。

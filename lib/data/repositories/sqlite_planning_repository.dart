@@ -11,9 +11,50 @@ import '../../core/repositories/planning_repository.dart';
 import '../database/app_database.dart';
 
 class SqlitePlanningRepository
-    implements PlanningRepository, PlanningDispatchRepository {
+    implements
+        PlanningRepository,
+        PlanningDispatchRepository,
+        FirstPlanningStepRepository {
   const SqlitePlanningRepository(this._app);
   final AppDatabase _app;
+
+  @override
+  Future<Plan> createFirstPlanningStep({
+    required String planId,
+    required String itemId,
+    required String worldNodeId,
+    required String title,
+    String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    required DateTime now,
+  }) => _app.database.transaction((tx) async {
+    final history = await tx.query(
+      'plans',
+      columns: ['id'],
+      where: 'world_node_id = ?',
+      whereArgs: [worldNodeId],
+      limit: 1,
+    );
+    if (history.isNotEmpty) {
+      throw const DomainFailure('计划已变化，请返回重新打开；历史计划需要明确开始新一轮');
+    }
+    final plan = await _createPlan(
+      tx,
+      id: planId,
+      worldNodeId: worldNodeId,
+      now: now,
+    );
+    await _createPlanItem(
+      tx,
+      id: itemId,
+      planId: plan.id,
+      title: title,
+      note: note,
+      initialStatus: initialStatus,
+      now: now,
+    );
+    return plan;
+  });
 
   @override
   Future<List<JaxEvent>> dispatchPlanItems({
@@ -152,7 +193,23 @@ class SqlitePlanningRepository
     required String worldNodeId,
     String? title,
     required DateTime now,
-  }) => _app.database.transaction((tx) async {
+  }) => _app.database.transaction(
+    (tx) => _createPlan(
+      tx,
+      id: id,
+      worldNodeId: worldNodeId,
+      title: title,
+      now: now,
+    ),
+  );
+
+  Future<Plan> _createPlan(
+    DatabaseExecutor tx, {
+    required String id,
+    required String worldNodeId,
+    String? title,
+    required DateTime now,
+  }) async {
     final nodes = await tx.query(
       'world_nodes',
       columns: ['status'],
@@ -190,7 +247,7 @@ class SqlitePlanningRepository
     );
     await tx.insert('plans', _planToRow(plan));
     return plan;
-  });
+  }
 
   @override
   Future<void> renamePlan(String id, String? title, DateTime now) async {
@@ -265,7 +322,27 @@ class SqlitePlanningRepository
     String? note,
     PlanItemStatus initialStatus = PlanItemStatus.draft,
     required DateTime now,
-  }) => _app.database.transaction((tx) async {
+  }) => _app.database.transaction(
+    (tx) => _createPlanItem(
+      tx,
+      id: id,
+      planId: planId,
+      title: title,
+      note: note,
+      initialStatus: initialStatus,
+      now: now,
+    ),
+  );
+
+  Future<PlanItem> _createPlanItem(
+    DatabaseExecutor tx, {
+    required String id,
+    required String planId,
+    required String title,
+    String? note,
+    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    required DateTime now,
+  }) async {
     _requireTitle(title);
     if (initialStatus != PlanItemStatus.draft &&
         initialStatus != PlanItemStatus.next) {
@@ -289,7 +366,7 @@ class SqlitePlanningRepository
     );
     await tx.insert('plan_items', _itemToRow(item));
     return item;
-  });
+  }
 
   @override
   Future<void> editPlanItem(

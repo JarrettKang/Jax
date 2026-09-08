@@ -80,21 +80,22 @@ void main() {
       await tester.tap(find.text('补充计划步骤…'));
       await tester.pumpAndSettle();
 
-      expect(find.text('补充计划步骤'), findsOneWidget);
-      expect(find.text('论文 · 第 1 轮计划'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('当前计划 · 第 1 轮'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('plan-item-title')),
         '补实验图',
       );
+      await tester.tap(find.text('说明'));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('plan-item-note')),
         '先整理原始数据',
       );
       await tester.tap(find.byKey(const ValueKey('plan-item-initial-status')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('下一步').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('保存'));
+      await tester.tap(find.byKey(const ValueKey('add-plan-item')));
       await tester.pumpAndSettle();
 
       expect(fixture.planning.items, hasLength(2));
@@ -192,12 +193,12 @@ void main() {
     expect(find.text('补充到当前计划'), findsOneWidget);
     await tester.tap(find.text('补充到当前计划'));
     await tester.pumpAndSettle();
-    expect(find.text('论文 · 第 2 轮计划'), findsOneWidget);
+    expect(find.text('当前计划 · 第 2 轮'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('plan-item-title')),
       '新一轮步骤',
     );
-    await tester.tap(find.text('保存'));
+    await tester.tap(find.byKey(const ValueKey('add-plan-item')));
     await tester.pumpAndSettle();
     expect(fixture.planning.items.last.planId, 'current-plan');
     expect(fixture.planning.items.first.planId, 'source-plan');
@@ -216,7 +217,7 @@ void main() {
     expect(find.text('添加新一轮'), findsOneWidget);
     await tester.tap(find.text('添加新一轮'));
     await tester.pumpAndSettle();
-    expect(find.text('论文 · 第 2 轮计划'), findsOneWidget);
+    expect(find.text('当前计划 · 第 2 轮'), findsOneWidget);
     expect(fixture.planning.plans.last.status, PlanStatus.current);
   });
 
