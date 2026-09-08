@@ -49,10 +49,30 @@ then the visible add button added a fourth as next. Existing steps stayed visibl
 input focus returned after each submit, and the checkbox reset to draft. With a
 Chinese IME, Enter first commits composition and a subsequent Enter submits.
 
-Android real-device install was rejected with INSTALL_FAILED_ABORTED (user
-rejected permissions). The guarded installer stopped, with no uninstall or
-automatic retry. Formal Jax and its database were not updated. A new install
-request is pending explicit user direction. Android soft-keyboard behavior is
-covered by widget tests but has not passed native acceptance for this revision.
+Android real-device installation initially returned INSTALL_FAILED_ABORTED. After
+explicit user authorization, one guarded install -r retry succeeded for
+com.example.jax.worldfixture. APK SHA-256:
+204AC02475FDE21B7864D847389892C5B82F6E1D55274A6A3676BA60084746C3.
+There was no uninstall, data clear or automatic retry. Formal Jax was not updated.
+
+Android native acceptance on <device-model> (2026-09-08) passed the main entry flow:
+World focus -> optional shortcut -> matching node workspace -> three consecutive
+draft submissions (a, b, c) using the actual on-screen keyboard -> fourth step d
+explicitly next. The keyboard stayed open and accepted the next title without
+retapping the field. Existing steps and Quick Add stayed visible, scoped order
+was a/b/c/d, and the next checkbox reset after submission. After hiding the
+keyboard the summary showed one next and zero dispatched. Optional-note input
+was canceled without adding a fifth item; existing-item detail editing opened
+with title and note fields and was canceled. The QA app was force-stopped after
+acceptance. Screenshots are retained locally under .debug_backups as
+planning-android-three-drafts.png and planning-android-four-items.png.
+
+Native acceptance detail: with a long list and the keyboard open, expanding the
+optional note may require scrolling to reveal its field. The main title input
+remains visible. ADB text injection changed the phone IME display/composition
+mode, so acceptance was repeated in a fresh temporary QA session using only
+touches on the actual soft keyboard. No production workaround was introduced.
+Home running-event and ended-history invariants remain covered by the automated
+regressions; they were not exercised against real user records on the phone.
 Desktop native mouse navigation and keyboard checks used the isolated temporary
 fixture database; no real Windows business data was used or changed.
