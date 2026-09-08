@@ -20,6 +20,60 @@ void main() {
   late _PlanningRepository plans;
   late PlanningController controller;
 
+  testWidgets('World menu actions never toggle and completed parents browse', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final root = _node('11111111-1111-4111-8111-111111111111', 'Parent');
+    final child = _node(
+      '22222222-2222-4222-8222-222222222222',
+      'Leaf',
+      parentId: root.id,
+      categoryId: null,
+    );
+    final sibling = _node(
+      '33333333-3333-4333-8333-333333333333',
+      'Sibling',
+      order: 1,
+    );
+    nodes.nodes.addAll([root, child, sibling]);
+    final store = InMemoryWorldCategoryCollapseStore();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WorldPage(
+          controller: controller,
+          worldCategoryCollapseStore: store,
+        ),
+      ),
+    );
+    await _pumpFrames(tester);
+    final parentRow = find.byKey(ValueKey('world-node-${root.id}'));
+    expect(tester.getSemantics(parentRow).hintOverrides?.onTapHint, '折叠下级');
+    for (final action in ['关注', '取消关注', '下移', '完成节点']) {
+      await _openMenu(tester, root.id);
+      await tester.tap(find.text(action));
+      await _pumpFrames(tester);
+      expect(find.text('Leaf'), findsOneWidget);
+      expect(await store.loadCollapsedSectionKeys(), isEmpty);
+    }
+    expect(controller.nodeFor(root.id)!.status, WorldNodeStatus.completed);
+    await tester.tap(find.text('Parent'));
+    await _pumpFrames(tester);
+    expect(find.text('Leaf'), findsNothing);
+    expect(tester.getSemantics(parentRow).hintOverrides?.onTapHint, '展开下级');
+    await tester.tap(find.text('Parent'));
+    await _pumpFrames(tester);
+    expect(find.text('Leaf'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(find.byKey(ValueKey('world-node-${child.id}')))
+          .hintOverrides
+          ?.onTapHint,
+      isNull,
+    );
+    semantics.dispose();
+  });
+
   setUp(() {
     events = MemoryRepository();
     nodes = _WorldRepository();
@@ -511,7 +565,7 @@ void main() {
             .hasExpandedChildren,
         isTrue,
       );
-      await tester.tap(find.byKey(ValueKey('world-node-branch-${child.id}')));
+      await tester.tap(find.text('WCA粒子'));
       await _pumpFrames(tester);
       expect(find.text('看分层倾斜角'), findsNothing);
       expect(
@@ -530,7 +584,7 @@ void main() {
       );
       await _pumpFrames(tester);
       expect(find.text('看分层倾斜角'), findsNothing);
-      await tester.tap(find.byKey(ValueKey('world-node-branch-${child.id}')));
+      await tester.tap(find.text('WCA粒子'));
       await _pumpFrames(tester);
       expect(find.text('看分层倾斜角'), findsOneWidget);
       expect(nodes.nodes, facts);
@@ -745,6 +799,23 @@ class _WorldRepository implements WorldNodeRepository {
 
   @override
   Future<List<WorldNode>> getWorldNodes() async => List.unmodifiable(nodes);
+
+  @override
+  Future<void> updateWorldNode(WorldNode node) async {
+    nodes[nodes.indexWhere((value) => value.id == node.id)] = node;
+  }
+
+  @override
+  Future<void> setWorldNodeFocus(String id, bool focused, DateTime now) async {
+    final node = nodes.firstWhere((value) => value.id == id);
+    await updateWorldNode(node.copyWith(isFocused: focused, updatedAt: now));
+  }
+
+  @override
+  Future<void> reorderWorldNode(String id, int targetIndex) async {
+    final node = nodes.firstWhere((value) => value.id == id);
+    await updateWorldNode(node.copyWith(sortOrder: targetIndex));
+  }
 
   @override
   Future<void> reparentWorldNode(

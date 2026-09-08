@@ -11,7 +11,7 @@
 5. overview 不再显示“尚无计划”，详细信息仍由 WorldNode Detail 承担。
 6. 仅 current Plan 有摘要：有 next 项显示“N 个下一步”，否则“当前计划”。标题可用宽度至少 260dp 时同行，窄屏放轻量辅助行。
 7. Category 改为紧凑 section header：颜色点、名称、根节点计数、添加根节点、More，以及分隔线；不是树的业务父节点。
-8. More 使用中性色 18dp 图标，仍保留至少 48×48dp 操作区；点击整行进入详情，展开按钮独立。
+8. More 使用中性色 18dp 图标，仍保留至少 48×48dp 操作区；有 children 的主行与展开按钮共用 toggle，leaf 主行无操作，More 第一项“查看详情”进入既有详情页。
 9. Category 沿用原本地折叠偏好；分支以 `world-branch:<nodeId>` 命名空间复用同一 UI-only store，重建和重启恢复，不进入 Sync snapshot。
 10. 每级缩进 16dp，视觉深度沿用最多 7 级上限。390dp 窄屏 fixture 验证六层节点和最深层 More 可操作；不改变真实 parentId。
 11. 长名称最多两行并省略，不挤占 More；详情可查看完整名称。父节点略加粗，叶节点对齐，focus 为轻量标记。

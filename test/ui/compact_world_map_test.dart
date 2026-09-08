@@ -17,6 +17,7 @@ import 'package:jax/ui/pages/world_page.dart';
 import 'package:jax/ui/widgets/world_node_tree_guide.dart';
 
 import '../support/world_map_fixture.dart';
+import '../support/world_tree_interactions.dart';
 
 void main() {
   for (final width in [390.0, 1400.0]) {
@@ -129,6 +130,11 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('C1'), findsNothing);
           expect(find.text('C2'), findsNothing);
+          await exerciseWorldTreeBrowsing(
+            tester,
+            SqliteWorldCategoryCollapseStore(app),
+            keyboard: width > 600,
+          );
           final after = await SqliteSyncSnapshotAdapter(app.database).read();
           expect(after.businessFingerprint, before.businessFingerprint);
           expect(tester.takeException(), isNull);

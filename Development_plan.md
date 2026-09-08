@@ -10,6 +10,10 @@
 
 ## 2. 当前状态
 
+- World tree interaction priority adjustment：高频 expand/collapse 使用有 children
+  的主行及 chevron，共用持久化 toggle；leaf 主行无操作。低频 open detail 移到
+  More 第一项“查看详情”，复用既有 Detail；Category 与 picker 交互保持不变。
+
 - World density/hierarchy redesign：Category section、48dp 起步的 compact rows、
   父子连续 connector、按需 current Plan 摘要；branch 折叠复用 device-local preference。
   主树与 Planning/Move picker 共享 guide，不改业务模型、schema 21 或 Sync protocol 8。

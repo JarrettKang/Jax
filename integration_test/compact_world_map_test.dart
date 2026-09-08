@@ -15,9 +15,10 @@ import 'package:jax/ui/pages/world_page.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../test/support/world_map_fixture.dart';
+import '../test/support/world_tree_interactions.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('native compact World fixture is read only', (tester) async {
     final directory = await Directory.systemTemp.createTemp('jax-world-map-');
     final file = '${directory.path}/fixture.db';
@@ -53,9 +54,19 @@ void main() {
     expect(find.text('看分层倾斜角'), findsOneWidget);
     expect(find.text('2 个下一步'), findsOneWidget);
     expect(find.text('尚无计划'), findsNothing);
+    await exerciseWorldTreeBrowsing(
+      tester,
+      SqliteWorldCategoryCollapseStore(app),
+    );
     const hold = int.fromEnvironment('WORLD_VISUAL_HOLD_SECONDS');
     if (hold > 0) {
-      await Future<void>.delayed(const Duration(seconds: hold));
+      binding.shouldPropagateDevicePointerEvents = true;
+      final watch = Stopwatch()..start();
+      while (watch.elapsed < const Duration(seconds: hold)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      }
+      binding.shouldPropagateDevicePointerEvents = false;
     }
     final deep = find.byKey(ValueKey('world-node-${mapNodeId(14)}'));
     await tester.ensureVisible(deep);

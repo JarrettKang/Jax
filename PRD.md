@@ -530,7 +530,7 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   的 Plan 继续只能结束并保留复盘。
 - Plan detail 以低噪音时间顺序展示复盘，提供窄屏可滚动的多行编辑器；复盘可选，
   结束计划不强迫填写。
-- World 首页保持 Category/节点/status/current Plan 的低噪音树；点击节点进入只读
+- World 首页保持 Category/节点/status/current Plan 的低噪音树；More → 查看详情进入只读
   Detail，展示 breadcrumb、当前计划摘要、按轮次确定排序的历史计划及精确节点执行历史。
 - 执行历史只沿 planned Event 的 sourcePlanItem 关系反查该节点，不包含 standalone
   Event、不汇总 descendant，不提供 start/pause/complete 等执行控制。
@@ -645,5 +645,10 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - Category 保留固定 palette 小色点、根节点计数、添加、More、折叠，采用单行 header
   与分隔线。branch 用 `world-branch:<nodeId>` namespace 复用既有 device-local
   collapse preference 表，Category 旧 key 不变；重启恢复折叠，改名/reparent 不改变 identity。
-- 主行进入 Detail，展开/More 各自处理点击。Planning / Move picker 复用同一 connector
+- 高频 tree browsing 使用整行大点击区域：有 children 的主行与 chevron 共用展开/折叠，
+  leaf 主行无操作、不导航；读屏动作提示展开/折叠，桌面键盘沿用标准行激活。
+  More 第一项“查看详情”复用 WorldNodeDetailPage，返回保持滚动及分类/分支折叠状态。
+  chevron 与 More 独立处理点击，一次点击不重复 toggle；菜单中的 focus/排序等动作
+  不触发折叠。展开继续复用 device-local preference，connector 随可见子树立即刷新。
+  Category header 点击语义不变。Planning / Move picker 复用同一 connector
   painter，保留各自候选资格、提示和布局。所有展开、滚动、查看均零业务写入。
