@@ -25,7 +25,7 @@ and retain focus. Busy prevents duplicate concurrent submission, failures retain
 text, blank titles show inline validation, and duplicates are allowed. Keyboard
 metrics trigger scrolling to the input. Existing scoped order is preserved.
 
-The title is the WorldNode, followed by breadcrumb and a secondary round summary.
+The title is the WorldNode, followed by full ancestry and a secondary round summary.
 Empty plans explain that the first idea need not be a complete plan. Review CRUD,
 history and all item lifecycle/reorder/detail actions remain. Detailed existing
 item edits retain their modal for now; no modal can create a new PlanItem.
@@ -81,3 +81,32 @@ fixture database; no real Windows business data was used or changed.
 
 Private device rollout evidence omitted from this historical version.
 
+## Workspace hierarchy refinement (2026-09-12)
+
+UI-only changes in planning_page.dart: full ancestry is now a compact vertical
+context with short branch connectors, wrapping names and an indentation budget
+of 22% of available width. AppBar height accommodates long node titles. Round
+metadata is body-small text; the summary begins with total steps and omits zero
+next/dispatched counts. A light “计划步骤” heading introduces the continuous list.
+Dense item rows use dot/arrow/dispatched/check/dropped markers. Draft/next still
+toggle directly through the leading control; existing up/down ordering moves
+into More to free title width. No drag mechanism was added.
+
+Quick Add stays at the list end. Its options appear on focus, cancel is visually
+secondary, submit retains focus and defaults to draft. Expanding note schedules
+input reveal. Empty plans and Home's add intent retain initial focus. Review has
+a small add button; existing notes show a one-line latest preview and expand to
+the existing CRUD controls. No empty-review message is shown.
+
+The World tree painter was not reused: it represents branching sibling rows,
+whereas this context is a single ancestry chain. Lightweight text connectors
+avoid fixed-depth layout assumptions. Data models, repositories, state semantics,
+dispatch, Event creation, navigation and Review persistence are unchanged.
+Responsive widget checks exercise six-level long-name ancestry and twelve steps
+at 390 and 1200 logical pixels, plus continuous submit, cancellation, Home source
+selection and historical plans. This revision has not been installed on a phone;
+the native acceptance and rollout above refer specifically to the September 8
+revision, not this UI refinement.
+Validation: all 298 tests pass; flutter analyze reports no issues; ordinary
+Windows Debug and Android Debug builds succeed. Physical-device keyboard and
+native desktop visual acceptance have not been repeated for this revision.

@@ -81,7 +81,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('当前计划 · 第 1 轮'), findsOneWidget);
+      expect(find.text('第 1 轮计划'), findsOneWidget);
       await tester.enterText(
         find.byKey(const ValueKey('plan-item-title')),
         '补实验图',
@@ -193,7 +193,7 @@ void main() {
     expect(find.text('补充到当前计划'), findsOneWidget);
     await tester.tap(find.text('补充到当前计划'));
     await tester.pumpAndSettle();
-    expect(find.text('当前计划 · 第 2 轮'), findsOneWidget);
+    expect(find.text('第 2 轮计划'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('plan-item-title')),
       '新一轮步骤',
@@ -217,7 +217,7 @@ void main() {
     expect(find.text('添加新一轮'), findsOneWidget);
     await tester.tap(find.text('添加新一轮'));
     await tester.pumpAndSettle();
-    expect(find.text('当前计划 · 第 2 轮'), findsOneWidget);
+    expect(find.text('第 2 轮计划'), findsOneWidget);
     expect(fixture.planning.plans.last.status, PlanStatus.current);
   });
 

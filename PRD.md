@@ -598,8 +598,12 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
 - “开始规划”直达该 WorldNode 的工作区：有 current Plan 则原样打开；完全无历史时
   显示首步输入，提交首步时以同一 transaction 创建 Plan 和 PlanItem。仅打开、输入、
   空标题提交或取消均不写业务数据。已有 ended history 时必须明确点击“开始新一轮计划”。
-- 工作区第一视觉是 WorldNode 名称，轻量 hierarchy breadcrumb 与 current/ended round
-  为辅助信息。空 Plan 引导用户先写第一件事，之后可随时补充、调整或删除。
+- 工作区第一视觉是 WorldNode 名称；完整 ancestry 用轻量纵向层级呈现，缩进限制在可用
+  宽度内，长名称自然换行。轮次为弱化元信息，摘要先显示总步骤数并省略零状态计数。
+  “计划步骤”引出紧凑列表；状态标记区分 draft/next/dispatched/done/dropped。
+  空 Plan 引导用户先写第一件事，之后可随时补充、调整或删除。
+- Quick Add 是列表末行，聚焦后显示次级选项，取消弱化；原有上移/下移收进 More。
+  复盘无记录时只显示轻量新增入口，有记录时显示最新预览并可展开全部，保留 CRUD。
 - Plan round 表示思路迭代，不是编辑次数。Plan 保持可修改的草稿式工作空间。
 - 新增 PlanItem 的唯一主路径是列表末尾 inline Quick Add，默认 draft，可显式选择 next；
   Enter / Android Done / 可见添加按钮提交，保存后清空并保持键盘焦点，允许同名步骤。

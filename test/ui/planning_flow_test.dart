@@ -57,6 +57,76 @@ void main() {
     },
   );
   for (final width in [390.0, 1200.0]) {
+    testWidgets('deep workspace and twelve steps fit $width', (tester) async {
+      await tester.runAsync(() async {
+        await tester.binding.setSurfaceSize(Size(width, 850));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final app = await AppDatabase.inMemory();
+        addTearDown(app.close);
+        await seedWorldMapFixture(app);
+        final repo = SqlitePlanningRepository(app);
+        final plan = await repo.createPlan(
+          id: 'deep',
+          worldNodeId: mapNodeId(14),
+          now: DateTime.now(),
+        );
+        for (var i = 0; i < 12; i++) {
+          await repo.createPlanItem(
+            id: 'deep-$i',
+            planId: plan.id,
+            title: '步骤 $i：检查计算结果与研究假设',
+            now: DateTime.now(),
+          );
+        }
+        final c = PlanningController(
+          planningRepository: repo,
+          worldNodeRepository: SqliteWorldNodeRepository(app),
+          eventRepository: SqliteEventRepository(app),
+          newId: () => 'unused',
+          now: DateTime.now,
+        );
+        addTearDown(c.dispose);
+        await c.load();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: PlanDetailPage(controller: c, planId: plan.id),
+          ),
+        );
+        await settle(tester);
+        for (final name in [
+          '科研',
+          'A：多层结构',
+          'D：下一分支',
+          'E：第三层',
+          'F：第四层',
+          'G：第五层',
+        ]) {
+          expect(find.text(name), findsOneWidget);
+        }
+        expect(find.text('12 个步骤'), findsOneWidget);
+        expect(find.text('计划步骤'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('plan-item-title')),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          find.byKey(const ValueKey('plan-item-initial-status')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const ValueKey('plan-item-title')));
+        await settle(tester);
+        expect(
+          find.byKey(const ValueKey('plan-item-initial-status')),
+          findsOneWidget,
+        );
+        expect(find.text('还没有复盘记录'), findsNothing);
+        expect(tester.takeException(), isNull);
+        expect(c.itemsFor(plan.id), hasLength(12));
+        await tester.pumpWidget(const SizedBox());
+      });
+    });
     testWidgets(
       'World direct workspace, no navigation writes and continuous entry $width',
       (tester) async {

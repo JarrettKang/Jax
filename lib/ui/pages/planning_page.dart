@@ -295,7 +295,8 @@ class PlanDetailPage extends StatelessWidget {
       final canAdd = plan?.isCurrent ?? (history.isEmpty && canBegin);
       return Scaffold(
         appBar: AppBar(
-          title: Text(node.name),
+          toolbarHeight: _workspaceTitleHeight(context, node.name),
+          title: Text(node.name, softWrap: true),
           actions: [
             if (plan != null && plan.isCurrent && canBegin && !node.isFocused)
               TextButton.icon(
@@ -334,21 +335,25 @@ class PlanDetailPage extends StatelessWidget {
               key: const ValueKey('plan-detail'),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
-                Text(
-                  _workspacePath(controller, node),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
+                _WorldContext(names: _workspacePath(controller, node)),
+                const SizedBox(height: 16),
                 if (plan != null) ...[
                   Text(
-                    '${plan.isCurrent ? '当前计划' : '已结束'} · 第 ${plan.roundNumber} 轮',
+                    '第 ${plan.roundNumber} 轮计划${plan.isCurrent ? '' : ' · 已结束'}',
                     key: const ValueKey('plan-item-context'),
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   if (plan.title != null) Text(plan.title!),
                   Text(
-                    '${items.where((i) => i.status == PlanItemStatus.next).length} 个下一步 · '
-                    '${items.where((i) => i.status == PlanItemStatus.dispatched).length} 个已派发',
+                    [
+                      '${items.length} 个步骤',
+                      if (items.any((i) => i.status == PlanItemStatus.next))
+                        '${items.where((i) => i.status == PlanItemStatus.next).length} 个下一步',
+                      if (items.any(
+                        (i) => i.status == PlanItemStatus.dispatched,
+                      ))
+                        '${items.where((i) => i.status == PlanItemStatus.dispatched).length} 个已派发',
+                    ].join(' · '),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -378,6 +383,8 @@ class PlanDetailPage extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: 12),
+                Text('计划步骤', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
                 ...List.generate(
                   items.length,
                   (index) => _PlanItemRow(
@@ -440,30 +447,43 @@ class PlanDetailPage extends StatelessWidget {
                     },
                   ),
                 if (plan != null) ...[
-                  const Divider(height: 32),
+                  const Divider(height: 24),
                   Row(
                     children: [
-                      Text(
-                        '复盘',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
+                      Text('复盘', style: Theme.of(context).textTheme.bodySmall),
                       const Spacer(),
-                      TextButton.icon(
+                      IconButton(
                         key: const ValueKey('add-review-note'),
                         onPressed: () => _editReviewNote(context, plan: plan),
-                        icon: const Icon(Icons.add_comment_outlined),
-                        label: const Text('添加复盘'),
+                        icon: const Icon(Icons.add, size: 20),
+                        tooltip: '添加复盘',
                       ),
                     ],
                   ),
-                  if (reviews.isEmpty) const Text('还没有复盘记录'),
-                  ...reviews.map(
-                    (note) => _ReviewNoteRow(
-                      note: note,
-                      onEdit: () => _editReviewNote(context, note: note),
-                      onDelete: () => _deleteReviewNote(context, note),
+                  if (reviews.isNotEmpty)
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(
+                        '上次记录：${reviews.first.content}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      subtitle: Text(
+                        '查看全部 ${reviews.length} 条',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      children: reviews
+                          .map(
+                            (note) => _ReviewNoteRow(
+                              note: note,
+                              onEdit: () =>
+                                  _editReviewNote(context, note: note),
+                              onDelete: () => _deleteReviewNote(context, note),
+                            ),
+                          )
+                          .toList(),
                     ),
-                  ),
                 ],
                 if (history.isNotEmpty)
                   ExpansionTile(
@@ -641,7 +661,24 @@ class PlanDetailPage extends StatelessWidget {
   }
 }
 
-String _workspacePath(PlanningController controller, WorldNode node) {
+double _workspaceTitleHeight(BuildContext context, String title) {
+  final painter =
+      TextPainter(
+        text: TextSpan(
+          text: title,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(
+        maxWidth: (MediaQuery.sizeOf(context).width - 200).clamp(100.0, 1000.0),
+      );
+  final height = (painter.height + 16).clamp(kToolbarHeight, double.infinity);
+  painter.dispose();
+  return height;
+}
+
+List<String> _workspacePath(PlanningController controller, WorldNode node) {
   final names = <String>[];
   final seen = <String>{};
   WorldNode? cursor = node;
@@ -659,7 +696,48 @@ String _workspacePath(PlanningController controller, WorldNode node) {
     }
     cursor = controller.nodeFor(cursor.parentWorldNodeId ?? '');
   }
-  return names.join(' › ');
+  return names;
+}
+
+class _WorldContext extends StatelessWidget {
+  const _WorldContext({required this.names});
+  final List<String> names;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final step = names.length < 2
+          ? 0.0
+          : (constraints.maxWidth * .22 / (names.length - 1)).clamp(0.0, 12.0);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var index = 0; index < names.length; index++)
+            Padding(
+              padding: EdgeInsets.only(left: index * step, bottom: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (index > 0)
+                    const Text('└ ', style: TextStyle(color: Colors.grey)),
+                  Expanded(
+                    child: Text(
+                      names[index],
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: index == names.length - 1
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    },
+  );
 }
 
 /// One editor for World, Overview and Home refinement. Unsubmitted text is local.
@@ -681,11 +759,16 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
   final _note = TextEditingController();
   final _focus = FocusNode();
   bool _busy = false, _next = false, _details = false;
+  bool _active = false;
   String? _error;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _active = widget.autofocus;
+    _focus.addListener(() {
+      if (_focus.hasFocus && !_active) setState(() => _active = true);
+    });
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -751,7 +834,7 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
+    padding: const EdgeInsets.symmetric(vertical: 4),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -763,56 +846,74 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
           textInputAction: TextInputAction.done,
           onEditingComplete: () {},
           onSubmitted: (_) => _submit(),
-          onTap: _reveal,
+          onTap: () {
+            setState(() => _active = true);
+            _reveal();
+          },
           decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
             hintText: '添加一步……',
             prefixIcon: const Icon(Icons.add),
             errorText: _error,
-            suffixIcon: IconButton(
-              key: const ValueKey('add-plan-item'),
-              tooltip: '添加',
-              onPressed: _busy ? null : _submit,
-              icon: const Icon(Icons.arrow_upward),
-            ),
+            suffixIcon: !_active
+                ? null
+                : IconButton(
+                    key: const ValueKey('add-plan-item'),
+                    tooltip: '添加',
+                    onPressed: _busy ? null : _submit,
+                    icon: const Icon(Icons.arrow_upward),
+                  ),
           ),
         ),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  key: const ValueKey('plan-item-initial-status'),
-                  value: _next,
-                  onChanged: _busy
-                      ? null
-                      : (value) => setState(() => _next = value ?? false),
+        if (_active)
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    key: const ValueKey('plan-item-initial-status'),
+                    value: _next,
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _next = value ?? false),
+                  ),
+                  const Text('设为下一步'),
+                ],
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() => _details = !_details);
+                  _reveal();
+                },
+                child: const Text('说明'),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
+                  textStyle: Theme.of(context).textTheme.labelSmall,
                 ),
-                const Text('设为下一步'),
-              ],
-            ),
-            TextButton(
-              onPressed: () => setState(() => _details = !_details),
-              child: const Text('说明'),
-            ),
-            TextButton(
-              onPressed: _busy
-                  ? null
-                  : () {
-                      _title.clear();
-                      _note.clear();
-                      _focus.unfocus();
-                      setState(() {
-                        _next = false;
-                        _error = null;
-                        _details = false;
-                      });
-                    },
-              child: const Text('取消'),
-            ),
-          ],
-        ),
+                onPressed: _busy
+                    ? null
+                    : () {
+                        _title.clear();
+                        _note.clear();
+                        _focus.unfocus();
+                        setState(() {
+                          _next = false;
+                          _error = null;
+                          _details = false;
+                          _active = false;
+                        });
+                      },
+                child: const Text('取消'),
+              ),
+            ],
+          ),
         if (_details)
           TextField(
             key: const ValueKey('plan-item-note'),
@@ -844,6 +945,10 @@ class _ReviewNoteRow extends StatelessWidget {
     children: [
       ListTile(
         contentPadding: EdgeInsets.zero,
+        dense: true,
+        visualDensity: const VisualDensity(vertical: -2),
+        minVerticalPadding: 2,
+        horizontalTitleGap: 4,
         title: Text(note.content),
         subtitle: Text(
           note.updatedAt == note.createdAt
@@ -899,14 +1004,17 @@ class _PlanItemRow extends StatelessWidget {
       child: ListTile(
         key: ValueKey('plan-item-${item.id}'),
         contentPadding: EdgeInsets.zero,
+        dense: true,
+        visualDensity: const VisualDensity(vertical: -2),
+        minVerticalPadding: 2,
+        horizontalTitleGap: 4,
         leading: IconButton(
           key: ValueKey('toggle-next-${item.id}'),
           tooltip: item.status == PlanItemStatus.next ? '改为草稿' : '设为下一步',
           onPressed: editable && mutable ? onToggle : null,
           icon: Icon(
-            item.status == PlanItemStatus.next
-                ? Icons.adjust
-                : _itemIcon(item.status),
+            _itemIcon(item.status),
+            size: item.status == PlanItemStatus.draft ? 7 : 20,
           ),
         ),
         title: Text(item.title),
@@ -926,21 +1034,27 @@ class _PlanItemRow extends StatelessWidget {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (mutable && index > 0)
-                    IconButton(
-                      tooltip: '上移',
-                      onPressed: () => onMove(index - 1),
-                      icon: const Icon(Icons.arrow_upward, size: 19),
-                    ),
-                  if (mutable && index < count - 1)
-                    IconButton(
-                      tooltip: '下移',
-                      onPressed: () => onMove(index + 1),
-                      icon: const Icon(Icons.arrow_downward, size: 19),
-                    ),
                   PopupMenuButton<String>(
-                    onSelected: onAction,
+                    onSelected: (value) {
+                      if (value == 'move-up') {
+                        onMove(index - 1);
+                      } else if (value == 'move-down') {
+                        onMove(index + 1);
+                      } else {
+                        onAction(value);
+                      }
+                    },
                     itemBuilder: (_) => [
+                      if (mutable && index > 0)
+                        const PopupMenuItem(
+                          value: 'move-up',
+                          child: Text('上移'),
+                        ),
+                      if (mutable && index < count - 1)
+                        const PopupMenuItem(
+                          value: 'move-down',
+                          child: Text('下移'),
+                        ),
                       if (mutable)
                         const PopupMenuItem(value: 'edit', child: Text('编辑详情')),
                       if (mutable)
@@ -1162,8 +1276,8 @@ String _itemStatusText(PlanItemStatus status) => switch (status) {
 };
 
 IconData _itemIcon(PlanItemStatus status) => switch (status) {
-  PlanItemStatus.draft => Icons.radio_button_unchecked,
-  PlanItemStatus.next => Icons.adjust,
+  PlanItemStatus.draft => Icons.fiber_manual_record,
+  PlanItemStatus.next => Icons.arrow_forward,
   PlanItemStatus.dispatched => Icons.call_made,
   PlanItemStatus.done => Icons.check_circle_outline,
   PlanItemStatus.dropped => Icons.remove_circle_outline,
