@@ -139,3 +139,8 @@ These are automated platform/layout checks. Physical phone IME and native Window
 mouse/keyboard acceptance have not been repeated for this revision; no real-data
 app installation or business mutation was performed during this change.
 Ordinary Windows Debug and Android Debug builds both succeed.
+
+## Formal rollout and no-op native check (2026-09-13)
+
+Private device rollout evidence omitted from this historical version.
+
