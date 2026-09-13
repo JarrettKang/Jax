@@ -110,3 +110,32 @@ revision, not this UI refinement.
 Validation: all 298 tests pass; flutter analyze reports no issues; ordinary
 Windows Debug and Android Debug builds succeed. Physical-device keyboard and
 native desktop visual acceptance have not been repeated for this revision.
+
+## Draft inline title editing (2026-09-13)
+
+PlanDetailPage now hides round, optional plan title and all step/status counts in
+the main workspace; overview/history and roundNumber data remain unchanged.
+_WorkspaceDivider supplies both section dividers with outlineVariant color and
+0.5 thickness. Quick Add title and optional-note fields have no underline.
+
+_DraftInlineContent owns its text controller and focus node. Only current-plan
+draft main text opens this inline single-line editor, placing the caret at the
+end. Enter/Done, tapping outside or focus traversal saves through the existing
+PlanningController.editItem method, preserving the note. Blank/unchanged input
+exits without a write; Escape cancels. Save failures keep the editor and display
+the error. Stable row keys preserve edits across reorder/load; changing item or
+leaving draft cancels the editor. More and marker controls are separate targets.
+TextField scrollPadding and Flutter's focused-field keyboard reveal handle
+the active editor; no scroll-to-top operation is performed.
+
+No schema, repository, state-machine, dispatch, Today, Event, Review or navigation
+logic changed. Android (390px) and Windows (1200px) widget tests cover caret/focus,
+submit, outside save, empty rollback, Escape, refresh and reorder preservation,
+keyboard insets, More isolation, direct status control and all four non-draft
+states. Row comparisons preserve all fields except title/update timestamp;
+execution tables, plan data and tombstones remain unchanged. All 300 tests pass,
+including the added targeted reorder/inset checks; analyze has no issues.
+These are automated platform/layout checks. Physical phone IME and native Windows
+mouse/keyboard acceptance have not been repeated for this revision; no real-data
+app installation or business mutation was performed during this change.
+Ordinary Windows Debug and Android Debug builds both succeed.

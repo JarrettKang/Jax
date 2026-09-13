@@ -103,7 +103,7 @@ void main() {
         ]) {
           expect(find.text(name), findsOneWidget);
         }
-        expect(find.text('12 个步骤'), findsOneWidget);
+        expect(find.text('12 个步骤'), findsNothing);
         expect(find.text('计划步骤'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.scrollUntilVisible(

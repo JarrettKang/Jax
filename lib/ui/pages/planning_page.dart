@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/entities/plan.dart';
 import '../../core/entities/plan_item.dart';
@@ -336,27 +337,8 @@ class PlanDetailPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
                 _WorldContext(names: _workspacePath(controller, node)),
-                const SizedBox(height: 16),
-                if (plan != null) ...[
-                  Text(
-                    '第 ${plan.roundNumber} 轮计划${plan.isCurrent ? '' : ' · 已结束'}',
-                    key: const ValueKey('plan-item-context'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (plan.title != null) Text(plan.title!),
-                  Text(
-                    [
-                      '${items.length} 个步骤',
-                      if (items.any((i) => i.status == PlanItemStatus.next))
-                        '${items.where((i) => i.status == PlanItemStatus.next).length} 个下一步',
-                      if (items.any(
-                        (i) => i.status == PlanItemStatus.dispatched,
-                      ))
-                        '${items.where((i) => i.status == PlanItemStatus.dispatched).length} 个已派发',
-                    ].join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                const _WorkspaceDivider(),
+                Text('计划步骤', style: Theme.of(context).textTheme.titleSmall),
                 if (plan == null && history.isNotEmpty) ...[
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
@@ -383,12 +365,17 @@ class PlanDetailPage extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: 12),
-                Text('计划步骤', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 4),
                 ...List.generate(
                   items.length,
                   (index) => _PlanItemRow(
+                    key: ValueKey('workspace-row-${items[index].id}'),
                     item: items[index],
+                    onRename: (title) => controller.editItem(
+                      items[index],
+                      title,
+                      items[index].note,
+                    ),
                     linkedEvent: controller.linkedEventFor(items[index].id),
                     index: index,
                     count: items.length,
@@ -447,7 +434,7 @@ class PlanDetailPage extends StatelessWidget {
                     },
                   ),
                 if (plan != null) ...[
-                  const Divider(height: 24),
+                  const _WorkspaceDivider(),
                   Row(
                     children: [
                       Text('复盘', style: Theme.of(context).textTheme.bodySmall),
@@ -699,6 +686,16 @@ List<String> _workspacePath(PlanningController controller, WorldNode node) {
   return names;
 }
 
+class _WorkspaceDivider extends StatelessWidget {
+  const _WorkspaceDivider();
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 24,
+    thickness: .5,
+    color: Theme.of(context).colorScheme.outlineVariant,
+  );
+}
+
 class _WorldContext extends StatelessWidget {
   const _WorldContext({required this.names});
   final List<String> names;
@@ -854,6 +851,12 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(vertical: 10),
             hintText: '添加一步……',
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
             prefixIcon: const Icon(Icons.add),
             errorText: _error,
             suffixIcon: !_active
@@ -921,7 +924,12 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
             readOnly: _busy,
             minLines: 2,
             maxLines: 4,
-            decoration: const InputDecoration(hintText: '说明（可选）'),
+            decoration: const InputDecoration(
+              hintText: '说明（可选）',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
           ),
       ],
     ),
@@ -971,6 +979,8 @@ class _ReviewNoteRow extends StatelessWidget {
 
 class _PlanItemRow extends StatelessWidget {
   const _PlanItemRow({
+    super.key,
+    required this.onRename,
     required this.item,
     required this.linkedEvent,
     required this.index,
@@ -983,6 +993,7 @@ class _PlanItemRow extends StatelessWidget {
     required this.isEventToday,
   });
   final PlanItem item;
+  final Future<void> Function(String title) onRename;
   final JaxEvent? linkedEvent;
   final int index;
   final int count;
@@ -1017,8 +1028,12 @@ class _PlanItemRow extends StatelessWidget {
             size: item.status == PlanItemStatus.draft ? 7 : 20,
           ),
         ),
-        title: Text(item.title),
-        subtitle: Text(_itemSubtitle(item, linkedEvent)),
+        title: _DraftInlineContent(
+          item: item,
+          enabled: editable && item.status == PlanItemStatus.draft,
+          subtitle: _itemSubtitle(item, linkedEvent),
+          onSave: onRename,
+        ),
         trailing:
             item.status == PlanItemStatus.dispatched &&
                 linkedEvent != null &&
@@ -1073,6 +1088,154 @@ class _PlanItemRow extends StatelessWidget {
             : null,
       ),
     );
+  }
+}
+
+class _DraftInlineContent extends StatefulWidget {
+  const _DraftInlineContent({
+    required this.item,
+    required this.enabled,
+    required this.subtitle,
+    required this.onSave,
+  });
+  final PlanItem item;
+  final bool enabled;
+  final String subtitle;
+  final Future<void> Function(String) onSave;
+  @override
+  State<_DraftInlineContent> createState() => _DraftInlineContentState();
+}
+
+class _DraftInlineContentState extends State<_DraftInlineContent> {
+  final _text = TextEditingController();
+  final _focus = FocusNode();
+  bool _editing = false, _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_focusChanged);
+  }
+
+  void _focusChanged() {
+    if (!_focus.hasFocus && _editing) _save();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DraftInlineContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id || !widget.enabled) {
+      _editing = false;
+      _error = null;
+      _focus.unfocus();
+    }
+  }
+
+  void _begin() {
+    if (!widget.enabled || _saving) return;
+    _text.value = TextEditingValue(
+      text: widget.item.title,
+      selection: TextSelection.collapsed(offset: widget.item.title.length),
+    );
+    setState(() {
+      _editing = true;
+      _error = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _editing) _focus.requestFocus();
+    });
+  }
+
+  void _finish() {
+    setState(() {
+      _editing = false;
+      _error = null;
+    });
+    _focus.unfocus();
+  }
+
+  Future<void> _save() async {
+    if (!_editing || _saving) return;
+    final title = _text.text.trim();
+    if (title.isEmpty || title == widget.item.title) {
+      _finish();
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(title);
+      if (mounted) _finish();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_focusChanged);
+    _focus.dispose();
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_editing) {
+      return Focus(
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape &&
+              !_saving) {
+            _finish();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: TextField(
+          key: ValueKey('draft-title-${widget.item.id}'),
+          controller: _text,
+          focusNode: _focus,
+          readOnly: _saving,
+          textInputAction: TextInputAction.done,
+          scrollPadding: const EdgeInsets.all(32),
+          onEditingComplete: () {},
+          onSubmitted: (_) => _save(),
+          onTapOutside: (_) => _save(),
+          decoration: InputDecoration(
+            isDense: true,
+            border: InputBorder.none,
+            errorText: _error,
+          ),
+        ),
+      );
+    }
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(widget.item.title),
+        Text(
+          widget.subtitle,
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+    return widget.enabled
+        ? InkWell(
+            key: ValueKey('draft-edit-${widget.item.id}'),
+            onTap: _begin,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: content,
+            ),
+          )
+        : content;
   }
 }
 
