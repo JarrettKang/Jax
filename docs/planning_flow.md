@@ -173,3 +173,8 @@ acceptance have not been repeated for this revision; previous rollout evidence
 above applies to earlier revisions. No real-data app was installed or modified.
 Validation: all 300 tests pass, analyze reports no issues, and final ordinary
 Windows Debug and Android Debug builds succeed.
+
+## Capture editor formal Android rollout (2026-09-13)
+
+Private device rollout evidence omitted from this historical version.
+
