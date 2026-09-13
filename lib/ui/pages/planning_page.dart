@@ -753,9 +753,9 @@ class _PlanQuickAdd extends StatefulWidget {
 class _PlanQuickAddState extends State<_PlanQuickAdd>
     with WidgetsBindingObserver {
   final _title = TextEditingController();
-  final _note = TextEditingController();
+
   final _focus = FocusNode();
-  bool _busy = false, _next = false, _details = false;
+  bool _busy = false;
   bool _active = false;
   String? _error;
   @override
@@ -791,7 +791,7 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _title.dispose();
-    _note.dispose();
+
     _focus.dispose();
     super.dispose();
   }
@@ -809,15 +809,9 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
       _error = null;
     });
     try {
-      await widget.onSubmit(
-        title,
-        _note.text.trim().isEmpty ? null : _note.text.trim(),
-        _next ? PlanItemStatus.next : PlanItemStatus.draft,
-      );
+      await widget.onSubmit(title, null, PlanItemStatus.draft);
       if (!mounted) return;
       _title.clear();
-      _note.clear();
-      setState(() => _next = false);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -829,109 +823,148 @@ class _PlanQuickAddState extends State<_PlanQuickAdd>
     }
   }
 
+  void _cancel() {
+    if (_busy) return;
+    _title.clear();
+    _focus.unfocus();
+    setState(() {
+      _active = false;
+      _error = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextField(
-          key: const ValueKey('plan-item-title'),
-          controller: _title,
-          focusNode: _focus,
-          readOnly: _busy,
-          textInputAction: TextInputAction.done,
-          onEditingComplete: () {},
-          onSubmitted: (_) => _submit(),
-          onTap: () {
-            setState(() => _active = true);
-            _reveal();
-          },
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-            hintText: '添加一步……',
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            disabledBorder: InputBorder.none,
-            errorBorder: InputBorder.none,
-            focusedErrorBorder: InputBorder.none,
-            prefixIcon: const Icon(Icons.add),
-            errorText: _error,
-            suffixIcon: !_active
-                ? null
-                : IconButton(
-                    key: const ValueKey('add-plan-item'),
-                    tooltip: '添加',
-                    onPressed: _busy ? null : _submit,
-                    icon: const Icon(Icons.arrow_upward),
-                  ),
-          ),
-        ),
-        if (_active)
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Checkbox(
-                    key: const ValueKey('plan-item-initial-status'),
-                    value: _next,
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() => _next = value ?? false),
-                  ),
-                  const Text('设为下一步'),
-                ],
-              ),
-              TextButton(
-                onPressed: () {
-                  setState(() => _details = !_details);
-                  _reveal();
-                },
-                child: const Text('说明'),
-              ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant,
-                  textStyle: Theme.of(context).textTheme.labelSmall,
-                ),
-                onPressed: _busy
-                    ? null
-                    : () {
-                        _title.clear();
-                        _note.clear();
-                        _focus.unfocus();
-                        setState(() {
-                          _next = false;
-                          _error = null;
-                          _details = false;
-                          _active = false;
-                        });
-                      },
-                child: const Text('取消'),
-              ),
-            ],
-          ),
-        if (_details)
+    child: _InlineTitleEditor(
+      fieldKey: const ValueKey('plan-item-title'),
+      actionKey: const ValueKey('add-plan-item'),
+      controller: _title,
+      focusNode: _focus,
+      busy: _busy,
+      active: _active,
+      hint: '添加一步……',
+      prefix: const Icon(Icons.add),
+      error: _error,
+      actionLabel: '添加',
+      onSubmit: _submit,
+      onCancel: _cancel,
+      onOutside: () {
+        if (!mounted || _busy) return;
+        if (_title.text.trim().isEmpty) {
+          _cancel();
+        } else {
+          _focus.unfocus();
+        }
+      },
+      onTap: () {
+        setState(() => _active = true);
+        _reveal();
+      },
+    ),
+  );
+}
+
+class _InlineTitleEditor extends StatelessWidget {
+  const _InlineTitleEditor({
+    required this.fieldKey,
+    required this.actionKey,
+    required this.controller,
+    required this.focusNode,
+    required this.busy,
+    required this.active,
+    required this.actionLabel,
+    required this.onSubmit,
+    required this.onCancel,
+    this.cancelKey,
+    this.hint,
+    this.prefix,
+    this.error,
+    this.onTap,
+    this.onOutside,
+  });
+  final Key fieldKey, actionKey;
+  final Key? cancelKey;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool busy, active;
+  final String actionLabel;
+  final String? hint, error;
+  final Widget? prefix;
+  final VoidCallback onSubmit, onCancel;
+  final VoidCallback? onTap, onOutside;
+  @override
+  Widget build(BuildContext context) => TextFieldTapRegion(
+    child: Focus(
+      onFocusChange: (hasFocus) {
+        if (!hasFocus && !busy) onOutside?.call();
+      },
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.escape &&
+            !busy) {
+          onCancel();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           TextField(
-            key: const ValueKey('plan-item-note'),
-            controller: _note,
-            readOnly: _busy,
-            minLines: 2,
-            maxLines: 4,
-            decoration: const InputDecoration(
-              hintText: '说明（可选）',
+            key: fieldKey,
+            controller: controller,
+            focusNode: focusNode,
+            readOnly: busy,
+            textInputAction: TextInputAction.done,
+            scrollPadding: const EdgeInsets.all(64),
+            onEditingComplete: () {},
+            onSubmitted: (_) => onSubmit(),
+            onTap: onTap,
+            onTapOutside: (_) => onOutside?.call(),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              hintText: hint,
+              prefixIcon: prefix,
+              errorText: error,
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
             ),
           ),
-      ],
+          if (active)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                    key: cancelKey,
+                    onPressed: busy ? null : onCancel,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant,
+                    ),
+                    child: const Text('取消'),
+                  ),
+                  TextButton(
+                    key: actionKey,
+                    onPressed: busy ? null : onSubmit,
+                    style: TextButton.styleFrom(
+                      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    child: Text(actionLabel),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     ),
   );
 }
@@ -1113,16 +1146,6 @@ class _DraftInlineContentState extends State<_DraftInlineContent> {
   String? _error;
 
   @override
-  void initState() {
-    super.initState();
-    _focus.addListener(_focusChanged);
-  }
-
-  void _focusChanged() {
-    if (!_focus.hasFocus && _editing) _save();
-  }
-
-  @override
   void didUpdateWidget(covariant _DraftInlineContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.id != widget.item.id || !widget.enabled) {
@@ -1156,7 +1179,7 @@ class _DraftInlineContentState extends State<_DraftInlineContent> {
   }
 
   Future<void> _save() async {
-    if (!_editing || _saving) return;
+    if (!mounted || !_editing || _saving) return;
     final title = _text.text.trim();
     if (title.isEmpty || title == widget.item.title) {
       _finish();
@@ -1178,7 +1201,6 @@ class _DraftInlineContentState extends State<_DraftInlineContent> {
 
   @override
   void dispose() {
-    _focus.removeListener(_focusChanged);
     _focus.dispose();
     _text.dispose();
     super.dispose();
@@ -1187,32 +1209,19 @@ class _DraftInlineContentState extends State<_DraftInlineContent> {
   @override
   Widget build(BuildContext context) {
     if (_editing) {
-      return Focus(
-        onKeyEvent: (_, event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.escape &&
-              !_saving) {
-            _finish();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: TextField(
-          key: ValueKey('draft-title-${widget.item.id}'),
-          controller: _text,
-          focusNode: _focus,
-          readOnly: _saving,
-          textInputAction: TextInputAction.done,
-          scrollPadding: const EdgeInsets.all(32),
-          onEditingComplete: () {},
-          onSubmitted: (_) => _save(),
-          onTapOutside: (_) => _save(),
-          decoration: InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-            errorText: _error,
-          ),
-        ),
+      return _InlineTitleEditor(
+        fieldKey: ValueKey('draft-title-${widget.item.id}'),
+        actionKey: ValueKey('save-draft-${widget.item.id}'),
+        cancelKey: ValueKey('cancel-draft-${widget.item.id}'),
+        controller: _text,
+        focusNode: _focus,
+        busy: _saving,
+        active: true,
+        error: _error,
+        actionLabel: '保存',
+        onSubmit: _save,
+        onCancel: _finish,
+        onOutside: _save,
       );
     }
     final content = Column(

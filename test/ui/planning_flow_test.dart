@@ -119,8 +119,9 @@ void main() {
         await settle(tester);
         expect(
           find.byKey(const ValueKey('plan-item-initial-status')),
-          findsOneWidget,
+          findsNothing,
         );
+        expect(find.byKey(const ValueKey('add-plan-item')), findsOneWidget);
         expect(find.text('还没有复盘记录'), findsNothing);
         expect(tester.takeException(), isNull);
         expect(c.itemsFor(plan.id), hasLength(12));
@@ -207,11 +208,20 @@ void main() {
             c.itemsFor(plan.id).every((i) => i.status == PlanItemStatus.draft),
             isTrue,
           );
-          await tester.tap(
+          expect(
             find.byKey(const ValueKey('plan-item-initial-status')),
+            findsNothing,
           );
           await tester.enterText(input, '检查平衡性');
           await tester.testTextInput.receiveAction(TextInputAction.done);
+          await settle(tester);
+          expect(c.itemsFor(plan.id).last.status, PlanItemStatus.draft);
+          await tester.ensureVisible(
+            find.byKey(ValueKey('toggle-next-${c.itemsFor(plan.id).last.id}')),
+          );
+          await tester.tap(
+            find.byKey(ValueKey('toggle-next-${c.itemsFor(plan.id).last.id}')),
+          );
           await settle(tester);
           expect(c.itemsFor(plan.id).last.status, PlanItemStatus.next);
           expect(

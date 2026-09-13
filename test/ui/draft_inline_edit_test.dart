@@ -134,6 +134,32 @@ void main() {
           expect(input, findsNothing);
           expect(find.text('Outside save'), findsOneWidget);
           await begin();
+          await tester.enterText(input, 'Cancel must not save');
+          await tester.tap(
+            find.byKey(const ValueKey('cancel-draft-edit-draft')),
+          );
+          await settle();
+          expect(input, findsNothing);
+          expect(find.text('Outside save'), findsOneWidget);
+          expect(
+            (await app.database.query(
+              'plan_items',
+              where: 'id = ?',
+              whereArgs: ['edit-draft'],
+            )).single['title'],
+            'Outside save',
+          );
+          await begin();
+          await tester.enterText(input, 'Button save');
+          await tester.tap(find.byKey(const ValueKey('save-draft-edit-draft')));
+          await settle();
+          expect(input, findsNothing);
+          expect(find.text('Button save'), findsOneWidget);
+          await begin();
+          await tester.enterText(input, 'Outside save');
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await settle();
+          await begin();
           await tester.enterText(input, 'Discard this');
           await tester.sendKeyEvent(LogicalKeyboardKey.escape);
           await settle();

@@ -603,15 +603,18 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   使用统一浅灰分隔线，Quick Add 输入区域不显示黑色下划线。
   “计划步骤”引出紧凑列表；状态标记区分 draft/next/dispatched/done/dropped。
   空 Plan 引导用户先写第一件事，之后可随时补充、调整或删除。
-- Quick Add 是列表末行，聚焦后显示次级选项，取消弱化；原有上移/下移收进 More。
+- Quick Add 是列表末行，聚焦后只显示标题与“取消 / 添加”；原有上移/下移收进 More。
   复盘无记录时只显示轻量新增入口，有记录时显示最新预览并可展开全部，保留 CRUD。
 - Plan round 表示思路迭代，不是编辑次数。Plan 保持可修改的草稿式工作空间。
 - current Plan 的 draft 步骤点击主文本可原地编辑标题，末尾聚焦，Enter/Done 或失焦保存；
-  空标题恢复原名并退出，Esc 取消。说明、ID、状态和顺序不变，其它状态不开放此快捷入口。
+  使用与新建相同的轻量编辑器，但按钮为“取消 / 保存”。空标题恢复原名并退出，Esc 或
+  取消按钮放弃修改且不写数据库。说明、ID、状态和顺序不变，其它状态不开放此快捷入口。
   状态标记与 More 保持独立操作，详细编辑继续可用。
-- 新增 PlanItem 的唯一主路径是列表末尾 inline Quick Add，默认 draft，可显式选择 next；
+- Quick Add = Capture：唯一主路径是列表末尾 inline 输入标题，固定创建 draft；
   Enter / Android Done / 可见添加按钮提交，保存后清空并保持键盘焦点，允许同名步骤。
-  空标题仅轻量提示，失败保留输入。可选说明在行内展开；现有步骤的详细编辑暂保留弹窗。
+  空标题仅轻量提示，失败保留输入。取消丢弃输入并收起，不增加确认弹窗。
+  PlanItem = Refine：创建后的状态操作、说明及详细编辑继续使用已有入口；Quick Add
+  不显示 next 选择、说明或箭头提交按钮，不删除任何说明/状态能力。
 - next 不自动 dispatch。PlanItem scoped order 保持用户顺序，不因状态重排；已有步骤、
   执行状态、复盘和历史入口仍可见。Windows 内容宽度限制820，Android自然滚动并避让键盘。
 - Overview 保留 focused WorldNode 工作台，显示轮次、数量及前两个 next 摘要，不展开完整计划。

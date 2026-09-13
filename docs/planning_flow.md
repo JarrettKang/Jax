@@ -144,3 +144,32 @@ Ordinary Windows Debug and Android Debug builds both succeed.
 
 Private device rollout evidence omitted from this historical version.
 
+## Capture-only Quick Add (2026-09-13)
+
+Quick Add now accepts only a title and always submits null note + draft through
+the existing repository/controller path. The next checkbox, note editor and
+up-arrow submit control have been removed from this UI only. Existing item
+status controls and More -> detailed editing still provide refinement and notes.
+
+_PlanQuickAdd and _DraftInlineContent share _InlineTitleEditor: a borderless title
+field and a compact right-aligned Cancel + Add/Save text-button row. The primary
+action uses the theme accent and a stronger label; no filled panel or modal was
+added. Enter/Done invokes the same submission as the button; Escape cancels.
+Capture success clears input and retains focus for continuous entry. Capture
+cancel discards input and collapses. Outside capture clicks never create an item:
+empty input collapses; nonempty input loses focus but remains available.
+
+Draft cancel discards edits without calling persistence. TextFieldTapRegion and
+a Focus ancestor wrap the entire editor including buttons, so clicking Cancel
+does not count as an outside tap or a departure from the editor's focus group.
+Outside clicks/focus traversal out of the group still save draft edits. Empty
+capture stays open with validation; empty draft restores the stored title.
+No schema, state machine, dispatch, Today, Event or note persistence changed.
+
+Android/Windows widget regressions cover add/save/cancel, unchanged execution
+facts, continuous Done, Escape, outside save, field rebuild/reorder, keyboard
+insets and a 360px scaled Home editor. Native phone IME and native desktop
+acceptance have not been repeated for this revision; previous rollout evidence
+above applies to earlier revisions. No real-data app was installed or modified.
+Validation: all 300 tests pass, analyze reports no issues, and final ordinary
+Windows Debug and Android Debug builds succeed.

@@ -65,7 +65,7 @@ void main() {
   });
 
   testWidgets(
-    'running Planned Event opens canonical editor and appends next without execution disturbance',
+    'running Planned Event opens canonical editor and captures draft without execution disturbance',
     (tester) async {
       await _setViewport(tester, const Size(1200, 800));
       final fixture = _Fixture.current();
@@ -86,14 +86,11 @@ void main() {
         find.byKey(const ValueKey('plan-item-title')),
         '补实验图',
       );
-      await tester.tap(find.text('说明'));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('plan-item-note')),
-        '先整理原始数据',
+      expect(find.text('说明'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('plan-item-initial-status')),
+        findsNothing,
       );
-      await tester.tap(find.byKey(const ValueKey('plan-item-initial-status')));
-      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('add-plan-item')));
       await tester.pumpAndSettle();
@@ -102,8 +99,8 @@ void main() {
       expect(fixture.planning.items.first.status, PlanItemStatus.dispatched);
       final added = fixture.planning.items.last;
       expect(added.title, '补实验图');
-      expect(added.note, '先整理原始数据');
-      expect(added.status, PlanItemStatus.next);
+      expect(added.note, isNull);
+      expect(added.status, PlanItemStatus.draft);
       expect(added.sortOrder, 1);
       expect(fixture.events.events.single, eventBefore);
       expect(fixture.events.segments.single.id, segmentBefore.id);
@@ -127,7 +124,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('plan-item-initial-status')),
-        findsOneWidget,
+        findsNothing,
       );
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('取消'));
