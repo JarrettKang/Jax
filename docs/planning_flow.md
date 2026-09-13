@@ -244,3 +244,8 @@ flutter analyze reports no issues, and ordinary Windows Debug/Android Debug buil
 both succeed. Log: .debug_backups/planning_withdraw_20260913_final_tests.log.
 Platform UI coverage above is automated widget testing; this revision has not
 been installed for physical-phone or native desktop interaction acceptance.
+
+## Direct dispatch formal Android rollout (2026-09-13)
+
+Private device rollout evidence omitted from this historical version.
+
