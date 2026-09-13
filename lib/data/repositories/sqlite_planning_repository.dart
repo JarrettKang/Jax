@@ -63,7 +63,7 @@ class SqlitePlanningRepository
     required DateTime now,
   }) async {
     if (eventIdsByPlanItemId.isEmpty) {
-      throw const DomainFailure('请至少选择一个今日建议');
+      throw const DomainFailure('请至少选择一个计划步骤');
     }
     final utc = now.toUtc();
     try {
@@ -90,10 +90,10 @@ class SqlitePlanningRepository
           if (rows.single['plan_status'] != 'current' ||
               rows.single['node_status'] != 'inProgress' ||
               rows.single['node_is_focused'] != 1) {
-            throw const DomainFailure('只有关注中世界节点的当前计划下一步可以加入今日');
+            throw const DomainFailure('只有关注中世界节点的当前计划步骤可以加入今日');
           }
-          if (rows.single['item_status'] != PlanItemStatus.next.name) {
-            throw const DomainFailure('计划项已变化，请刷新今日建议');
+          if (!{'draft', 'next'}.contains(rows.single['item_status'])) {
+            throw const DomainFailure('计划项已变化，请刷新后重试');
           }
           final linked = await tx.query(
             'events',
@@ -130,7 +130,7 @@ class SqlitePlanningRepository
               'status': PlanItemStatus.dispatched.name,
               'updated_at_utc': utc.millisecondsSinceEpoch,
             },
-            where: "id = ? AND status = 'next'",
+            where: "id = ? AND status IN ('draft','next')",
             whereArgs: [entry.key],
           );
           if (updated != 1) {
@@ -151,6 +151,46 @@ class SqlitePlanningRepository
       throw const DomainFailure('计划项派发冲突，请刷新后重试');
     }
   }
+
+  @override
+  Future<void> withdrawPlanItem({
+    required String planItemId,
+    required DateTime now,
+  }) => _app.database.transaction((tx) async {
+    final rows = await tx.rawQuery(
+      '''
+      SELECT e.id FROM events e
+      JOIN plan_items i ON i.id = e.source_plan_item_id
+      WHERE i.id = ? AND i.status = 'dispatched'
+        AND e.status = 'pending'
+        AND e.first_started_at_utc IS NULL AND e.completed_at_utc IS NULL
+        AND NOT EXISTS (SELECT 1 FROM run_segments s WHERE s.event_id = e.id)
+      ''',
+      [planItemId],
+    );
+    if (rows.length != 1) {
+      throw const DomainFailure('只有从未执行过的已派发事项可以收回到计划');
+    }
+    final eventId = rows.single['id']! as String;
+    // Explicitly remove every JaxDay, including carry-over/history. Existing
+    // DELETE triggers record both day-plan and Event tombstones in this txn.
+    await tx.delete(
+      'event_day_plans',
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+    );
+    await tx.delete('events', where: 'id = ?', whereArgs: [eventId]);
+    final updated = await tx.update(
+      'plan_items',
+      {
+        'status': PlanItemStatus.draft.name,
+        'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+      },
+      where: "id = ? AND status = 'dispatched'",
+      whereArgs: [planItemId],
+    );
+    if (updated != 1) throw const DomainFailure('计划项已变化，请刷新后重试');
+  });
 
   @override
   Future<List<Plan>> getPlans() async => (await _app.database.query(

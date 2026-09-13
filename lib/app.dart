@@ -107,6 +107,7 @@ class _JaxAppState extends State<JaxApp> {
     if (widget.planningRepository != null &&
         widget.worldNodeRepository != null) {
       _planningController = PlanningController(
+        onExecutionChanged: _controller.load,
         planningRepository: widget.planningRepository!,
         worldNodeRepository: widget.worldNodeRepository!,
         eventRepository: widget.repository,

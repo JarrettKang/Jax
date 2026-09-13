@@ -8,6 +8,7 @@ import '../controllers/event_controller.dart';
 import '../controllers/planning_controller.dart';
 import '../theme/category_palette_colors.dart';
 import '../widgets/execution_action_buttons.dart';
+import '../widgets/event_more_menu_button.dart';
 
 class EventsPage extends StatefulWidget {
   const EventsPage({
@@ -87,6 +88,7 @@ class _EventsPageState extends State<EventsPage> {
                     for (var i = 0; i < events.length; i++)
                       _EventRow(
                         controller: controller,
+                        planning: planning,
                         event: events[i],
                         index: i,
                         count: events.length,
@@ -410,11 +412,13 @@ class _CompactEmptyState extends StatelessWidget {
 class _EventRow extends StatelessWidget {
   const _EventRow({
     required this.controller,
+    required this.planning,
     required this.event,
     required this.index,
     required this.count,
   });
   final EventController controller;
+  final PlanningController? planning;
   final JaxEvent event;
   final int index;
   final int count;
@@ -451,6 +455,28 @@ class _EventRow extends StatelessWidget {
             icon: const Icon(Icons.arrow_downward),
           ),
         ..._actions(context),
+        if (planning?.canWithdrawEvent(event.id) == true &&
+            event.status == EventStatus.pending &&
+            event.firstStartedAt == null &&
+            event.completedAt == null &&
+            !controller.hasEventRunSegments(event.id))
+          EventMoreMenuButton<String>(
+            key: ValueKey('today-event-more-${event.id}'),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'withdraw', child: Text('收回到计划')),
+            ],
+            onSelected: (_) async {
+              try {
+                await planning!.withdrawToPlan(event.sourcePlanItemId!);
+                await controller.load();
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text(error.toString())));
+                }
+              }
+            },
+          ),
         if (event.status != EventStatus.running &&
             event.status != EventStatus.completed)
           IconButton(

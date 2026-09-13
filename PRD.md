@@ -476,10 +476,37 @@ hierarchy order、descendant switch 或 hierarchical completion 的产品规则�
   提交；恢复时 Event `completed→paused` 与 PlanItem `done→dispatched`
   同样原子。状态不匹配必须回滚并报错。
 - 从 Today 移除只删除 `EventDayPlan`，不撤回派发、不删除 Event；Today
-  始终提供“已有事项”以重加未完成 Event。P3 不提供 withdraw，planned
-  Event 不允许普通物理删除。
+  始终提供“已有事项”以重加未完成 Event。planned Event 不允许普通删除；
+  未执行事项可以通过下述“收回到计划”专用事务撤销派发。
 - dispatched/done PlanItem 标题不可编辑；Event 名称是派发时拷贝，后续与
   PlanItem title 解耦。Planning detail 展示 linked Event 的当前状态。
+
+### 主动派发与收回（2026-09-13）
+
+- Planning 表达 intention，Event/Today/Record 表达 execution reality。
+  `next` 是用户主动标记的优先步骤，不是进入执行层的资格门槛。
+  `inProgress + focused WorldNode + current Plan` 中的 `draft` 和 `next`
+  均可在步骤 More 中直接“加入今日”。Today recommendation 仍只推荐 next。
+- 派发在同一事务中重新验证资格、创建 pending Event、将原 item 设为
+  dispatched、追加当前 JaxDay EventDayPlan。失败必须全部回滚。
+- Planning 步骤 More 和 Today 事项 More 仅对可收回事项提供“收回到计划”。
+  要求 item=dispatched，linked Event=pending，firstStartedAt/completedAt
+  均为空，且不存在任何 RunSegment（包括补录、零时长、open/closed）。
+  repository 在事务内重新验证，不能仅依赖菜单打开时的缓存。
+- 收回删除该 Event 的所有 JaxDay 安排，再删除 Event，沿用既有触发器写入
+  Event/EventDayPlan tombstone，并将同一个 item 恢复为 draft，保留顺序、
+  标题、说明和创建时间。不会重新创建 item、改变 focus、重开 ended Plan。
+  已 ended 的计划保持历史只读；收回不会赋予历史计划继续编辑的资格。
+- 本版采用方案 B：旧模型不保存派发前状态，draft/next 收回后统一为 draft。
+  不新增字段、migration 或 Sync 协议。可在 current Plan 点击草稿标题编辑，
+  再次加入今日会创建新 Event；不做 Event/PlanItem 标题联动。
+- EventDayPlan tombstone 使用既有 `eventId@jaxDay` identity 定位删除，
+  不从空 payload 读取复合键；仅移出今日的同步也应保留 Event 与 dispatched 状态。
+- 手工补录沿用 firstStartedAt 留存执行事实，删除历史 segment 前也为旧版
+  补录补齐该证据，防止删掉最后一个 segment 后误获收回资格。
+  旧版若已删除补录且从未保存首次开始时间，现存 tombstone 没有 owner 信息，
+  无法从当前数据库反推出该段属于哪个 Event；此历史信息缺失不能追溯修复。
+- completion/restore 联动、carry-over、从今日移除的原语义保持不变。
 
 ## 19. 当前执行开始时间修正
 

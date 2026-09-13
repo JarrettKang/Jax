@@ -380,6 +380,8 @@ class PlanDetailPage extends StatelessWidget {
                     index: index,
                     count: items.length,
                     editable: plan!.isCurrent,
+                    canDispatch: controller.canDispatch(items[index]),
+                    canWithdraw: controller.canWithdraw(items[index]),
                     onToggle: () => _guard(
                       context,
                       () => controller.setItemStatus(
@@ -579,6 +581,15 @@ class PlanDetailPage extends StatelessWidget {
     String action,
   ) async {
     if (action == 'edit') return _editItem(context, item: item);
+    if (action == 'dispatch') {
+      return _guard(
+        context,
+        () => controller.dispatchRecommendations([item.id]),
+      );
+    }
+    if (action == 'withdraw') {
+      return _guard(context, () => controller.withdrawToPlan(item.id));
+    }
     if (action == 'drop') {
       return _guard(
         context,
@@ -1019,6 +1030,8 @@ class _PlanItemRow extends StatelessWidget {
     required this.index,
     required this.count,
     required this.editable,
+    required this.canDispatch,
+    required this.canWithdraw,
     required this.onToggle,
     required this.onMove,
     required this.onAction,
@@ -1031,6 +1044,8 @@ class _PlanItemRow extends StatelessWidget {
   final int index;
   final int count;
   final bool editable;
+  final bool canDispatch;
+  final bool canWithdraw;
   final VoidCallback onToggle;
   final ValueChanged<int> onMove;
   final ValueChanged<String> onAction;
@@ -1067,58 +1082,55 @@ class _PlanItemRow extends StatelessWidget {
           subtitle: _itemSubtitle(item, linkedEvent),
           onSave: onRename,
         ),
-        trailing:
-            item.status == PlanItemStatus.dispatched &&
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (item.status == PlanItemStatus.dispatched &&
                 linkedEvent != null &&
                 isEventToday?.call(linkedEvent!.id) != true &&
-                onAddToToday != null
-            ? IconButton(
+                onAddToToday != null)
+              IconButton(
                 key: ValueKey('add-dispatched-to-today-${item.id}'),
                 tooltip: '加入今日',
                 onPressed: onAddToToday,
                 icon: const Icon(Icons.today_outlined),
-              )
-            : editable
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'move-up') {
-                        onMove(index - 1);
-                      } else if (value == 'move-down') {
-                        onMove(index + 1);
-                      } else {
-                        onAction(value);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      if (mutable && index > 0)
-                        const PopupMenuItem(
-                          value: 'move-up',
-                          child: Text('上移'),
-                        ),
-                      if (mutable && index < count - 1)
-                        const PopupMenuItem(
-                          value: 'move-down',
-                          child: Text('下移'),
-                        ),
-                      if (mutable)
-                        const PopupMenuItem(value: 'edit', child: Text('编辑详情')),
-                      if (mutable)
-                        const PopupMenuItem(value: 'drop', child: Text('不再需要')),
-                      if (mutable)
-                        const PopupMenuItem(value: 'delete', child: Text('删除')),
-                      if (dropped)
-                        const PopupMenuItem(
-                          value: 'restore',
-                          child: Text('恢复为草稿'),
-                        ),
-                    ],
-                  ),
+              ),
+            if ((editable && (mutable || dropped)) || canWithdraw)
+              PopupMenuButton<String>(
+                key: ValueKey('plan-item-more-${item.id}'),
+                onSelected: (value) {
+                  if (value == 'move-up') {
+                    onMove(index - 1);
+                  } else if (value == 'move-down') {
+                    onMove(index + 1);
+                  } else {
+                    onAction(value);
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (canDispatch)
+                    const PopupMenuItem(value: 'dispatch', child: Text('加入今日')),
+                  if (canWithdraw)
+                    const PopupMenuItem(
+                      value: 'withdraw',
+                      child: Text('收回到计划'),
+                    ),
+                  if (mutable && index > 0)
+                    const PopupMenuItem(value: 'move-up', child: Text('上移')),
+                  if (mutable && index < count - 1)
+                    const PopupMenuItem(value: 'move-down', child: Text('下移')),
+                  if (mutable)
+                    const PopupMenuItem(value: 'edit', child: Text('编辑详情')),
+                  if (mutable)
+                    const PopupMenuItem(value: 'drop', child: Text('不再需要')),
+                  if (mutable)
+                    const PopupMenuItem(value: 'delete', child: Text('删除')),
+                  if (dropped)
+                    const PopupMenuItem(value: 'restore', child: Text('恢复为草稿')),
                 ],
-              )
-            : null,
+              ),
+          ],
+        ),
       ),
     );
   }

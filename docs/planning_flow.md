@@ -178,3 +178,69 @@ Windows Debug and Android Debug builds succeed.
 
 Private device rollout evidence omitted from this historical version.
 
+## Direct dispatch and withdraw-to-plan (2026-09-13)
+
+Read-only implementation audit before editing:
+
+- DispatchPlanItems delegates to SqlitePlanningRepository.dispatchPlanItems;
+  its transaction previously checked next both before and during the status write.
+  Planning had no direct undispatched-item action. Today recommendations use a
+  separate PlanningController.recommendationGroups filter, so they remain next-only.
+- Actual Event duration derives from run_segments. Manual Record additions use
+  ExecutionSegmentService -> insertHistoricalRunSegment into the same table;
+  no separate Event duration ledger exists. Event status, firstStartedAt and
+  completedAt provide additional evidence; completion restores to paused, not pending.
+  Routine executions/segments are independent owners and are not touched.
+- Ordinary planned Event deletion is rejected. Existing physical DELETE triggers
+  create Event and EventDayPlan sync_tombstones. No previous PlanItem status is
+  stored or recoverable after dispatch.
+- Saving the previous priority would require schema and cross-platform transport
+  changes. This revision explicitly chooses option B: withdraw restores draft for
+  both original draft and next. Schema remains 21 and Sync protocol remains 8.
+  Shared Dart core/repository/controller/UI code serves Android and Windows;
+  no platform-specific persistence migration or baseline rebuild is introduced.
+
+Current rules and implementation:
+
+- Focused + inProgress node + current Plan allows draft or next direct dispatch.
+  next is a priority marker, still the only automatic recommendation candidate.
+  The existing transaction appends Today and rejects stale/duplicate dispatch.
+- Planning item More provides Join Today and eligible Withdraw to Plan. Today
+  exposes withdrawal only under Event More; its existing remove-today action is
+  separate. The app reloads execution state after planning mutations. Today checks
+  its fresh Event/segment state even when Planning still has cached pending data.
+- Withdrawal rechecks dispatched + pending + null firstStartedAt/completedAt +
+  no RunSegment in the write transaction. It deletes ALL EventDayPlans and the
+  Event, generates the existing tombstones, and restores the same item to draft.
+  ID, title, note, order and createdAt remain unchanged. No focus or Plan status
+  changes, no title mirroring, no completion/restore or carry-over rule changes.
+  Ended plans remain ended and read-only even if their pending Event is withdrawn.
+- Manual segment insertion now preserves firstStartedAt; deleting an old manual
+  segment also retains this marker before deletion. This prevents deleting the
+  last segment from making an executed pending Event withdrawable. The marker
+  uses existing sync fields. Historical manual segments already deleted by old
+  versions without this marker cannot be attributed from owner-less tombstones;
+  the lost evidence cannot be reconstructed by this revision.
+- Independent-file Sync tests exposed a pre-existing EventDayPlan deletion bug:
+  tombstone payload is empty, so payload-derived keys were null. The executor now
+  locates deleted day plans by their existing eventId@jaxDay identity. No contract
+  change is needed. This covers remove-today alone as well as withdrawal.
+
+Validation covers draft/next dispatch, no-next recommendation flooding, unchanged
+item identity/order/focus, rename and redispatch, multi-day cleanup, stale/double
+withdrawal, transaction rollback including tombstones, every Event status, open/
+zero-duration/manual segments, deleted manual evidence and unchanged lifecycle.
+Android 390px and Windows 1200px widget tests exercise both More entries, draft
+inline editing, fresh Today after mutation and hidden withdrawal after start.
+Sync tests use TWO separate temporary database files, not cached in-memory handles:
+snapshot -> compare -> compile -> apply -> readiness/fingerprint round-trip,
+including remove-today, carry-over dates, withdrawal, redispatch and manual evidence.
+Withdraw versus execution on the other peer remains an unresolved conflict with
+the actual execution preserved. No real-data database, device installation,
+production Sync Apply, Windows DB or successful-sync baseline was touched.
+
+Final validation: all 321 tests passed (including the independent-file Sync cases),
+flutter analyze reports no issues, and ordinary Windows Debug/Android Debug builds
+both succeed. Log: .debug_backups/planning_withdraw_20260913_final_tests.log.
+Platform UI coverage above is automated widget testing; this revision has not
+been installed for physical-phone or native desktop interaction acceptance.

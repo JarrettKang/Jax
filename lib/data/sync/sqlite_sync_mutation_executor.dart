@@ -498,6 +498,11 @@ class SqliteSyncMutationExecutor {
       'id = ?',
       [record.metadata.id],
     ),
+    SyncEntityKind.eventDayPlan when record.isDeleted => _SqlTarget(
+      'event_day_plans',
+      "event_id || '@' || day_date = ?",
+      [record.metadata.id],
+    ),
     SyncEntityKind.eventDayPlan => _SqlTarget(
       'event_day_plans',
       'event_id = ? AND day_date = ?',

@@ -6,6 +6,7 @@ import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/plan.dart';
 import 'package:jax/core/entities/plan_item.dart';
+import 'package:jax/core/entities/run_segment.dart';
 import 'package:jax/core/entities/world_node.dart';
 import 'package:jax/core/errors/domain_failure.dart';
 import 'package:jax/core/use_cases/complete_event.dart';
@@ -103,6 +104,7 @@ void main() {
     await item(focused, 'a');
     await item(focused, 'b');
     await item(focused, 'draft', next: false);
+    await planning.setPlanItemStatus('draft', PlanItemStatus.dropped, now);
 
     await expectLater(
       dispatcher()(['a', 'b', 'draft']),
@@ -113,16 +115,16 @@ void main() {
     expect(await events.getEventDayPlans('2026-09-02'), isEmpty);
     expect(
       (await planning.getPlanItems(focused.id)).map((value) => value.status),
-      [PlanItemStatus.next, PlanItemStatus.next, PlanItemStatus.draft],
+      [PlanItemStatus.next, PlanItemStatus.next, PlanItemStatus.dropped],
     );
   });
 
   test(
-    'draft, unfocused, ended, and duplicate dispatch are rejected',
+    'draft can dispatch; unfocused, ended and duplicate dispatch are rejected',
     () async {
       final focused = await plan();
       await item(focused, 'draft', next: false);
-      await expectLater(dispatcher()(['draft']), throwsA(isA<DomainFailure>()));
+      await dispatcher()(['draft']);
 
       await item(focused, 'next');
       await worlds.setWorldNodeFocus(
@@ -138,7 +140,7 @@ void main() {
       );
       await dispatcher()(['next']);
       await expectLater(dispatcher()(['next']), throwsA(isA<DomainFailure>()));
-      expect(await events.getIncompleteEvents(), hasLength(1));
+      expect(await events.getIncompleteEvents(), hasLength(2));
 
       final secondDirectory = await Directory.systemTemp.createTemp(
         'jax-p3-ended-',
@@ -375,6 +377,252 @@ void main() {
       expect(await events.getEventDayPlans('2026-09-03'), hasLength(1));
     },
   );
+
+  for (final next in [false, true]) {
+    test(
+      'withdraw ${next ? 'next' : 'draft'} restores same draft and can redispatch',
+      () async {
+        final p = await plan();
+        await item(p, 'before');
+        await item(p, 'target', next: next);
+        await item(p, 'after');
+        final original = (await app.database.query(
+          'plan_items',
+          where: "id = 'target'",
+        )).single;
+        final event = (await dispatcher()(['target'])).single;
+        // Yesterday's entry, carry-over to a second JaxDay, then remove/re-add.
+        await events.addEventDayPlan(
+          EventDayPlan(
+            eventId: event.id,
+            dayKey: '2026-09-03',
+            order: 8,
+            createdAt: now,
+          ),
+        );
+        await events.removeEventDayPlan(event.id, '2026-09-02');
+        await events.addEventDayPlan(
+          EventDayPlan(
+            eventId: event.id,
+            dayKey: '2026-09-02',
+            order: 5,
+            createdAt: now,
+          ),
+        );
+        final planBefore = await app.database.query('plans');
+        final worldBefore = await app.database.query('world_nodes');
+        await planning.withdrawPlanItem(planItemId: 'target', now: now);
+        expect(await events.getEvent(event.id), isNull);
+        expect(await app.database.query('event_day_plans'), isEmpty);
+        final restored = (await app.database.query(
+          'plan_items',
+          where: "id = 'target'",
+        )).single;
+        for (final key in original.keys.where(
+          (k) => k != 'status' && k != 'updated_at_utc',
+        )) {
+          expect(restored[key], original[key], reason: key);
+        }
+        expect(restored['status'], 'draft');
+        expect(await app.database.query('plans'), planBefore);
+        expect(await app.database.query('world_nodes'), worldBefore);
+        final tombstones = await app.database.query('sync_tombstones');
+        expect(
+          tombstones.where((t) => t['entity_type'] == 'event'),
+          hasLength(1),
+        );
+        expect(
+          tombstones.where((t) => t['entity_type'] == 'eventDayPlan'),
+          hasLength(2),
+        );
+        expect(
+          tombstones.where((t) => t['entity_type'] == 'planItem'),
+          isEmpty,
+        );
+        await planning.editPlanItem('target', title: '测试2e5', now: now);
+        final again = (await dispatcher()(['target'])).single;
+        expect(again.id, isNot(event.id));
+        expect(again.name, '测试2e5');
+        expect(await events.getIncompleteEvents(), hasLength(1));
+        expect((await planning.getPlanItems(p.id)).map((i) => i.id), [
+          'before',
+          'target',
+          'after',
+        ]);
+      },
+    );
+  }
+
+  test('withdrawal rollback includes all deletions and tombstones', () async {
+    final p = await plan();
+    await item(p, 'target', next: false);
+    await dispatcher()(['target']);
+    final tables = [
+      'plan_items',
+      'events',
+      'event_day_plans',
+      'sync_tombstones',
+    ];
+    final before = {
+      for (final table in tables) table: await app.database.query(table),
+    };
+    await app.database.execute(
+      '''CREATE TRIGGER fail_withdraw BEFORE UPDATE ON plan_items
+      WHEN NEW.status = 'draft' BEGIN SELECT RAISE(ABORT, 'injected failure'); END''',
+    );
+    await expectLater(
+      planning.withdrawPlanItem(planItemId: 'target', now: now),
+      throwsA(anything),
+    );
+    for (final table in tables) {
+      expect(await app.database.query(table), before[table], reason: table);
+    }
+  });
+
+  test('Today insert failure rolls back Event and draft status', () async {
+    final p = await plan();
+    await item(p, 'target', next: false);
+    await app.database.execute(
+      '''CREATE TRIGGER fail_today BEFORE INSERT ON event_day_plans
+      BEGIN SELECT RAISE(ABORT, 'injected failure'); END''',
+    );
+    await expectLater(dispatcher()(['target']), throwsA(isA<DomainFailure>()));
+    expect(await app.database.query('events'), isEmpty);
+    expect(await app.database.query('event_day_plans'), isEmpty);
+    expect(await app.database.query('sync_tombstones'), isEmpty);
+    expect(
+      (await planning.getPlanItems(p.id)).single.status,
+      PlanItemStatus.draft,
+    );
+  });
+
+  test('missing link and duplicate withdrawal fail without mutation', () async {
+    final p = await plan();
+    await item(p, 'target');
+    await expectLater(
+      planning.withdrawPlanItem(planItemId: 'target', now: now),
+      throwsA(isA<DomainFailure>()),
+    );
+    await dispatcher()(['target']);
+    await planning.withdrawPlanItem(planItemId: 'target', now: now);
+    final before = await app.database.query('sync_tombstones');
+    await expectLater(
+      planning.withdrawPlanItem(planItemId: 'target', now: now),
+      throwsA(isA<DomainFailure>()),
+    );
+    expect(await app.database.query('sync_tombstones'), before);
+    expect(
+      (await planning.getPlanItems(p.id)).single.status,
+      PlanItemStatus.draft,
+    );
+  });
+
+  for (final fact in [
+    'running',
+    'paused',
+    'waiting',
+    'completed',
+    'firstStarted',
+    'completedAt',
+    'open',
+    'zero',
+    'manual',
+    'deletedManual',
+    'legacyDeletedManual',
+  ]) {
+    test('withdrawal rejects execution reality: $fact', () async {
+      final p = await plan();
+      await item(p, 'target');
+      final event = (await dispatcher()(['target'])).single;
+      if (['running', 'paused', 'waiting', 'completed'].contains(fact)) {
+        await app.database.update(
+          'events',
+          {'status': fact},
+          where: 'id = ?',
+          whereArgs: [event.id],
+        );
+      } else if (fact == 'firstStarted' || fact == 'completedAt') {
+        await app.database.update(
+          'events',
+          {
+            fact == 'firstStarted'
+                    ? 'first_started_at_utc'
+                    : 'completed_at_utc':
+                now.millisecondsSinceEpoch,
+          },
+          where: 'id = ?',
+          whereArgs: [event.id],
+        );
+      } else {
+        final segment = RunSegment(
+          id: 'execution',
+          eventId: event.id,
+          startedAt: now.toUtc(),
+          createdAt: now.toUtc(),
+          endedAt: fact == 'open'
+              ? null
+              : now.toUtc().add(Duration(seconds: fact == 'zero' ? 0 : 5)),
+        );
+        await events.insertHistoricalRunSegment(segment);
+        if (fact == 'legacyDeletedManual') {
+          await app.database.update(
+            'events',
+            {'first_started_at_utc': null},
+            where: 'id = ?',
+            whereArgs: [event.id],
+          );
+        }
+        if (fact.endsWith('Manual')) {
+          await events.deleteClosedRunSegment(segment.id);
+        }
+        // Prove existence alone blocks, even for legacy rows with no first-start marker.
+        if (['open', 'zero', 'manual'].contains(fact)) {
+          await app.database.update(
+            'events',
+            {'first_started_at_utc': null},
+            where: 'id = ?',
+            whereArgs: [event.id],
+          );
+        }
+      }
+      final before = {
+        for (final table in [
+          'events',
+          'plan_items',
+          'event_day_plans',
+          'run_segments',
+          'sync_tombstones',
+        ])
+          table: await app.database.query(table),
+      };
+      await expectLater(
+        planning.withdrawPlanItem(planItemId: 'target', now: now),
+        throwsA(isA<DomainFailure>()),
+      );
+      for (final table in before.keys) {
+        expect(await app.database.query(table), before[table], reason: table);
+      }
+    });
+  }
+
+  test('withdraw does not reopen ended plan or change focus', () async {
+    final p = await plan();
+    await item(p, 'target');
+    await dispatcher()(['target']);
+    await worlds.setWorldNodeFocus(
+      '00000000-0000-4000-8000-000000000001',
+      false,
+      now,
+    );
+    await planning.setPlanStatus(p.id, PlanStatus.ended, now);
+    await planning.withdrawPlanItem(planItemId: 'target', now: now);
+    expect((await planning.getPlan(p.id))!.status, PlanStatus.ended);
+    expect(
+      (await planning.getPlanItems(p.id)).single.status,
+      PlanItemStatus.draft,
+    );
+    await expectLater(dispatcher()(['target']), throwsA(isA<DomainFailure>()));
+  });
 }
 
 class _Ids {

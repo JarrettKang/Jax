@@ -624,6 +624,9 @@ class EventController extends ChangeNotifier {
     }),
   );
 
+  bool hasEventRunSegments(String eventId) =>
+      (_segments[eventId] ?? const <RunSegment>[]).isNotEmpty;
+
   DateTime? runningEventStartedAt(String eventId) =>
       (_segments[eventId] ?? const <RunSegment>[])
           .where((segment) => segment.endedAt == null)

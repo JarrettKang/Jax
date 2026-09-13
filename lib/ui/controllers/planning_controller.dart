@@ -24,6 +24,7 @@ class PlanningController extends ChangeNotifier {
     required this.eventRepository,
     required this.newId,
     required this.now,
+    this.onExecutionChanged,
   }) : _dispatch = planningRepository is PlanningDispatchRepository
            ? DispatchPlanItems(
                repository: planningRepository as PlanningDispatchRepository,
@@ -37,6 +38,7 @@ class PlanningController extends ChangeNotifier {
   final EventRepository eventRepository;
   final IdGenerator newId;
   final Clock now;
+  final Future<void> Function()? onExecutionChanged;
   final DispatchPlanItems? _dispatch;
 
   List<Plan> plans = const [];
@@ -99,6 +101,47 @@ class PlanningController extends ChangeNotifier {
   List<PlanReviewNote> reviewNotesFor(String planId) =>
       _reviewNotes[planId] ?? const [];
   JaxEvent? linkedEventFor(String planItemId) => _linkedEvents[planItemId];
+
+  bool canDispatch(PlanItem item) {
+    final plan = plans.where((p) => p.id == item.planId).firstOrNull;
+    final node = worldNodes.where((n) => n.id == plan?.worldNodeId).firstOrNull;
+    return _dispatch != null &&
+        plan?.isCurrent == true &&
+        node?.status == WorldNodeStatus.inProgress &&
+        node?.isFocused == true &&
+        (item.status == PlanItemStatus.draft ||
+            item.status == PlanItemStatus.next);
+  }
+
+  bool canWithdraw(PlanItem item) {
+    final event = linkedEventFor(item.id);
+    return planningRepository is PlanningDispatchRepository &&
+        item.status == PlanItemStatus.dispatched &&
+        event != null &&
+        event.status == EventStatus.pending &&
+        event.firstStartedAt == null &&
+        event.completedAt == null &&
+        (_segments[event.id] ?? const []).isEmpty;
+  }
+
+  bool canWithdrawEvent(String eventId) => _items.values
+      .expand((items) => items)
+      .any(
+        (item) => linkedEventFor(item.id)?.id == eventId && canWithdraw(item),
+      );
+
+  Future<void> withdrawToPlan(String planItemId) async {
+    final repository = planningRepository;
+    if (repository is! PlanningDispatchRepository) {
+      throw const DomainFailure('当前数据库不支持收回计划');
+    }
+    await (repository as PlanningDispatchRepository).withdrawPlanItem(
+      planItemId: planItemId,
+      now: now(),
+    );
+    await load();
+    await onExecutionChanged?.call();
+  }
 
   List<PlanningRecommendationGroup> get recommendationGroups {
     final groups = <PlanningRecommendationGroup>[];
@@ -166,6 +209,7 @@ class PlanningController extends ChangeNotifier {
     try {
       await _dispatch(planItemIds);
       await load();
+      await onExecutionChanged?.call();
     } finally {
       dispatching = false;
       notifyListeners();

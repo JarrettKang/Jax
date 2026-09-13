@@ -167,10 +167,22 @@ class SqliteEventRepository
         orderBy: 'started_at_utc ASC',
       )).map(_segmentFromRow).toList(growable: false);
   @override
-  Future<void> insertHistoricalRunSegment(RunSegment segment) => _appDatabase
-      .database
-      .insert('run_segments', _segmentToRow(segment))
-      .then((_) {});
+  Future<void> insertHistoricalRunSegment(RunSegment segment) =>
+      _appDatabase.database.transaction((tx) async {
+        await tx.insert('run_segments', _segmentToRow(segment));
+        // Retain execution evidence if this manual segment is later deleted.
+        // firstStartedAt is already part of the Sync contract.
+        await tx.rawUpdate(
+          '''UPDATE events
+          SET first_started_at_utc = ?, updated_at_utc = ?
+          WHERE id = ? AND first_started_at_utc IS NULL''',
+          [
+            segment.startedAt.toUtc().millisecondsSinceEpoch,
+            segment.createdAt.toUtc().millisecondsSinceEpoch,
+            segment.eventId,
+          ],
+        );
+      });
   @override
   Future<void> updateClosedRunSegment(RunSegment segment) async {
     if (await _appDatabase.database.update(
@@ -263,14 +275,28 @@ class SqliteEventRepository
 
   @override
   Future<void> deleteClosedRunSegment(String id) async {
-    if (await _appDatabase.database.delete(
-          'run_segments',
-          where: 'id = ? AND ended_at_utc IS NOT NULL',
-          whereArgs: [id],
-        ) !=
-        1) {
-      throw StateError('Closed run segment not found');
-    }
+    await _appDatabase.database.transaction((tx) async {
+      // Preserve evidence for manual segments created by earlier versions too.
+      final rows = await tx.query(
+        'run_segments',
+        where: 'id = ? AND ended_at_utc IS NOT NULL',
+        whereArgs: [id],
+      );
+      if (rows.isEmpty) throw StateError('Closed run segment not found');
+      await tx.rawUpdate(
+        '''UPDATE events
+        SET first_started_at_utc = ? WHERE id = ? AND first_started_at_utc IS NULL''',
+        [rows.single['started_at_utc'], rows.single['event_id']],
+      );
+      if (await tx.delete(
+            'run_segments',
+            where: 'id = ? AND ended_at_utc IS NOT NULL',
+            whereArgs: [id],
+          ) !=
+          1) {
+        throw StateError('Closed run segment not found');
+      }
+    });
   }
 
   @override

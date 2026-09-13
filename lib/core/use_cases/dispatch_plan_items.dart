@@ -17,7 +17,7 @@ class DispatchPlanItems {
 
   Future<List<JaxEvent>> call(Iterable<String> planItemIds) async {
     final ids = planItemIds.toSet().toList(growable: false);
-    if (ids.isEmpty) throw const DomainFailure('请至少选择一个今日建议');
+    if (ids.isEmpty) throw const DomainFailure('请至少选择一个计划步骤');
     final instant = now();
     return repository.dispatchPlanItems(
       eventIdsByPlanItemId: {for (final id in ids) id: newId()},
