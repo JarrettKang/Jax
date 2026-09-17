@@ -193,10 +193,26 @@ Ignore rules and safety tools may mention generic private-output directories or
 synthetic fixtures. Such policy references do not include those directories or
 private evidence in Git. They are distinguished from sensitive-value hits.
 
+## Phase 6 reproducibility and branding
+
+Phase 6 adds one normal commit, `Document reproducible builds and replace template branding`,
+for 163 total commits while preserving the exact 162-commit Phase 5 history.
+The clean checkout passed analyze, the 695-case host baseline, all eight Android
+and seven Windows native cases, and seven PowerShell tool contract groups.
+Android Debug built without secrets; missing-secret Release rejected explicitly.
+A separate clean candidate Release build retained the Phase 5 signing certificate.
+
+See [Building Jax](BUILDING.md) for canonical prerequisites and commands, and
+[Reproducibility evidence](REPRODUCIBILITY.md) for the clean checkout method,
+current checks, network recovery and limitations. Original MIT-licensed Jax
+launcher assets replace the Android/Windows Flutter templates; framework and
+third-party attribution remain intact. Phase5 facts above are historical results;
+Phase6 results are recorded separately and do not imply a fresh Windows VM.
+
 ## Remaining release work
 
 - Confirm offline key backup with its owner; a checklist alone is not backup evidence.
-- Replace Flutter template launcher icons before claiming finished Jax branding.
+- Original Jax placeholder icons now replace template launcher assets; final brand design is a separate decision.
 - Complete distribution-level dependency/license review; see THIRD_PARTY_NOTICES.md.
 - Rewrite README and reconcile stale public architecture/data-model links.
 - Prepare synthetic-data screenshots and CI; no publishing has happened.

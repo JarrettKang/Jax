@@ -5,16 +5,15 @@ Flutter, dependencies, plugins, system libraries, fonts or template artwork.
 
 ## Asset provenance
 
-- The five Android launcher PNGs are byte-identical to the installed Flutter
-  Android app templates.
-- The Windows ICO is byte-identical to the flutter_template_images Windows
-  template asset. It is not an original Jax brand asset.
-- Both are classified as Flutter template assets. Their branding must be replaced
-  or explicitly reviewed before public distribution; no final logo was created.
+- Android launcher/adaptive/round icons and the Windows ICO now derive from the
+  original assets/branding/jax_icon.svg, released under Jax's root MIT License.
+  No third-party image, font or trademark was used to create the J monogram.
+- The previous Flutter launcher assets were replaced in Phase6. Their old
+  versions remain in retained Git history; history was not rewritten.
 - pubspec.yaml declares no custom third-party image/font asset directories.
   Material icons/fonts are supplied by Flutter. The installed Material Icons
   license is Creative Commons Attribution 4.0; preserve its generated notices.
-- No external replacement artwork was downloaded or introduced in Phase 5.
+- No external replacement artwork was downloaded for Phase6.
 
 ## Dependency notices
 
