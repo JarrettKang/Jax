@@ -39,8 +39,16 @@ void main() {
     await tester.pumpAndSettle();
     await openRoutinePage(tester);
 
-    await tester.tap(find.byKey(const ValueKey('routine-up-C')));
-    await tester.tap(find.byKey(const ValueKey('routine-up-C')));
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('up');
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('up');
     await tester.pumpAndSettle();
 
     expect((await repository.getRoutines()).map((routine) => routine.id), [
@@ -67,9 +75,21 @@ void main() {
     await tester.pumpAndSettle();
     await openRoutinePage(tester);
 
-    await tester.tap(find.byKey(const ValueKey('routine-up-C')));
-    await tester.tap(find.byKey(const ValueKey('routine-up-D')));
-    await tester.tap(find.byKey(const ValueKey('routine-down-C')));
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('up');
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-D')),
+        )
+        .onSelected!('up');
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('down');
     await tester.pumpAndSettle();
 
     expect((await repository.getRoutines()).map((routine) => routine.id), [
@@ -79,9 +99,24 @@ void main() {
       'B',
       'E',
     ]);
+    await tester.tap(find.byKey(const ValueKey('routine-more-A')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-up-A')), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('routine-more-E')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('routine-more-E')));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑'), findsOneWidget);
     expect(find.byKey(const ValueKey('routine-down-E')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('routine-down-A')));
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-A')),
+        )
+        .onSelected!('down');
     await tester.pumpAndSettle();
     expect((await repository.getRoutines()).map((routine) => routine.id), [
       'D',
@@ -105,16 +140,36 @@ void main() {
     await tester.pumpAndSettle();
     await openRoutinePage(tester);
 
+    await tester.tap(find.byKey(const ValueKey('routine-more-A')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-up-A')), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('routine-more-B')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-down-B')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('routine-up-B')));
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-B')),
+        )
+        .onSelected!('up');
     await tester.pumpAndSettle();
     expect((await repository.getRoutines()).map((routine) => routine.id), [
       'B',
       'A',
       'inactive',
     ]);
+    await tester.tap(find.byKey(const ValueKey('routine-more-B')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-up-B')), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('routine-more-A')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-down-A')), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
   });
 }

@@ -172,7 +172,10 @@ void main() {
         'current',
         'current',
       ]);
-      expect(await app.database.query('plan_items'), itemBefore);
+      expect(await app.database.query('plan_items'), [
+        for (final item in itemBefore)
+          {...item, 'promoted_world_node_id': null},
+      ]);
       expect(await app.database.query('plan_review_notes'), noteBefore);
       expect(await app.database.query('dataset_metadata'), generationBefore);
       expect(await app.database.rawQuery('PRAGMA foreign_key_check'), isEmpty);

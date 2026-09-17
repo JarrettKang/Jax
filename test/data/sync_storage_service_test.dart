@@ -205,6 +205,7 @@ void main() {
       final service = SyncStorageService(appDataRoot: root.path);
       final settings = await service.load();
       Directory session(String name, {String? status}) {
+        name = "20260831_00000${name.split('_').last}_${'a' * 32}";
         final directory = Directory(
           '${settings.backupsPath}${Platform.pathSeparator}$name',
         )..createSync(recursive: true);
@@ -212,9 +213,19 @@ void main() {
             .writeAsStringSync('w');
         File('${directory.path}${Platform.pathSeparator}android.db')
             .writeAsStringSync('a');
-        if (status != null) {
+        {
           File('${directory.path}${Platform.pathSeparator}metadata.json')
-              .writeAsStringSync(jsonEncode({'status': status}));
+              .writeAsStringSync(
+                jsonEncode({
+                  'owner': 'jax-sync-backup',
+                  'metadataVersion': 1,
+                  'sessionId': name,
+                  'createdAtUtc': '2026-08-31T00:00:00Z',
+                  'schemaVersion': 24,
+                  'protocolVersion': 11,
+                  'status': status ?? 'Success',
+                }),
+              );
         }
         return directory;
       }
@@ -228,6 +239,7 @@ void main() {
       final old = session('20260831_0');
       final removed = await service.cleanupBackups(
         activeSessionPath: active.absolute.path,
+        apply: true,
       );
       expect(newest.existsSync(), isTrue);
       expect(active.existsSync(), isTrue);

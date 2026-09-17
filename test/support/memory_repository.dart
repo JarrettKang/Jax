@@ -39,7 +39,7 @@ class MemoryRepository
   Future<JaxEvent?> getEvent(String id) async =>
       events.where((event) => event.id == id).firstOrNull;
   @override
-  Future<void> updateEvent(JaxEvent event) async =>
+  Future<void> updateEvent(JaxEvent event, {JaxEvent? expectedPaused}) async =>
       events[events.indexWhere((item) => item.id == event.id)] = event;
   @override
   Future<void> startEvent(JaxEvent event, RunSegment segment) async {
@@ -122,7 +122,11 @@ class MemoryRepository
   }
 
   @override
-  Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
+  Future<void> pauseEvent(
+    JaxEvent event,
+    RunSegment segment, {
+    DateTime? expectedUpdatedAt,
+  }) async {
     await updateEvent(event);
     segments[segments.indexWhere((item) => item.id == segment.id)] = segment;
   }
@@ -535,8 +539,9 @@ class MemoryRepository
   @override
   Future<void> pauseRoutineExecution(
     RoutineExecution e,
-    RoutineRunSegment s,
-  ) async {
+    RoutineRunSegment s, {
+    DateTime? expectedUpdatedAt,
+  }) async {
     await updateRoutineExecutionOnly(e);
     routineSegments[routineSegments.indexWhere((x) => x.id == s.id)] = s;
   }
@@ -547,7 +552,10 @@ class MemoryRepository
     RoutineRunSegment s,
   ) => pauseRoutineExecution(e, s);
   @override
-  Future<void> updateRoutineExecutionOnly(RoutineExecution e) async {
+  Future<void> updateRoutineExecutionOnly(
+    RoutineExecution e, {
+    RoutineExecution? expectedPaused,
+  }) async {
     routineExecutions[routineExecutions.indexWhere((x) => x.id == e.id)] = e;
   }
 

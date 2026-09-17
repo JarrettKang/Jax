@@ -1,10 +1,23 @@
 import 'dart:io';
 
+import 'package:jax/data/database/app_database.dart';
+
+import 'private_tool_support.dart';
+
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-const expectedSchemaVersion = 21;
+const expectedSchemaVersion = AppDatabase.schemaVersion;
 
-Future<void> main(List<String> arguments) async {
+Future<void> main(List<String> arguments) =>
+    runPrivateTool(arguments, runSnapshot);
+
+Future<void> runSnapshot(List<String> arguments) async {
+  if (arguments.contains("--help") || arguments.contains("-help")) {
+    stdout.writeln(
+      "Read-only source; snapshot writes a NEW private output. No migration.\nUsage: database_snapshot.dart snapshot|snapshot-any <db> <private-output.db> or verify|verify-any|inspect|inspect-any <db>. Inspect prints no rows. --verbose: private diagnostics.",
+    );
+    return;
+  }
   if (arguments.isEmpty ||
       !{
         'snapshot',
@@ -26,7 +39,7 @@ Future<void> main(List<String> arguments) async {
     if (arguments.length != 2) {
       throw ArgumentError('inspect requires a database path');
     }
-    await _inspect(arguments[1], requireCurrentSchema: requireCurrentSchema);
+    await _verify(arguments[1], requireCurrentSchema: requireCurrentSchema);
     return;
   }
   if (arguments[0].startsWith('verify')) {
@@ -50,68 +63,6 @@ Future<void> main(List<String> arguments) async {
   );
 }
 
-Future<void> _inspect(String path, {required bool requireCurrentSchema}) async {
-  final database = await databaseFactoryFfi.openDatabase(
-    path,
-    options: OpenDatabaseOptions(readOnly: true),
-  );
-  try {
-    await _verifyOpen(
-      database,
-      path,
-      requireCurrentSchema: requireCurrentSchema,
-    );
-    const tables = [
-      'categories',
-      'events',
-      'run_segments',
-      'routine_categories',
-      'routines',
-      'routine_executions',
-      'routine_run_segments',
-      'event_day_plans',
-      'world_nodes',
-      'plans',
-      'plan_items',
-      'plan_review_notes',
-      'sync_tombstones',
-      'dataset_metadata',
-      'world_category_collapse_preferences',
-      'routine_category_collapse_preferences',
-    ];
-    for (final table in tables) {
-      final exists = (await database.rawQuery(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-        [table],
-      )).isNotEmpty;
-      if (exists) {
-        final count = (await database.rawQuery(
-          'SELECT COUNT(*) AS count FROM $table',
-        )).single['count'];
-        stdout.writeln('$table=$count');
-      }
-    }
-    final runningEvents = (await database.rawQuery(
-      "SELECT COUNT(*) AS count FROM events WHERE status = 'running'",
-    )).single['count'];
-    final runningRoutines = (await database.rawQuery(
-      "SELECT COUNT(*) AS count FROM routine_executions WHERE status = 'running'",
-    )).single['count'];
-    final openEventSegments = (await database.rawQuery(
-      'SELECT COUNT(*) AS count FROM run_segments WHERE ended_at_utc IS NULL',
-    )).single['count'];
-    final openRoutineSegments = (await database.rawQuery(
-      'SELECT COUNT(*) AS count FROM routine_run_segments WHERE ended_at_utc IS NULL',
-    )).single['count'];
-    stdout.writeln('running_events=$runningEvents');
-    stdout.writeln('running_routines=$runningRoutines');
-    stdout.writeln('open_event_segments=$openEventSegments');
-    stdout.writeln('open_routine_segments=$openRoutineSegments');
-  } finally {
-    await database.close();
-  }
-}
-
 Future<void> _snapshot(
   String source,
   String destination, {
@@ -120,13 +71,14 @@ Future<void> _snapshot(
   if (!File(source).existsSync()) {
     throw StateError('Source database does not exist: $source');
   }
+  requirePrivateOutput(destination);
   final output = File(destination);
   if (output.existsSync()) {
     throw StateError('Snapshot destination already exists: $destination');
   }
   await output.parent.create(recursive: true);
   final database = await databaseFactoryFfi.openDatabase(
-    source,
+    File(source).absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {
@@ -135,13 +87,13 @@ Future<void> _snapshot(
       source,
       requireCurrentSchema: requireCurrentSchema,
     );
-    final escaped = destination.replaceAll("'", "''");
+    final escaped = output.absolute.path.replaceAll("'", "''");
     await database.execute("VACUUM INTO '$escaped'");
   } finally {
     await database.close();
   }
   await _verify(destination, requireCurrentSchema: requireCurrentSchema);
-  stdout.writeln('Consistent SQLite snapshot created: $destination');
+  stdout.writeln('Consistent SQLite snapshot created in private output.');
 }
 
 Future<void> _verify(String path, {required bool requireCurrentSchema}) async {
@@ -149,7 +101,7 @@ Future<void> _verify(String path, {required bool requireCurrentSchema}) async {
     throw StateError('Database does not exist: $path');
   }
   final database = await databaseFactoryFfi.openDatabase(
-    path,
+    File(path).absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {
@@ -189,7 +141,5 @@ Future<void> _verifyOpen(
       .single
       .values
       .single;
-  stdout.writeln(
-    'Verified schema=$version integrity=ok journal_mode=$journal: $path',
-  );
+  stdout.writeln('Verified schema=$version integrity=ok journal_mode=$journal');
 }

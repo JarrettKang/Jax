@@ -79,6 +79,9 @@ class SqliteSyncSnapshotAdapter {
       ..remove('id')
       ..remove('created_at_utc')
       ..remove('updated_at_utc');
+    if (kind == SyncEntityKind.routineExecution) {
+      if (payload.remove('is_waiting') == 1) payload['status'] = 'waiting';
+    }
     return SyncRecord(
       kind: kind,
       metadata: SyncMetadata(
@@ -206,6 +209,8 @@ class SqliteSyncSnapshotAdapter {
     'show_in_home_quick_actions' => 'showInHomeQuickActions',
     'time_recommendation_start_minute' => 'timeRecommendationStartMinute',
     'time_recommendation_end_minute' => 'timeRecommendationEndMinute',
+    'time_recommendation_latest_end_minute' =>
+      'timeRecommendationLatestEndMinute',
     'time_recommendation_reason' => 'timeRecommendationReason',
     'is_focused' => 'isFocused',
     'first_started_at_utc' => 'firstStartedAtUtc',
@@ -217,6 +222,7 @@ class SqliteSyncSnapshotAdapter {
     'legacy_event_id' => 'legacyEventSyncId',
     'world_node_id' => 'worldNodeSyncId',
     'plan_id' => 'planSyncId',
+    'promoted_world_node_id' => 'promotedWorldNodeSyncId',
     'round_number' => 'roundNumber',
     _ => sql,
   };

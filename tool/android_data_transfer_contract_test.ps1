@@ -13,24 +13,25 @@ if ($errors.Count) { throw "PowerShell parse errors: $($errors -join '; ')" }
 $content = Get-Content -LiteralPath $scriptPath -Raw
 $required = @{
   'requires an explicit device when ambiguous' = 'Multiple Android devices are connected'
-  'rejects unauthorized devices' = 'An Android device is unauthorized'
+  'validates selected Debug device' = 'Assert-JaxDebugDevice'
   'requires a debuggable package' = 'Package is not debuggable with run-as'
   'stops the app before database access' = "'am', 'force-stop'"
   'backs up Android before import' = 'New-AndroidBackup'
   'uses a consistent Windows snapshot' = "'snapshot', `$SourceDatabase"
   'removes stale WAL and SHM' = '$databaseRelativePath-wal'
   'round-trip verifies imported bytes' = 'Imported Android database differs'
-  'supports restore' = 'RestoreLatest'
+  'defaults to preview' = 'DRY_RUN'
+  'requires dual confirmation' = '-not $Apply -or -not $ConfirmOverwrite'
+  'rolls back failed overwrite' = 'Install-Database $backup'
 }
 foreach ($entry in $required.GetEnumerator()) {
   if ($content -notmatch [regex]::Escape($entry.Value)) { throw "Missing safety contract: $($entry.Key)" }
 }
 
 $backupIndex = $content.IndexOf('$backup = New-AndroidBackup')
-$migrationIndex = $content.IndexOf("Starting the current Debug app once")
 $installIndex = $content.IndexOf('Install-Database $snapshot')
-if ($backupIndex -lt 0 -or $migrationIndex -le $backupIndex -or $installIndex -le $migrationIndex) {
-  throw 'Required destructive-operation order is backup -> normal migration -> import.'
+if ($backupIndex -lt 0 -or $installIndex -le $backupIndex) {
+  throw 'Required order is verified backup -> overwrite. Implicit migration is forbidden.'
 }
 
 $helper = Get-Content -LiteralPath $helperPath -Raw

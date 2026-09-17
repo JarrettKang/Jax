@@ -1,3 +1,5 @@
+import '../../core/services/temporal_routine.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' hide Category;
@@ -113,6 +115,7 @@ class EventController extends ChangeNotifier {
   List<Routine> _routines = const [];
   List<RoutineCategory> _routineCategories = const [];
   final Map<String, RoutineExecution?> _todayExecutions = {};
+  final Map<String, RoutineExecution?> _occurrenceExecutions = {};
   final Map<String, List<RoutineRunSegment>> _routineSegments = {};
   List<EventDayPlan> _todayPlans = const [];
   HomeRunningContext? _homeRunningContext;
@@ -151,7 +154,15 @@ class EventController extends ChangeNotifier {
         .where(
           (r) =>
               r.isScheduled &&
-              ((r.isActive && r.appliesTo(displayDate)) || r.id == runningId),
+              ((r.isActive &&
+                      (r.appliesTo(displayDate) ||
+                          TemporalRoutine.actionable(
+                                r,
+                                currentJaxDay,
+                                _now(),
+                              ) !=
+                              null)) ||
+                  r.id == runningId),
         )
         .toList();
   }
@@ -188,7 +199,41 @@ class EventController extends ChangeNotifier {
           )
           .toList(growable: false);
 
-  RoutineExecution? executionFor(Routine r) => _todayExecutions[r.id];
+  List<RoutineExecution> _pausedExecutions = [];
+  List<RoutineExecution> get pausedRoutineExecutions =>
+      List.unmodifiable(_pausedExecutions);
+  List<RoutineExecution> _waitingExecutions = [];
+  List<RoutineExecution> get waitingRoutineExecutions =>
+      List.unmodifiable(_waitingExecutions);
+  List<Routine> get waitingRoutines => _routines
+      .where((r) => _waitingExecutions.any((e) => e.routineId == r.id))
+      .toList();
+
+  RoutineExecution? executionFor(Routine r) {
+    final running = _todayExecutions[r.id];
+    if (running?.status != RoutineExecutionStatus.running) {
+      final waiting = _waitingExecutions
+          .where((e) => e.routineId == r.id)
+          .firstOrNull;
+      if (waiting != null) return waiting;
+      final paused = _pausedExecutions
+          .where((e) => e.routineId == r.id)
+          .firstOrNull;
+      if (paused != null) return paused;
+    }
+    if (!r.isScheduled || running?.status == RoutineExecutionStatus.running) {
+      return running;
+    }
+    return _occurrenceExecutions['${r.id}@${TemporalRoutine.occurrenceKey(r, _now())}'];
+  }
+
+  RoutineExecution? executionForOccurrence(
+    Routine routine,
+    String occurrenceKey,
+  ) => _occurrenceExecutions['${routine.id}@$occurrenceKey'];
+
+  List<ResolvedTemporalWindow> temporalOccurrencesFor(Routine r) =>
+      TemporalRoutine.windows(r, currentJaxDay);
   RoutineExecution? get runningRoutineExecution => _todayExecutions.values
       .where((e) => e?.status == RoutineExecutionStatus.running)
       .firstOrNull;
@@ -206,7 +251,7 @@ class EventController extends ChangeNotifier {
       currentJaxDay: JaxDay.containing(localNow),
       todayEvents: todayEvents,
       todayScheduledRoutines: todayRoutines,
-      routineExecutions: Map.unmodifiable(_todayExecutions),
+      routineExecutions: {for (final r in todayRoutines) r.id: executionFor(r)},
       runningEventId: runningEvent?.id,
       runningRoutineId: runningRoutine?.id,
     );
@@ -274,11 +319,24 @@ class EventController extends ChangeNotifier {
       _routineCategories = await _routineRepository.getRoutineCategories();
       _routines = await _routineRepository.getRoutines();
       _todayExecutions.clear();
+      _occurrenceExecutions.clear();
       _routineSegments.clear();
-      final day = dayKey;
       for (final r in _routines) {
+        if (r.isScheduled) {
+          for (final owner in [currentDay.previous, currentDay]) {
+            final occurrence = await _routineRepository.getRoutineExecution(
+              r.id,
+              owner.key,
+            );
+            _occurrenceExecutions['${r.id}@${owner.key}'] = occurrence;
+            if (occurrence != null) {
+              _routineSegments[occurrence.id] = await _routineRepository
+                  .getRoutineRunSegments(occurrence.id);
+            }
+          }
+        }
         final e = r.isScheduled
-            ? await _routineRepository.getRoutineExecution(r.id, day)
+            ? _occurrenceExecutions['${r.id}@${TemporalRoutine.occurrenceKey(r, _now())}']
             : await _routineRepository.getUnfinishedRoutineExecution(r.id);
         _todayExecutions[r.id] = e;
         if (e != null) {
@@ -286,9 +344,25 @@ class EventController extends ChangeNotifier {
               .getRoutineRunSegments(e.id);
         }
       }
+      _waitingExecutions =
+          (await _routineRepository.getRoutineExecutions())
+              .where((e) => e.status == RoutineExecutionStatus.waiting)
+              .toList()
+            ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+      _pausedExecutions =
+          (await _routineRepository.getRoutineExecutions())
+              .where((e) => e.status == RoutineExecutionStatus.paused)
+              .toList()
+            ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+      for (final e in [..._waitingExecutions, ..._pausedExecutions]) {
+        _occurrenceExecutions['${e.routineId}@${e.occurrenceDate}'] = e;
+        _routineSegments[e.id] = await _routineRepository.getRoutineRunSegments(
+          e.id,
+        );
+      }
       final runningRoutine = await _routineRepository
           .getRunningRoutineExecution();
-      if (runningRoutine != null && runningRoutine.occurrenceDate != day) {
+      if (runningRoutine != null) {
         _todayExecutions[runningRoutine.routineId] = runningRoutine;
         _routineSegments[runningRoutine.id] = await _routineRepository
             .getRoutineRunSegments(runningRoutine.id);
@@ -317,6 +391,16 @@ class EventController extends ChangeNotifier {
 
   Future<String?> create(String name, {String? categoryId}) =>
       _change(() => _create(name, categoryId: categoryId));
+
+  Future<String?> createAndStartStandalone(String name, {String? categoryId}) =>
+      _enqueueExecution(
+        () => _change(() async {
+          final event = await _create(name, categoryId: categoryId);
+          await _start(event.id);
+          await _ensureToday(event.id);
+          return null;
+        }),
+      );
 
   Future<String?> createStandaloneForToday(String name, {String? categoryId}) =>
       _change(() async {
@@ -360,21 +444,35 @@ class EventController extends ChangeNotifier {
       _enqueueExecution(() => _change(() => _wait(id)));
   Future<String?> complete(String id) =>
       _enqueueExecution(() => _change(() => _complete(id)));
-  Future<String?> completeAt(String id, DateTime endTime) => _enqueueExecution(
-    () => _change(() async {
-      final open = (_segments[id] ?? const <RunSegment>[])
-          .where((segment) => segment.endedAt == null)
-          .firstOrNull;
-      if (open == null) throw const DomainFailure('执行计时数据不完整');
-      await _executionSegments.validateCompletionEnd(
-        open.id,
-        open.startedAt,
-        endTime,
-      );
-      await _complete(id, endTime: endTime);
-      return null;
-    }),
-  );
+  Future<String?> completeAt(String id, DateTime endTime) =>
+      correctedEventEndAction(id)(endTime);
+  Future<String?> pauseAt(String id, DateTime endTime) =>
+      correctedEventEndAction(id, pause: true)(endTime);
+
+  Future<String?> Function(DateTime) correctedEventEndAction(
+    String id, {
+    bool pause = false,
+  }) {
+    final expected = _events.where((e) => e.id == id).firstOrNull;
+    final open = (_segments[id] ?? const <RunSegment>[])
+        .where((s) => s.endedAt == null)
+        .toList();
+    return (end) => _enqueueExecution(
+      () => _change(() async {
+        if (expected == null || open.length != 1) {
+          throw const DomainFailure('执行计时数据不完整');
+        }
+        await _executionSegments.closeRunningEventAt(
+          expected: expected,
+          segment: open.single,
+          end: end,
+          pause: pause,
+        );
+        return null;
+      }),
+    );
+  }
+
   Future<String?> adjustRunningEventStart(
     String id,
     DateTime expectedStartedAt,
@@ -428,17 +526,19 @@ class EventController extends ChangeNotifier {
     ]);
     return null;
   });
-  Future<String?> removeFromToday(String id) => _change(() async {
-    final event = await _repository.getEvent(id);
-    if (event?.status == EventStatus.running) {
-      throw const DomainFailure('请先暂停或完成正在执行的事件');
-    }
-    if (event?.status == EventStatus.completed) {
-      throw const DomainFailure('当天已完成事项会保留到今日结束');
-    }
-    await _dayPlans?.removeEventDayPlan(id, currentJaxDay.key);
-    return null;
-  });
+  bool canDeferToday(JaxEvent event) =>
+      event.isStandalone && event.status == EventStatus.pending;
+
+  Future<String?> removeFromToday(String id) => _enqueueExecution(
+    () => _change(() async {
+      final event = await _repository.getEvent(id);
+      if (event == null || !canDeferToday(event)) {
+        throw const DomainFailure('只有尚未开始的独立事项可以选择今天先不处理');
+      }
+      await _dayPlans?.removeEventDayPlan(id, currentJaxDay.key);
+      return null;
+    }),
+  );
   Future<String?> moveToday(String id, int targetIndex) => _change(
     () => _dayPlans!.reorderEventDayPlan(id, currentJaxDay.key, targetIndex),
   );
@@ -569,9 +669,56 @@ class EventController extends ChangeNotifier {
     return queued;
   }
 
+  Future<String?> startRoutineOccurrence(Routine r, String key) =>
+      _enqueueExecution(
+        () => _change(
+          () => _routineService!.start(
+            r,
+            execution: executionForOccurrence(r, key),
+            occurrenceDayKey: key,
+          ),
+        ),
+      );
+  Future<String?> pauseRoutineOccurrence(Routine r, String key) =>
+      _enqueueExecution(
+        () => _change(
+          () => _routineService!.pause(executionForOccurrence(r, key)!),
+        ),
+      );
+  Future<String?> completeRoutineOccurrence(Routine r, String key) =>
+      _enqueueExecution(
+        () => _change(
+          () => _routineService!.complete(executionForOccurrence(r, key)!),
+        ),
+      );
+
   Future<String?> startRoutine(Routine r) => _enqueueExecution(
     () => _change(() => _routineService!.start(r, execution: executionFor(r))),
   );
+  Future<String?> waitRoutine(Routine r) => _enqueueExecution(
+    () => _change(() => _routineService!.wait(executionFor(r)!)),
+  );
+  Future<String?> resumeWaitingRoutine(RoutineExecution e) => _enqueueExecution(
+    () => _change(
+      () => _routineService!.start(
+        _routines.firstWhere((r) => r.id == e.routineId),
+        execution: e,
+      ),
+    ),
+  );
+  Future<String?> completeRoutineExecution(RoutineExecution e) =>
+      _enqueueExecution(() => _change(() => _routineService!.complete(e)));
+  Future<String?> resumeRoutineExecution(RoutineExecution e) =>
+      _enqueueExecution(
+        () => _change(() async {
+          final r = _routines.where((r) => r.id == e.routineId).firstOrNull;
+          if (r == null) throw const DomainFailure('日常不存在');
+          await _routineService!.start(r, execution: e);
+          return null;
+        }),
+      );
+  Future<String?> completeWaitingRoutine(RoutineExecution e) =>
+      _enqueueExecution(() => _change(() => _routineService!.complete(e)));
   Future<String?> pauseRoutine(Routine r) => _enqueueExecution(
     () => _change(() => _routineService!.pause(executionFor(r)!)),
   );
@@ -579,24 +726,34 @@ class EventController extends ChangeNotifier {
     () => _change(() => _routineService!.complete(executionFor(r)!)),
   );
   Future<String?> completeRoutineAt(Routine r, DateTime endTime) =>
-      _enqueueExecution(
-        () => _change(() async {
-          final execution = executionFor(r);
-          if (execution == null) throw const DomainFailure('执行记录不存在');
-          final open =
-              (_routineSegments[execution.id] ?? const <RoutineRunSegment>[])
-                  .where((segment) => segment.endedAt == null)
-                  .firstOrNull;
-          if (open == null) throw const DomainFailure('执行计时数据不完整');
-          await _executionSegments.validateCompletionEnd(
-            open.id,
-            open.startedAt,
-            endTime,
-          );
-          await _routineService!.complete(execution, endTime: endTime);
-          return null;
-        }),
-      );
+      correctedRoutineEndAction(r)(endTime);
+  Future<String?> pauseRoutineAt(Routine r, DateTime endTime) =>
+      correctedRoutineEndAction(r, pause: true)(endTime);
+
+  Future<String?> Function(DateTime) correctedRoutineEndAction(
+    Routine r, {
+    bool pause = false,
+  }) {
+    final expected = executionFor(r);
+    final open = (_routineSegments[expected?.id] ?? const <RoutineRunSegment>[])
+        .where((s) => s.endedAt == null)
+        .toList();
+    return (end) => _enqueueExecution(
+      () => _change(() async {
+        if (expected == null || open.length != 1) {
+          throw const DomainFailure('执行计时数据不完整');
+        }
+        await _executionSegments.closeRunningRoutineAt(
+          expected: expected,
+          segment: open.single,
+          end: end,
+          pause: pause,
+        );
+        return null;
+      }),
+    );
+  }
+
   Future<String?> adjustRunningRoutineStart(
     Routine routine,
     DateTime expectedStartedAt,

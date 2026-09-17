@@ -176,12 +176,11 @@ void main() {
           expect(input, findsNothing);
           await tester.tapAt(const Offset(10, 100));
           await settle();
-          await tester.tap(
+          expect(
             find.byKey(const ValueKey('toggle-next-edit-draft')),
+            findsNothing,
           );
-          await settle();
-          expect(input, findsNothing);
-          for (final status in ['next', 'dispatched', 'done', 'dropped']) {
+          for (final status in ['dispatched', 'done', 'dropped']) {
             // UI-only fixture states; no dispatch or real execution is performed.
             await app.database.update(
               'plan_items',

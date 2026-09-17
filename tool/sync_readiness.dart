@@ -1,9 +1,19 @@
 import 'dart:io';
 
-import 'package:jax/data/database/app_database.dart';
+import 'private_tool_support.dart';
+
 import 'package:jax/data/sync/sqlite_sync_readiness.dart';
 
-Future<void> main(List<String> arguments) async {
+Future<void> main(List<String> arguments) =>
+    runPrivateTool(arguments, runAudit);
+
+Future<void> runAudit(List<String> arguments) async {
+  if (arguments.contains("--help") || arguments.contains("-help")) {
+    stdout.writeln(
+      "Read-only sync_readiness: <database>. No migration or repair. Unsupported schema fails. --verbose is private diagnostics.",
+    );
+    return;
+  }
   if (arguments.length != 1) {
     stderr.writeln('Usage: dart run tool/sync_readiness.dart <database>');
     exitCode = 64;
@@ -15,17 +25,17 @@ Future<void> main(List<String> arguments) async {
     exitCode = 66;
     return;
   }
-  final database = await AppDatabase.open(file.path);
+  final database = await openReadOnly(file.path);
   try {
-    final issues = await SqliteSyncReadiness(database).validate();
-    stdout.writeln('schema=${AppDatabase.schemaVersion}');
+    final issues = await SqliteSyncReadiness.fromDatabase(database).validate();
+    stdout.writeln('Read-only schema verified.');
     if (issues.isEmpty) {
       stdout.writeln('SYNC_READINESS_OK');
       return;
     }
     for (final issue in issues) {
       final output = issue.isBlocking ? stderr : stdout;
-      output.writeln('${issue.isBlocking ? 'ERROR' : 'WARNING'} $issue');
+      output.writeln('${issue.isBlocking ? 'ERROR' : 'WARNING'} ${issue.code}');
     }
     if (issues.any((issue) => issue.isBlocking)) {
       exitCode = 1;

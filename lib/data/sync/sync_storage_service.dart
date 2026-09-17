@@ -1,3 +1,5 @@
+import 'backup_ownership.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -130,7 +132,10 @@ class SyncStorageService {
     );
   }
 
-  Future<List<String>> cleanupBackups({String? activeSessionPath}) async {
+  Future<List<String>> cleanupBackups({
+    String? activeSessionPath,
+    bool apply = false,
+  }) async {
     final settings = await load();
     final root = Directory(settings.backupsPath);
     if (!await root.exists()) return const [];
@@ -144,6 +149,7 @@ class SyncStorageService {
     var retainedNormal = 0;
     for (final session in sessions) {
       if (session.absolute.path == activeSessionPath) continue;
+      if (!await isOwnedBackup(root.path, session.path)) continue;
       final metadata = File(
         '${session.path}${Platform.pathSeparator}metadata.json',
       );
@@ -159,7 +165,12 @@ class SyncStorageService {
     }
     final removed = <String>[];
     for (final session in removable) {
-      await session.delete(recursive: true);
+      if (apply) {
+        if (!await isOwnedBackup(root.path, session.path)) {
+          throw StateError("Backup ownership changed; cleanup stopped.");
+        }
+        await session.delete(recursive: true);
+      }
       removed.add(session.path);
     }
     return removed;

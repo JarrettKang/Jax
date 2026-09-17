@@ -31,6 +31,12 @@ class SqliteSyncReadiness {
       issues.add(SyncReadinessIssue('foreign-key', row.toString()));
     }
 
+    for (final row in await db.rawQuery(
+      "SELECT id FROM routine_executions WHERE is_waiting NOT IN (0,1) OR (is_waiting = 1 AND status != 'paused')",
+    )) {
+      issues.add(SyncReadinessIssue('routine-waiting-state', row.toString()));
+    }
+
     const identityTables = [
       'categories',
       'events',
@@ -151,6 +157,17 @@ class SqliteSyncReadiness {
     for (final row in await db.rawQuery('''SELECT i.id FROM plan_items i
       LEFT JOIN plans p ON p.id = i.plan_id WHERE p.id IS NULL''')) {
       issues.add(SyncReadinessIssue('plan-item-plan', row['id'].toString()));
+    }
+    for (final row in await db.rawQuery(
+      '''SELECT i.id FROM plan_items i
+      LEFT JOIN world_nodes n ON n.id = i.promoted_world_node_id
+      WHERE i.promoted_world_node_id IS NOT NULL AND
+        (n.id IS NULL OR i.status NOT IN ('next','draft') OR
+         EXISTS(SELECT 1 FROM events e WHERE e.source_plan_item_id = i.id))''',
+    )) {
+      issues.add(
+        SyncReadinessIssue('plan-item-promotion', row['id'].toString()),
+      );
     }
     for (final row in await db.rawQuery('''SELECT n.id FROM plan_review_notes n
       LEFT JOIN plans p ON p.id = n.plan_id WHERE p.id IS NULL''')) {
@@ -304,11 +321,15 @@ class SqliteSyncReadiness {
       (time_recommendation_enabled = 0 AND
         (time_recommendation_start_minute IS NOT NULL OR
          time_recommendation_end_minute IS NOT NULL OR
+         time_recommendation_latest_end_minute IS NOT NULL OR
          time_recommendation_reason IS NOT NULL)) OR
       (time_recommendation_enabled = 1 AND
         (routine_type != 'scheduled' OR
          time_recommendation_start_minute NOT BETWEEN 0 AND 1439 OR
          time_recommendation_end_minute NOT BETWEEN 0 AND 1439 OR
+         time_recommendation_latest_end_minute IS NULL OR
+         time_recommendation_latest_end_minute NOT BETWEEN 0 AND 1439 OR
+         ((time_recommendation_end_minute - time_recommendation_start_minute + 1440) % 1440) > ((time_recommendation_latest_end_minute - time_recommendation_start_minute + 1440) % 1440) OR
          time_recommendation_start_minute = time_recommendation_end_minute OR
          (time_recommendation_reason IS NOT NULL AND
           length(trim(time_recommendation_reason)) = 0)))''')) {
@@ -321,7 +342,9 @@ class SqliteSyncReadiness {
       show_in_home_quick_actions IS NULL OR
       show_in_home_quick_actions NOT IN (0,1) OR
       (show_in_home_quick_actions = 1 AND routine_type != 'onDemand')''')) {
-      issues.add(SyncReadinessIssue('routine-home-quick-action', row['id'].toString()));
+      issues.add(
+        SyncReadinessIssue('routine-home-quick-action', row['id'].toString()),
+      );
     }
 
     final overlaps = await db.rawQuery('''WITH all_segments AS (

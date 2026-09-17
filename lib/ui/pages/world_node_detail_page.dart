@@ -6,6 +6,7 @@ import '../../core/entities/plan_item.dart';
 import '../../core/entities/world_node.dart';
 import '../controllers/planning_controller.dart';
 import 'planning_page.dart';
+import '../theme/world_theme.dart';
 
 class WorldNodeDetailPage extends StatelessWidget {
   const WorldNodeDetailPage({
@@ -18,107 +19,122 @@ class WorldNodeDetailPage extends StatelessWidget {
   final String worldNodeId;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller,
-    builder: (context, _) {
-      final node = controller.nodeFor(worldNodeId);
-      if (node == null) {
-        return const Scaffold(body: Center(child: Text('世界节点不存在')));
-      }
-      final category = controller.categoryForNode(node);
-      final path = controller.pathFor(node);
-      final current = controller.currentPlanFor(node.id);
-      final history = controller.endedPlansFor(node.id);
-      final executions = controller.executionHistoryFor(node.id);
-      final totalDuration = executions.fold<Duration>(
-        Duration.zero,
-        (sum, value) => sum + value.directDuration,
-      );
-      return Scaffold(
-        appBar: AppBar(title: Text(node.name)),
-        body: ListView(
-          key: const ValueKey('world-node-detail'),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          children: [
-            const _SectionTitle('概览'),
-            Text(
-              [
-                category?.name ?? '未分类',
-                ...path.map((value) => value.name),
-              ].join(' › '),
-              key: const ValueKey('world-node-breadcrumb'),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              node.status == WorldNodeStatus.completed
-                  ? '已完成'
-                  : node.isFocused
-                  ? '进行中 · 关注中'
-                  : '进行中',
-            ),
-            const Divider(height: 32),
-            const _SectionTitle('当前计划'),
-            if (current == null)
-              _EmptyCurrentPlan(
-                completed: node.status == WorldNodeStatus.completed,
-                onCreate: () => _createPlan(context, node),
-              )
-            else
-              _CurrentPlanSummary(
-                plan: current,
-                items: controller.itemsFor(current.id),
-                onOpen: () => _openPlan(context, current),
+  Widget build(BuildContext context) => WorldVisualScope(
+    builder: (context) => AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final node = controller.nodeFor(worldNodeId);
+        if (node == null) {
+          return const Scaffold(body: Center(child: Text('世界节点不存在')));
+        }
+        final category = controller.categoryForNode(node);
+        final path = controller.pathFor(node);
+        final current = controller.currentPlanFor(node.id);
+        final history = controller.endedPlansFor(node.id);
+        final executions = controller.executionHistoryFor(node.id);
+        final totalDuration = executions.fold<Duration>(
+          Duration.zero,
+          (sum, value) => sum + value.directDuration,
+        );
+        return Scaffold(
+          appBar: AppBar(title: const Text('世界')),
+          body: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: WorldTheme.structuralWidth,
               ),
-            const Divider(height: 32),
-            const _SectionTitle('历史计划'),
-            if (history.isEmpty)
-              const _QuietEmpty('还没有已结束的计划')
-            else
-              ...history.map(
-                (plan) => ListTile(
-                  key: ValueKey('historical-plan-${plan.id}'),
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(plan.displayTitle),
-                  subtitle: Text(
-                    '第 ${plan.roundNumber} 轮 · ${_date(plan.createdAt)}—${_date(plan.endedAt!)} · '
-                    '${controller.itemsFor(plan.id).length} 个计划项 · '
-                    '${controller.reviewNotesFor(plan.id).length} 条复盘',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openPlan(context, plan),
-                ),
-              ),
-            const Divider(height: 32),
-            Row(
-              children: [
-                const Expanded(child: _SectionTitle('执行历史')),
-                if (executions.isNotEmpty)
+              child: ListView(
+                key: const ValueKey('world-node-detail'),
+                padding: WorldTheme.pagePadding(context),
+                children: [
                   Text(
-                    '直接用时 ${_duration(totalDuration)}',
+                    node.name,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  const _SectionTitle('概览'),
+                  Text(
+                    [
+                      category?.name ?? '未分类',
+                      ...path.map((value) => value.name),
+                    ].join(' › '),
+                    key: const ValueKey('world-node-breadcrumb'),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-              ],
-            ),
-            if (executions.isEmpty)
-              const _QuietEmpty('还没有由此节点计划派发的执行记录')
-            else
-              ...executions.map(
-                (entry) => ListTile(
-                  key: ValueKey('world-execution-${entry.event.id}'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(_eventIcon(entry.event.status)),
-                  title: Text(entry.event.name),
-                  subtitle: Text(
-                    '${_eventStatus(entry.event.status)} · ${_dateTime(entry.recentAt)} · '
-                    '${_duration(entry.directDuration)} · 第 ${entry.plan.roundNumber} 轮',
+                  const SizedBox(height: 8),
+                  Text(
+                    node.status == WorldNodeStatus.completed
+                        ? '已完成'
+                        : node.isFocused
+                        ? '进行中 · 关注中'
+                        : '进行中',
                   ),
-                ),
+                  const Divider(),
+                  const _SectionTitle('当前计划'),
+                  if (current == null)
+                    _EmptyCurrentPlan(
+                      completed: node.status == WorldNodeStatus.completed,
+                      onCreate: () => _createPlan(context, node),
+                    )
+                  else
+                    _CurrentPlanSummary(
+                      plan: current,
+                      items: controller.itemsFor(current.id),
+                      onOpen: () => _openPlan(context, current),
+                    ),
+                  const Divider(),
+                  const _SectionTitle('历史计划'),
+                  if (history.isEmpty)
+                    const _QuietEmpty('还没有已结束的计划')
+                  else
+                    ...history.map(
+                      (plan) => ListTile(
+                        key: ValueKey('historical-plan-${plan.id}'),
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(plan.displayTitle),
+                        subtitle: Text(
+                          '第 ${plan.roundNumber} 轮 · ${_date(plan.createdAt)}—${_date(plan.endedAt!)} · '
+                          '${controller.itemsFor(plan.id).length} 个计划项 · '
+                          '${controller.reviewNotesFor(plan.id).length} 条复盘',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openPlan(context, plan),
+                      ),
+                    ),
+                  const Divider(),
+                  Row(
+                    children: [
+                      const Expanded(child: _SectionTitle('执行历史')),
+                      if (executions.isNotEmpty)
+                        Text(
+                          '直接用时 ${_duration(totalDuration)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                  if (executions.isEmpty)
+                    const _QuietEmpty('还没有由此节点计划派发的执行记录')
+                  else
+                    ...executions.map(
+                      (entry) => ListTile(
+                        key: ValueKey('world-execution-${entry.event.id}'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(_eventIcon(entry.event.status)),
+                        title: Text(entry.event.name),
+                        subtitle: Text(
+                          '${_eventStatus(entry.event.status)} · ${_dateTime(entry.recentAt)} · '
+                          '${_duration(entry.directDuration)} · 第 ${entry.plan.roundNumber} 轮',
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
-      );
-    },
+            ),
+          ),
+        );
+      },
+    ),
   );
 
   Future<void> _createPlan(BuildContext context, WorldNode node) async {
@@ -149,7 +165,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: Theme.of(context).textTheme.titleMedium),
+    child: Text(text, style: Theme.of(context).textTheme.titleLarge),
   );
 }
 
@@ -197,7 +213,7 @@ class _CurrentPlanSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     int count(PlanItemStatus status) =>
-        items.where((item) => item.status == status).length;
+        items.where((item) => !item.isPromoted && item.status == status).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

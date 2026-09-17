@@ -1,3 +1,4 @@
+import '../services/temporal_routine.dart';
 import '../entities/event_status.dart';
 import '../entities/jax_day.dart';
 import '../entities/jax_event.dart';
@@ -103,28 +104,27 @@ class TimeRecommendationRule implements RecommendationRule {
     final configuration = routine.timeRecommendation;
     if (!routine.isScheduled ||
         !routine.isActive ||
-        !routine.appliesTo(context.currentJaxDay.displayDate) ||
         configuration == null ||
         context.runningRoutineId == routine.id ||
+        execution?.status == RoutineExecutionStatus.paused ||
+        execution?.status == RoutineExecutionStatus.waiting ||
         execution?.status == RoutineExecutionStatus.running ||
         execution?.status == RoutineExecutionStatus.completed) {
       return null;
     }
-    if (configuration.startMinute < 0 ||
-        configuration.startMinute >= 1440 ||
-        configuration.endMinute < 0 ||
-        configuration.endMinute >= 1440 ||
-        configuration.startMinute == configuration.endMinute) {
+    ResolvedTemporalWindow? window;
+    try {
+      window = TemporalRoutine.actionable(
+        routine,
+        context.currentJaxDay,
+        context.currentLocalDateTime,
+      );
+    } on Object {
       return null;
     }
-    final local = context.currentLocalDateTime.toLocal();
-    final minute = local.hour * 60 + local.minute;
+    if (window == null) return null;
     final start = configuration.startMinute;
-    final end = configuration.endMinute;
-    final matched = start < end
-        ? minute >= start && minute < end
-        : minute >= start || minute < end;
-    if (!matched) return null;
+    final end = configuration.latestEndMinute;
     return RecommendationSignal(
       candidateId: candidate.id,
       ruleId: ruleId,
@@ -155,7 +155,26 @@ class HomeCandidateProvider {
     }
     for (final routine in context.todayScheduledRoutines) {
       final execution = context.routineExecutions[routine.id];
+      if (!routine.isScheduled || !routine.isActive) continue;
+      if (routine.timeRecommendation != null) {
+        try {
+          if (TemporalRoutine.actionable(
+                routine,
+                context.currentJaxDay,
+                context.currentLocalDateTime,
+              ) ==
+              null) {
+            continue;
+          }
+        } on Object {
+          continue;
+        }
+      } else if (!routine.appliesTo(context.currentJaxDay.displayDate)) {
+        continue;
+      }
       if (routine.id == context.runningRoutineId ||
+          execution?.status == RoutineExecutionStatus.paused ||
+          execution?.status == RoutineExecutionStatus.waiting ||
           execution?.status == RoutineExecutionStatus.running ||
           execution?.status == RoutineExecutionStatus.completed) {
         continue;

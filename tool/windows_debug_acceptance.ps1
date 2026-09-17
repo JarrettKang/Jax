@@ -1,8 +1,12 @@
 param(
-  [string]$FlutterPath = 'flutter'
+  [string]$FlutterPath,
+  [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Help) { Write-Output 'Developer Windows acceptance: runs isolated integration/widget tests, stops test processes, rebuilds normal Debug entry. -FlutterPath or JAX_FLUTTER_PATH/PATH/FLUTTER_ROOT. See docs/TOOLS.md.'; return }
+. (Join-Path $PSScriptRoot 'tool_locator.ps1')
+$FlutterPath = Resolve-JaxTool flutter $FlutterPath
 Set-StrictMode -Version Latest
 
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

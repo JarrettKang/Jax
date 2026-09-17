@@ -1,3 +1,5 @@
+import 'private_tool_support.dart';
+
 import 'dart:io';
 
 import 'package:jax/core/sync/sync_compare_engine.dart';
@@ -5,7 +7,15 @@ import 'package:jax/core/sync/sync_contract.dart';
 import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) => runPrivateTool(args, runCommand);
+
+Future<void> runCommand(List<String> args) async {
+  if (args.contains("--help") || args.contains("-help")) {
+    stdout.writeln(
+      "Developer-only sync_phase2a. See docs/TOOLS.md for commands, private output and safety requirements. --verbose enables private diagnostics.",
+    );
+    return;
+  }
   if (args.isEmpty) return _usage();
   switch (args.first) {
     case 'export' when args.length == 3:
@@ -17,7 +27,8 @@ Future<void> main(List<String> args) async {
         args[3],
         args.length == 5 ? args[4] : null,
       );
-    case 'fingerprint' when args.length == 2:
+    case 'fingerprint'
+        when args.length == 3 && args.last == '--machine-private':
       stdout.write(
         SyncSnapshot.fromJsonString(File(args[1]).readAsStringSync())
             .businessFingerprint,
@@ -42,11 +53,12 @@ Future<void> _export(String source, String destination) async {
   }
   sqfliteFfiInit();
   final database = await databaseFactoryFfi.openDatabase(
-    source,
+    File(source).absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {
     final snapshot = await SqliteSyncSnapshotAdapter(database).read();
+    requirePrivateOutput(destination);
     final output = File(destination);
     await output.parent.create(recursive: true);
     await output.writeAsString(snapshot.toJsonString(pretty: true));
@@ -71,11 +83,12 @@ Future<void> _compare(
     android: load(androidPath),
     baseline: baselinePath == null ? null : load(baselinePath),
   );
+  requirePrivateOutput(outputPath);
   final output = File(outputPath);
   await output.parent.create(recursive: true);
   await output.writeAsString(plan.toJsonString());
   final summary = plan.toJson()['summary'];
   stdout.writeln('SYNC_COMPARE_OK previewOnly=true');
   stdout.writeln(summary);
-  stdout.writeln('Plan: ${output.path}');
+  stdout.writeln('Plan written to private output.');
 }

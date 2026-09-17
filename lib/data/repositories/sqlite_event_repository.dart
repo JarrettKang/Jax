@@ -1,3 +1,5 @@
+import '../../core/services/temporal_routine.dart';
+
 import 'package:sqflite/sqflite.dart' show ConflictAlgorithm, DatabaseExecutor;
 
 import '../../core/entities/event_status.dart';
@@ -57,8 +59,18 @@ class SqliteEventRepository
   }
 
   @override
-  Future<void> updateEvent(JaxEvent event) async {
+  Future<void> updateEvent(JaxEvent event, {JaxEvent? expectedPaused}) async {
     await _appDatabase.database.transaction((tx) async {
+      if (expectedPaused != null) {
+        await _validatePausedCompletionIn(
+          tx,
+          'events',
+          'run_segments',
+          'event_id',
+          event.id,
+          expectedPaused.updatedAt,
+        );
+      }
       final current = await tx.query(
         'events',
         columns: ['status', 'source_plan_item_id'],
@@ -300,8 +312,26 @@ class SqliteEventRepository
   }
 
   @override
-  Future<void> pauseEvent(JaxEvent event, RunSegment segment) async {
+  Future<void> pauseEvent(
+    JaxEvent event,
+    RunSegment segment, {
+    DateTime? expectedUpdatedAt,
+  }) async {
     await _appDatabase.database.transaction((transaction) async {
+      if (expectedUpdatedAt != null) {
+        await _validateRunningCloseIn(
+          transaction,
+          ownerTable: 'events',
+          ownerId: event.id,
+          segmentTable: 'run_segments',
+          ownerColumn: 'event_id',
+          segmentId: segment.id,
+          start: segment.startedAt,
+          end: segment.endedAt!,
+          now: event.updatedAt,
+          expectedUpdatedAt: expectedUpdatedAt,
+        );
+      }
       final current = await transaction.query(
         'events',
         columns: ['source_plan_item_id'],
@@ -880,10 +910,18 @@ class SqliteEventRepository
         }
       });
   @override
-  Future<void> insertRoutine(Routine r) async =>
-      _appDatabase.database.insert('routines', _routineToRow(r));
+  Future<void> insertRoutine(Routine r) async {
+    if (r.timeRecommendation != null) {
+      TemporalRoutine.validate(r.timeRecommendation!);
+    }
+    await _appDatabase.database.insert('routines', _routineToRow(r));
+  }
+
   @override
   Future<void> updateRoutine(Routine r) async {
+    if (r.timeRecommendation != null) {
+      TemporalRoutine.validate(r.timeRecommendation!);
+    }
     if (await _appDatabase.database.update(
           'routines',
           _routineToRow(r),
@@ -1184,8 +1222,11 @@ class SqliteEventRepository
   }
 
   @override
-  Future<void> pauseRoutineExecution(RoutineExecution e, RoutineRunSegment s) =>
-      _finishRoutineSegment(e, s);
+  Future<void> pauseRoutineExecution(
+    RoutineExecution e,
+    RoutineRunSegment s, {
+    DateTime? expectedUpdatedAt,
+  }) => _finishRoutineSegment(e, s, expectedUpdatedAt: expectedUpdatedAt);
   @override
   Future<void> completeRoutineExecution(
     RoutineExecution e,
@@ -1193,8 +1234,23 @@ class SqliteEventRepository
   ) => _finishRoutineSegment(e, s);
   Future<void> _finishRoutineSegment(
     RoutineExecution e,
-    RoutineRunSegment s,
-  ) async => _appDatabase.database.transaction((tx) async {
+    RoutineRunSegment s, {
+    DateTime? expectedUpdatedAt,
+  }) async => _appDatabase.database.transaction((tx) async {
+    if (expectedUpdatedAt != null) {
+      await _validateRunningCloseIn(
+        tx,
+        ownerTable: 'routine_executions',
+        ownerId: e.id,
+        segmentTable: 'routine_run_segments',
+        ownerColumn: 'routine_execution_id',
+        segmentId: s.id,
+        start: s.startedAt,
+        end: s.endedAt!,
+        now: e.updatedAt,
+        expectedUpdatedAt: expectedUpdatedAt,
+      );
+    }
     await tx.update(
       'routine_executions',
       _executionToRow(e),
@@ -1212,13 +1268,55 @@ class SqliteEventRepository
     }
   });
   @override
-  Future<void> updateRoutineExecutionOnly(RoutineExecution e) async =>
-      _appDatabase.database.update(
+  Future<void> updateRoutineExecutionOnly(
+    RoutineExecution e, {
+    RoutineExecution? expectedPaused,
+  }) async {
+    await _appDatabase.database.transaction((tx) async {
+      if (expectedPaused != null) {
+        await _validatePausedCompletionIn(
+          tx,
+          'routine_executions',
+          'routine_run_segments',
+          'routine_execution_id',
+          e.id,
+          expectedPaused.updatedAt,
+        );
+      }
+      await tx.update(
         'routine_executions',
         _executionToRow(e),
         where: 'id = ?',
         whereArgs: [e.id],
       );
+    });
+  }
+
+  Future<void> _validatePausedCompletionIn(
+    DatabaseExecutor tx,
+    String table,
+    String segments,
+    String ownerColumn,
+    String id,
+    DateTime expectedUpdatedAt,
+  ) async {
+    final rows = await tx.query(table, where: 'id = ?', whereArgs: [id]);
+    if (rows.length != 1 ||
+        rows.single['status'] != 'paused' ||
+        (table == 'routine_executions' && rows.single['is_waiting'] != 0) ||
+        rows.single['updated_at_utc'] !=
+            expectedUpdatedAt.toUtc().millisecondsSinceEpoch) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    final open = await tx.query(
+      segments,
+      columns: ['id'],
+      where: '$ownerColumn = ? AND ended_at_utc IS NULL',
+      whereArgs: [id],
+    );
+    if (open.isNotEmpty) throw const DomainFailure('暂停状态存在未关闭的执行段，请检查执行数据');
+  }
+
   @override
   Future<void> pauseRunningRoutine(DateTime now) async => _appDatabase.database
       .transaction((tx) => _pauseRunningRoutineIn(tx, now));
@@ -1286,6 +1384,8 @@ class SqliteEventRepository
     'show_in_home_quick_actions': r.showInHomeQuickActions ? 1 : 0,
     'time_recommendation_start_minute': r.timeRecommendation?.startMinute,
     'time_recommendation_end_minute': r.timeRecommendation?.endMinute,
+    'time_recommendation_latest_end_minute':
+        r.timeRecommendation?.latestEndMinute,
     'time_recommendation_reason': r.timeRecommendation?.reason,
     'sort_order': r.sortOrder,
     'created_at_utc': r.createdAt.toUtc().millisecondsSinceEpoch,
@@ -1304,6 +1404,7 @@ class SqliteEventRepository
         ? RoutineTimeRecommendation(
             startMinute: r['time_recommendation_start_minute'] as int,
             endMinute: r['time_recommendation_end_minute'] as int,
+            latestEndMinute: r['time_recommendation_latest_end_minute'] as int,
             reason: r['time_recommendation_reason'] as String?,
           )
         : null,
@@ -1344,7 +1445,10 @@ class SqliteEventRepository
     'id': e.id,
     'routine_id': e.routineId,
     'occurrence_date': e.occurrenceDate,
-    'status': e.status.name,
+    'status': e.status == RoutineExecutionStatus.waiting
+        ? 'paused'
+        : e.status.name,
+    'is_waiting': e.status == RoutineExecutionStatus.waiting ? 1 : 0,
     'completed_at_utc': e.completedAt?.toUtc().millisecondsSinceEpoch,
     'created_at_utc': e.createdAt.toUtc().millisecondsSinceEpoch,
     'updated_at_utc': e.updatedAt.toUtc().millisecondsSinceEpoch,
@@ -1354,7 +1458,9 @@ class SqliteEventRepository
         id: r['id'] as String,
         routineId: r['routine_id'] as String,
         occurrenceDate: r['occurrence_date'] as String,
-        status: RoutineExecutionStatus.values.byName(r['status'] as String),
+        status: r['is_waiting'] == 1
+            ? RoutineExecutionStatus.waiting
+            : RoutineExecutionStatus.values.byName(r['status'] as String),
         completedAt: r['completed_at_utc'] == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(
@@ -1411,12 +1517,72 @@ class SqliteEventRepository
     }
   }
 
+  Future<void> _validateRunningCloseIn(
+    DatabaseExecutor tx, {
+    required String ownerTable,
+    required String ownerId,
+    required String segmentTable,
+    required String ownerColumn,
+    required String segmentId,
+    required DateTime start,
+    required DateTime end,
+    required DateTime now,
+    required DateTime expectedUpdatedAt,
+  }) async {
+    if (!end.isAfter(start)) {
+      throw const DomainFailure('结束时间必须晚于开始时间');
+    }
+    if (end.isAfter(now)) throw const DomainFailure('不能记录未来时间');
+    final owner = await tx.query(
+      ownerTable,
+      where: 'id = ?',
+      whereArgs: [ownerId],
+    );
+    final open = await tx.query(
+      segmentTable,
+      where: '$ownerColumn = ? AND ended_at_utc IS NULL',
+      whereArgs: [ownerId],
+    );
+    if (owner.length != 1 ||
+        owner.single['status'] != 'running' ||
+        owner.single['updated_at_utc'] !=
+            expectedUpdatedAt.toUtc().millisecondsSinceEpoch ||
+        open.length != 1 ||
+        open.single['id'] != segmentId ||
+        open.single['started_at_utc'] != start.toUtc().millisecondsSinceEpoch) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    // A second open segment is corrupt/changed execution state, even if a
+    // shortened interval would no longer overlap it.
+    for (final table in ['run_segments', 'routine_run_segments']) {
+      final allOpen = await tx.query(
+        table,
+        columns: ['id'],
+        where: 'ended_at_utc IS NULL',
+      );
+      if (table == segmentTable
+          ? allOpen.length != 1 || allOpen.single['id'] != segmentId
+          : allOpen.isNotEmpty) {
+        throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+      }
+    }
+    await _validateNoSegmentOverlapIn(
+      tx,
+      start,
+      end,
+      exceptId: segmentId,
+      exceptTable: segmentTable,
+      runningStartCorrection: false,
+    );
+  }
+
   Future<void> _validateNoSegmentOverlapIn(
     DatabaseExecutor db,
     DateTime start,
     DateTime end, {
     required String exceptId,
     required String exceptTable,
+    bool runningStartCorrection = true,
   }) async {
     final rows = <Map<String, Object?>>[
       ...await db
@@ -1460,6 +1626,11 @@ JOIN routines r ON r.id = re.routine_id
           otherEnd,
           isUtc: true,
         ).toLocal();
+        if (!runningStartCorrection) {
+          throw DomainFailure(
+            '与「${row['name']} ${_clock(localStart)}–${_clock(localEnd)}」时间重叠',
+          );
+        }
         throw DomainFailure(
           '无法修改开始时间。${_clock(localStart)}–${_clock(localEnd)} 已有执行记录：${row['name']}。请选择 ${_clock(localEnd)} 之后的时间。',
         );

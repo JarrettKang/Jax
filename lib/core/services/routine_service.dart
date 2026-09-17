@@ -1,8 +1,10 @@
+import '../entities/execution_capabilities.dart';
 import '../entities/routine.dart';
 import '../entities/jax_day.dart';
 import '../errors/domain_failure.dart';
 import '../repositories/routine_repository.dart';
 import 'segment_lifecycle_log.dart';
+import 'temporal_routine.dart';
 import '../use_cases/create_event.dart';
 
 class RoutineService {
@@ -113,7 +115,8 @@ class RoutineService {
         sortOrder: destination,
         recurrence: recurrence,
         type: nextType,
-        showInHomeQuickActions: nextType == RoutineType.onDemand &&
+        showInHomeQuickActions:
+            nextType == RoutineType.onDemand &&
             (showInHomeQuickActions ??
                 (routine.type == nextType && routine.showInHomeQuickActions)),
         timeRecommendation: nextTimeRecommendation,
@@ -131,23 +134,51 @@ class RoutineService {
     if (type != RoutineType.scheduled) {
       throw const DomainFailure('只有计划型日常支持按时间推荐');
     }
-    if (configuration.startMinute < 0 ||
-        configuration.startMinute >= 1440 ||
-        configuration.endMinute < 0 ||
-        configuration.endMinute >= 1440) {
-      throw const DomainFailure('推荐时间无效');
-    }
-    if (configuration.startMinute == configuration.endMinute) {
-      throw const DomainFailure('推荐开始和结束时间不能相同');
-    }
+    TemporalRoutine.validate(configuration);
   }
 
   Future<void> setActive(Routine r, bool active) => repository.updateRoutine(
     r.copyWith(isActive: active, updatedAt: now().toUtc()),
   );
-  Future<void> start(Routine r, {RoutineExecution? execution}) async {
+  Future<void> start(
+    Routine r, {
+    RoutineExecution? execution,
+    String? occurrenceDayKey,
+  }) async {
     final t = now().toUtc();
-    final day = occurrence(t.toLocal());
+    if (execution != null) {
+      final current = (await repository.getRoutineExecutions())
+          .where((e) => e.id == execution!.id)
+          .firstOrNull;
+      if (current == null ||
+          current.status == RoutineExecutionStatus.completed) {
+        throw const DomainFailure('该执行已完成或不存在，请刷新');
+      }
+      execution = current;
+    }
+    final day = r.isScheduled
+        ? (occurrenceDayKey ?? TemporalRoutine.occurrenceKey(r, t))
+        : occurrence(t.toLocal());
+    if (execution != null && execution.routineId != r.id) {
+      throw const DomainFailure('执行记录与日常不一致');
+    }
+    if (occurrenceDayKey != null &&
+        execution?.status != RoutineExecutionStatus.waiting) {
+      final valid = TemporalRoutine.windows(r, JaxDay.containing(t)).any(
+        (window) =>
+            window.occurrenceKey == occurrenceDayKey &&
+            window.stateAt(t) != TemporalRecommendationState.expired,
+      );
+      if (!valid) throw const DomainFailure('该时间事项已变化或失效，请刷新');
+    }
+    if (occurrenceDayKey != null &&
+        execution != null &&
+        execution.occurrenceDate != occurrenceDayKey) {
+      throw const DomainFailure('执行记录与日常日期不一致');
+    }
+    if (r.isScheduled) {
+      execution ??= await repository.getRoutineExecution(r.id, day);
+    }
     if (r.isScheduled &&
         execution?.status == RoutineExecutionStatus.completed) {
       throw StateError('今天已经完成');
@@ -186,17 +217,29 @@ class RoutineService {
     );
   }
 
-  Future<void> pause(RoutineExecution e) async {
+  Future<void> wait(RoutineExecution e) =>
+      _stop(e, RoutineExecutionStatus.waiting);
+
+  Future<void> pause(RoutineExecution e) =>
+      _stop(e, RoutineExecutionStatus.paused);
+
+  Future<void> _stop(RoutineExecution e, RoutineExecutionStatus status) async {
+    e = await _current(e);
+    if (e.status != RoutineExecutionStatus.running) {
+      throw const DomainFailure('只有正在执行的日常可以暂停或等待');
+    }
     final t = now().toUtc();
     final open = (await repository.getRoutineRunSegments(e.id))
         .where((s) => s.endedAt == null)
         .first;
     await repository.pauseRoutineExecution(
-      e.copyWith(status: RoutineExecutionStatus.paused, updatedAt: t),
+      e.copyWith(status: status, updatedAt: t),
       open.copyWith(endedAt: t),
     );
     SegmentLifecycleLog.close(
-      reason: 'routine_pause',
+      reason: status == RoutineExecutionStatus.waiting
+          ? 'routine_wait'
+          : 'routine_pause',
       ownerType: 'routine',
       ownerId: e.routineId,
       executionId: e.id,
@@ -206,11 +249,31 @@ class RoutineService {
     );
   }
 
+  Future<RoutineExecution> _current(RoutineExecution e) async {
+    final current = (await repository.getRoutineExecutions())
+        .where((x) => x.id == e.id)
+        .firstOrNull;
+    if (current == null || current.status == RoutineExecutionStatus.completed) {
+      throw const DomainFailure('该执行已完成或不存在，请刷新');
+    }
+    return current;
+  }
+
   Future<void> complete(RoutineExecution e, {DateTime? endTime}) async {
+    final current = await _current(e);
+    if (e.status == RoutineExecutionStatus.paused &&
+        (current.status != e.status || current.updatedAt != e.updatedAt)) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    e = current;
+    if (!e.status.canComplete) throw const DomainFailure('该执行不能完成');
     final t = now().toUtc();
     final open = (await repository.getRoutineRunSegments(e.id))
         .where((s) => s.endedAt == null)
         .firstOrNull;
+    if (e.status == RoutineExecutionStatus.paused && open != null) {
+      throw const DomainFailure('暂停状态存在未关闭的执行段，请检查执行数据');
+    }
     final correctedEnd = endTime?.toUtc() ?? t;
     if (endTime != null &&
         open != null &&
@@ -226,7 +289,10 @@ class RoutineService {
       completedAt: correctedEnd,
     );
     if (open == null) {
-      await repository.updateRoutineExecutionOnly(done);
+      await repository.updateRoutineExecutionOnly(
+        done,
+        expectedPaused: e.status == RoutineExecutionStatus.paused ? e : null,
+      );
     } else {
       await repository.completeRoutineExecution(
         done,

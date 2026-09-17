@@ -40,12 +40,16 @@ abstract interface class RoutineRepository {
   );
   Future<void> pauseRoutineExecution(
     RoutineExecution execution,
-    RoutineRunSegment segment,
-  );
+    RoutineRunSegment segment, {
+    DateTime? expectedUpdatedAt,
+  });
   Future<void> completeRoutineExecution(
     RoutineExecution execution,
     RoutineRunSegment segment,
   );
-  Future<void> updateRoutineExecutionOnly(RoutineExecution execution);
+  Future<void> updateRoutineExecutionOnly(
+    RoutineExecution execution, {
+    RoutineExecution? expectedPaused,
+  });
   Future<void> pauseRunningRoutine(DateTime now);
 }

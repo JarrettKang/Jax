@@ -55,12 +55,14 @@ void main() {
     await tester.tap(find.text('记录'));
     await tester.pumpAndSettle();
     expect(find.text('今天 · 进行中'), findsOneWidget);
-    expect(find.text('一个很长的开发项目分类名称'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('1h 00m · 100%'), 250);
+    expect(find.text('一个很长的开发项目分类名称'), findsWidgets);
     expect(find.textContaining('1h 00m · 100%'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('今日时间分布'), 250);
     expect(find.text('今日时间分布'), findsOneWidget);
     expect(find.byKey(const ValueKey('timeline-visual-s-9-0')), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('执行记录'), 500);
+    await tester.scrollUntilVisible(find.text('执行记录'), -500);
     expect(find.text('执行记录'), findsOneWidget);
     expect(find.text('08:00 → 09:00'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('周总结'), -500);
@@ -75,7 +77,9 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('今日时间分布'), 250);
     expect(find.text('今日时间分布'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('周总结'), -500);
     for (var switchIndex = 0; switchIndex < 3; switchIndex++) {
       await tester.tap(find.text('周总结'));
       await tester.pump();
@@ -86,8 +90,9 @@ void main() {
     }
     await tester.pumpAndSettle();
     expect(find.text('今天 · 进行中'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('今日时间分布'), 250);
     expect(find.text('今日时间分布'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('执行记录'), 500);
+    await tester.scrollUntilVisible(find.text('执行记录'), -500);
     expect(find.text('执行记录'), findsOneWidget);
   });
 
@@ -214,6 +219,11 @@ void main() {
     expect(
       find.byKey(const ValueKey('segment-candidate-quick')),
       findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('segment-candidate-quick-paused')),
+      150,
+      scrollable: find.byType(Scrollable).last,
     );
     expect(
       find.byKey(const ValueKey('segment-candidate-quick-paused')),

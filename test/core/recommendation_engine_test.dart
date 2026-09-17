@@ -78,21 +78,27 @@ void main() {
     return engine.recommend(c, provider.provide(c)).firstOrNull;
   }
 
-  test('ordinary window uses inclusive start and exclusive end', () {
-    final lunch = routine('lunch');
-    expect(resultAt(lunch, 10, 59)?.strength, RecommendationStrength.normal);
-    expect(resultAt(lunch, 11, 0)?.strength, RecommendationStrength.promoted);
-    expect(resultAt(lunch, 12, 59)?.strength, RecommendationStrength.promoted);
-    expect(resultAt(lunch, 13, 0)?.strength, RecommendationStrength.normal);
-  });
+  test(
+    'temporal window includes endpoints and excludes inactive candidates',
+    () {
+      final lunch = routine('lunch');
+      expect(resultAt(lunch, 10, 59), isNull);
+      expect(resultAt(lunch, 11, 0)?.strength, RecommendationStrength.promoted);
+      expect(
+        resultAt(lunch, 12, 59)?.strength,
+        RecommendationStrength.promoted,
+      );
+      expect(resultAt(lunch, 13, 0)?.strength, RecommendationStrength.promoted);
+    },
+  );
 
   test('cross-midnight window follows local wall clock', () {
     final sleep = routine('sleep', start: 23 * 60 + 30, end: 90);
-    expect(resultAt(sleep, 23, 29)?.strength, RecommendationStrength.normal);
+    expect(resultAt(sleep, 23, 29), isNull);
     expect(resultAt(sleep, 23, 30)?.strength, RecommendationStrength.promoted);
     expect(resultAt(sleep, 0, 30)?.strength, RecommendationStrength.promoted);
     expect(resultAt(sleep, 1, 29)?.strength, RecommendationStrength.promoted);
-    expect(resultAt(sleep, 1, 30)?.strength, RecommendationStrength.normal);
+    expect(resultAt(sleep, 1, 30)?.strength, RecommendationStrength.promoted);
   });
 
   test('custom and default reasons are derived', () {
@@ -106,7 +112,7 @@ void main() {
       recurrence: RoutineRecurrence.selectedWeekdays,
       mask: 1 << 2,
     );
-    expect(resultAt(thursday, 12, 0)?.strength, RecommendationStrength.normal);
+    expect(resultAt(thursday, 12, 0), isNull);
     final done = routine('done');
     expect(
       resultAt(
@@ -129,7 +135,7 @@ void main() {
     expect(provider.provide(c), isEmpty);
   });
 
-  test('paused routine promotes and multiple matches keep stable order', () {
+  test('paused routine is excluded from unstarted recommendations', () {
     final first = routine('first');
     final second = routine('second');
     final c = context(
@@ -140,7 +146,7 @@ void main() {
       },
     );
     final results = engine.recommend(c, provider.provide(c));
-    expect(results.map((value) => value.candidate.id), ['first', 'second']);
+    expect(results.map((value) => value.candidate.id), ['second']);
     expect(
       results.map((value) => value.strength),
       everyElement(RecommendationStrength.promoted),
@@ -192,7 +198,7 @@ void main() {
         createdAt: created,
         updatedAt: created,
       );
-      final normal = routine('routine', start: 14 * 60, end: 15 * 60);
+      final normal = routine('routine').copyWith(timeRecommendation: null);
       final c = context(DateTime(2026, 9, 3, 12), [normal], events: [event]);
       expect(
         engine.recommend(c, provider.provide(c)).map((r) => r.candidate.id),

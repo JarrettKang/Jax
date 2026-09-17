@@ -4,6 +4,8 @@ import '../errors/domain_failure.dart';
 import '../repositories/planning_dispatch_repository.dart';
 import 'create_event.dart';
 
+/// Legacy dispatch compatibility for existing integrations and historical fixtures.
+/// Product actions use PlanningExecutionRepository.startPlanItem instead.
 class DispatchPlanItems {
   const DispatchPlanItems({
     required this.repository,

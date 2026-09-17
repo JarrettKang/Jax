@@ -1,3 +1,7 @@
+import '../theme/home_pilot_theme.dart';
+import '../theme/planning_theme.dart';
+import 'record_time_labels.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/entities/daily_execution_segment.dart';
@@ -23,7 +27,8 @@ class DailyTimeDistribution extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 600;
-      final rowHeight = wide ? 34.0 : 28.0;
+      final rowHeight = (MediaQuery.textScalerOf(context).scale(13) * 1.45 + 8)
+          .clamp(wide ? 34.0 : 28.0, double.infinity);
       final rows = DailyTimelineLayout.forJaxDay(
         date: date,
         segments: segments,
@@ -53,10 +58,10 @@ class DailyTimeDistribution extends StatelessWidget {
     child: Row(
       children: [
         SizedBox(
-          width: wide ? 58 : 46,
+          width: MediaQuery.textScalerOf(context).scale(46).clamp(46, 100),
           child: Text(
             _hourLabel(hour.startedAt),
-            style: Theme.of(context).textTheme.labelSmall,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
         Expanded(
@@ -69,7 +74,7 @@ class DailyTimeDistribution extends StatelessWidget {
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: BorderSide(
-                          color: Theme.of(context).colorScheme.outlineVariant,
+                          color: HomePilot.hairline,
                           width: 0.5,
                         ),
                       ),
@@ -84,8 +89,7 @@ class DailyTimeDistribution extends StatelessWidget {
                     child: VerticalDivider(
                       width: 1,
                       thickness: 0.5,
-                      color: Theme.of(context).colorScheme.outlineVariant
-                          .withValues(alpha: 0.65),
+                      color: HomePilot.hairline,
                     ),
                   ),
                 for (
@@ -135,10 +139,8 @@ class DailyTimeDistribution extends StatelessWidget {
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: color.withValues(
-              alpha: fragment.segment.isOpen ? 0.72 : 0.86,
-            ),
-            borderRadius: BorderRadius.circular(3),
+            color: color,
+            borderRadius: BorderRadius.circular(4),
           ),
           child: width >= (wide ? 72 : 58)
               ? Padding(
@@ -149,12 +151,12 @@ class DailyTimeDistribution extends StatelessWidget {
                       fragment.segment.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color:
                             ThemeData.estimateBrightnessForColor(color) ==
                                 Brightness.dark
-                            ? Colors.white
-                            : Colors.black87,
+                            ? HomePilot.surface
+                            : HomePilot.textPrimary,
                       ),
                     ),
                   ),
@@ -180,7 +182,10 @@ class DailyTimeDistribution extends StatelessWidget {
         child: Semantics(
           button: true,
           label: tooltip,
-          child: InkWell(onTap: () => onSegmentTap(fragment.segment)),
+          child: PlanningRowSurface(
+            onTap: () => onSegmentTap(fragment.segment),
+            child: const SizedBox.expand(),
+          ),
         ),
       ),
     );
@@ -189,13 +194,11 @@ class DailyTimeDistribution extends StatelessWidget {
 
   String _tooltip(DailyExecutionSegment segment) {
     final end = segment.endedAt?.toLocal() ?? now;
-    return '${segment.name}\n${_clock(segment.startedAt.toLocal())}–${segment.isOpen ? '现在' : _clock(end)}\n${_duration(end.difference(segment.startedAt.toLocal()))}\n${segment.categoryName}${segment.isOpen ? '\n正在执行' : ''}';
+    return '${segment.name}\n${recordRange(segment, date, now)}\n${_duration(end.difference(segment.startedAt.toLocal()))}\n${segment.categoryName}${segment.isOpen ? '\n正在执行' : ''}';
   }
 
   static String _hourLabel(DateTime value) =>
       '${value.hour.toString().padLeft(2, '0')}:00';
-  static String _clock(DateTime value) =>
-      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
   static String _duration(Duration value) =>
       '${value.inHours}h ${(value.inMinutes % 60).toString().padLeft(2, '0')}m';
 }

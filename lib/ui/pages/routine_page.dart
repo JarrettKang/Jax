@@ -1,3 +1,7 @@
+import '../theme/desktop_polish.dart';
+import '../theme/list_density.dart';
+import '../../core/entities/execution_capabilities.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/entities/routine.dart';
@@ -6,7 +10,10 @@ import '../../core/preferences/routine_category_collapse_store.dart';
 import '../controllers/event_controller.dart';
 import '../widgets/category_color_picker.dart';
 import '../widgets/category_edit_dialog.dart';
-import '../widgets/routine_reorder_buttons.dart';
+import '../theme/operational_theme.dart';
+import '../theme/home_pilot_theme.dart';
+import '../theme/planning_theme.dart';
+import '../widgets/execution_row_shell.dart';
 
 class RoutinePage extends StatefulWidget {
   const RoutinePage({
@@ -41,110 +48,118 @@ class _RoutinePageState extends State<RoutinePage> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.controller,
-    builder: (context, _) {
-      final active = widget.controller.routines
-          .where((r) => r.isActive)
-          .toList();
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 72),
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
+  Widget build(BuildContext context) => OperationalVisualScope(
+    builder: (context) => ColoredBox(
+      color: HomePilot.canvas,
+      child: AnimatedBuilder(
+        animation: widget.controller,
+        builder: (context, _) {
+          final active = widget.controller.routines
+              .where((r) => r.isActive)
+              .toList();
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              child: ListView(
+                padding: OperationalTheme.pagePadding(context),
                 children: [
-                  Text('日常', style: Theme.of(context).textTheme.headlineMedium),
                   Wrap(
-                    spacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      OutlinedButton.icon(
-                        key: const ValueKey('create-routine-category'),
-                        onPressed: () => _editCategory(context),
-                        icon: const Icon(Icons.create_new_folder_outlined),
-                        label: const Text('新建分类'),
+                      Text(
+                        '日常',
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                      FilledButton.icon(
-                        key: const ValueKey('create-routine'),
-                        onPressed: () => _editRoutine(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('新建日常'),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            key: const ValueKey('create-routine-category'),
+                            onPressed: () => _editCategory(context),
+                            icon: const Icon(Icons.create_new_folder_outlined),
+                            label: const Text('新建分类'),
+                          ),
+                          FilledButton.icon(
+                            key: const ValueKey('create-routine'),
+                            onPressed: () => _editRoutine(context),
+                            icon: const Icon(Icons.add),
+                            label: const Text('新建日常'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  for (
+                    var i = 0;
+                    i < widget.controller.routineCategories.length;
+                    i++
+                  )
+                    _section(
+                      context,
+                      widget.controller.routineCategories[i],
+                      i,
+                      active
+                          .where(
+                            (r) =>
+                                r.routineCategoryId ==
+                                widget.controller.routineCategories[i].id,
+                          )
+                          .toList(),
+                    ),
+                  if (active.any((r) => r.routineCategoryId == null))
+                    _section(
+                      context,
+                      null,
+                      -1,
+                      active.where((r) => r.routineCategoryId == null).toList(),
+                    ),
+                  if (widget.controller.routines.any((r) => !r.isActive)) ...[
+                    const SizedBox(height: 8),
+                    ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                      childrenPadding: const EdgeInsets.only(left: 24),
+                      title: Row(
+                        children: [
+                          Text(
+                            '已停用',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${widget.controller.routines.where((r) => !r.isActive).length}',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                      children: [
+                        for (final r in widget.controller.routines.where(
+                          (r) => !r.isActive,
+                        ))
+                          ExecutionRowShell(
+                            density: JaxListDensity.compact,
+                            title: r.name,
+                            state: ExecutionVisualState.idle,
+                            metadata: Text(_label(r)),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    widget.controller.setRoutineActive(r, true),
+                                child: const Text('重新启用'),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 16),
-              for (
-                var i = 0;
-                i < widget.controller.routineCategories.length;
-                i++
-              )
-                _section(
-                  context,
-                  widget.controller.routineCategories[i],
-                  i,
-                  active
-                      .where(
-                        (r) =>
-                            r.routineCategoryId ==
-                            widget.controller.routineCategories[i].id,
-                      )
-                      .toList(),
-                ),
-              if (active.any((r) => r.routineCategoryId == null))
-                _section(
-                  context,
-                  null,
-                  -1,
-                  active.where((r) => r.routineCategoryId == null).toList(),
-                ),
-              if (widget.controller.routines.any((r) => !r.isActive)) ...[
-                const SizedBox(height: 8),
-                ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                  childrenPadding: const EdgeInsets.only(left: 24),
-                  title: Row(
-                    children: [
-                      Text(
-                        '已停用',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${widget.controller.routines.where((r) => !r.isActive).length}',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
-                  children: [
-                    for (final r in widget.controller.routines.where(
-                      (r) => !r.isActive,
-                    ))
-                      ListTile(
-                        dense: true,
-                        title: Text(r.name, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                          _label(r),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: TextButton(
-                          onPressed: () =>
-                              widget.controller.setRoutineActive(r, true),
-                          child: const Text('重新启用'),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    },
+            ),
+          );
+        },
+      ),
+    ),
   );
 
   Widget _section(
@@ -156,18 +171,18 @@ class _RoutinePageState extends State<RoutinePage> {
     final isCollapsed = collapsed.contains(
       RoutineCategoryCollapseStore.sectionKey(category?.id),
     );
-    return Column(
+    return Padding(
       key: ValueKey('routine-category-${category?.id ?? 'unclassified'}'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        children: [
+          Row(
             children: [
               IconButton(
                 key: ValueKey(
                   'routine-category-toggle-${category?.id ?? 'unclassified'}',
                 ),
-                visualDensity: VisualDensity.compact,
+                tooltip: isCollapsed ? '展开分类' : '折叠分类',
                 onPressed: () => _toggle(category?.id),
                 icon: Icon(
                   isCollapsed ? Icons.chevron_right : Icons.expand_more,
@@ -176,106 +191,75 @@ class _RoutinePageState extends State<RoutinePage> {
               CategoryColorDot(colorKey: category?.colorKey),
               const SizedBox(width: 8),
               Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        category?.name ?? '未分类',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                child: Text(
+                  category?.name ?? '未分类',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              if (category != null)
+                PopupMenuButton<String>(
+                  key: ValueKey('routine-category-more-${category.id}'),
+                  tooltip: '分类操作',
+                  icon: const Icon(Icons.more_vert, size: 18),
+                  style: HomePilot.buttonStyle().copyWith(
+                    padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+                  ),
+                  onSelected: (v) {
+                    if (v == 'rename') _editCategory(context, category);
+                    if (v == 'delete') _deleteCategory(context, category);
+                    if (v == 'up') {
+                      widget.controller.reorderRoutineCategory(
+                        category.id,
+                        categoryIndex - 1,
+                      );
+                    }
+                    if (v == 'down') {
+                      widget.controller.reorderRoutineCategory(
+                        category.id,
+                        categoryIndex + 1,
+                      );
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'rename', child: Text('重命名')),
+                    if (categoryIndex > 0)
+                      PopupMenuItem(
+                        key: ValueKey('routine-category-up-${category.id}'),
+                        value: 'up',
+                        child: const Text('上移'),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${items.length} 项',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    if (categoryIndex <
+                        widget.controller.routineCategories.length - 1)
+                      PopupMenuItem(
+                        key: ValueKey('routine-category-down-${category.id}'),
+                        value: 'down',
+                        child: const Text('下移'),
+                      ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        '删除分类',
+                        style: TextStyle(color: PlanningTheme.error),
                       ),
                     ),
                   ],
                 ),
-              ),
-              if (category != null) ...[
-                SizedBox(
-                  key: ValueKey('routine-category-reorder-slot-${category.id}'),
-                  width: 96,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 48,
-                        child: categoryIndex > 0
-                            ? IconButton(
-                                key: ValueKey(
-                                  'routine-category-up-${category.id}',
-                                ),
-                                tooltip: '上移',
-                                onPressed: () =>
-                                    widget.controller.reorderRoutineCategory(
-                                      category.id,
-                                      categoryIndex - 1,
-                                    ),
-                                icon: const Icon(Icons.arrow_upward),
-                              )
-                            : null,
-                      ),
-                      SizedBox(
-                        width: 48,
-                        child:
-                            categoryIndex <
-                                widget.controller.routineCategories.length - 1
-                            ? IconButton(
-                                key: ValueKey(
-                                  'routine-category-down-${category.id}',
-                                ),
-                                tooltip: '下移',
-                                onPressed: () =>
-                                    widget.controller.reorderRoutineCategory(
-                                      category.id,
-                                      categoryIndex + 1,
-                                    ),
-                                icon: const Icon(Icons.arrow_downward),
-                              )
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  width: 48,
-                  child: PopupMenuButton<String>(
-                    key: ValueKey('routine-category-more-${category.id}'),
-                    onSelected: (v) {
-                      if (v == 'rename') _editCategory(context, category);
-                      if (v == 'delete') _deleteCategory(context, category);
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'rename', child: Text('重命名')),
-                      PopupMenuItem(value: 'delete', child: Text('删除分类')),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
-        ),
-        const Divider(height: 1),
-        if (!isCollapsed)
-          Padding(
-            padding: const EdgeInsets.only(left: 24),
-            child: Column(
-              children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  _routineRow(context, items[i], i, items.length),
-                  if (i < items.length - 1) const Divider(height: 1),
-                ],
-              ],
-            ),
-          ),
-        const SizedBox(height: 6),
-      ],
+          if (!isCollapsed)
+            for (var i = 0; i < items.length; i++)
+              _routineRow(context, items[i], i, items.length),
+        ],
+      ),
     );
+  }
+
+  Future<void> _completePaused(RoutineExecution e) async {
+    final error = await widget.controller.completeRoutineExecution(e);
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
   }
 
   Widget _routineRow(
@@ -283,100 +267,104 @@ class _RoutinePageState extends State<RoutinePage> {
     Routine routine,
     int index,
     int count,
-  ) => LayoutBuilder(
-    builder: (context, constraints) {
-      final controls = Row(
-        mainAxisSize: MainAxisSize.min,
+  ) {
+    final execution = widget.controller.executionFor(routine);
+    final window = routine.timeRecommendation;
+    return ExecutionRowShell(
+      density: JaxListDensity.compact,
+      key: ValueKey('routine-${routine.id}'),
+      title: routine.name,
+      state: switch (execution?.status) {
+        RoutineExecutionStatus.running => ExecutionVisualState.running,
+        RoutineExecutionStatus.paused => ExecutionVisualState.paused,
+        RoutineExecutionStatus.waiting => ExecutionVisualState.waiting,
+        RoutineExecutionStatus.completed => ExecutionVisualState.completed,
+        null => ExecutionVisualState.idle,
+      },
+      metadata: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 76,
-            child: !routine.isScheduled && routine.isActive
-                ? _OnDemandAction(
-                    controller: widget.controller,
-                    routine: routine,
-                  )
-                : null,
+          Text(
+            _recurrenceLabel(routine),
+            key: ValueKey('routine-recurrence-${routine.id}'),
           ),
-          RoutineReorderButtons(
-            controller: widget.controller,
-            routineId: routine.id,
-            index: index,
-            count: count,
-          ),
-          SizedBox(
-            width: 48,
-            child: PopupMenuButton<String>(
-              key: ValueKey('routine-more-${routine.id}'),
-              onSelected: (v) {
-                if (v == 'edit') _editRoutine(context, routine);
-                if (v == 'disable') {
-                  widget.controller.setRoutineActive(routine, false);
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('编辑')),
-                PopupMenuItem(value: 'disable', child: Text('停用')),
-              ],
+          if (routine.isScheduled && window != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '开始推荐 ${routineClockLabel(window.startMinute)} · 理想完成前 ${routineClockLabel(window.endMinute, relativeTo: window.startMinute)} · 最晚完成前 ${routineClockLabel(window.latestEndMinute, relativeTo: window.startMinute)}',
             ),
-          ),
+          ],
         ],
-      );
-      final recurrence = Text(
-        _label(routine),
-        key: ValueKey('routine-recurrence-${routine.id}'),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodySmall
-            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-      );
-      return Padding(
-        key: ValueKey('routine-${routine.id}'),
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: constraints.maxWidth >= 540
-            ? Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      routine.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(width: 180, child: recurrence),
-                  const SizedBox(width: 4),
-                  controls,
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          routine.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                      controls,
-                    ],
-                  ),
-                  recurrence,
-                ],
-              ),
-      );
-    },
-  );
+      ),
+      time: execution?.status == RoutineExecutionStatus.running
+          ? ExecutionTimeLabel(
+              executionDurationLabel(widget.controller.routineElapsed(routine)),
+              caption: '主动用时',
+            )
+          : null,
+      actions: [
+        if (!routine.isScheduled && routine.isActive)
+          _OnDemandAction(controller: widget.controller, routine: routine),
+      ],
+      trailing: PopupMenuButton<String>(
+        key: ValueKey('routine-more-${routine.id}'),
+        tooltip: '更多操作',
+        icon: const Icon(Icons.more_vert, size: 18),
+        style: HomePilot.buttonStyle().copyWith(
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        ),
+        onSelected: (v) async {
+          if (v == 'complete-paused') {
+            final e = widget.controller.executionFor(routine);
+            if (e != null) _completePaused(e);
+          }
+          if (v == 'resume-paused') widget.controller.startRoutine(routine);
+          if (v == 'edit') _editRoutine(context, routine);
+          if (v == 'disable') {
+            widget.controller.setRoutineActive(routine, false);
+          }
+          if (v == 'up' || v == 'down') {
+            final error = v == 'up'
+                ? await widget.controller.moveRoutineUp(routine.id)
+                : await widget.controller.moveRoutineDown(routine.id);
+            if (error != null && context.mounted) {
+              ScaffoldMessenger.maybeOf(context)
+                  ?.showSnackBar(SnackBar(content: Text(error)));
+            }
+          }
+        },
+        itemBuilder: (_) => [
+          if (execution?.status == RoutineExecutionStatus.paused) ...[
+            if (execution!.status.canResume)
+              const PopupMenuItem(value: 'resume-paused', child: Text('继续')),
+            if (execution.status.canComplete)
+              const PopupMenuItem(value: 'complete-paused', child: Text('完成')),
+          ],
+          const PopupMenuItem(value: 'edit', child: Text('编辑')),
+          if (index > 0)
+            PopupMenuItem(
+              key: ValueKey('routine-up-${routine.id}'),
+              value: 'up',
+              child: const Text('上移'),
+            ),
+          if (index < count - 1)
+            PopupMenuItem(
+              key: ValueKey('routine-down-${routine.id}'),
+              value: 'down',
+              child: const Text('下移'),
+            ),
+          const PopupMenuItem(value: 'disable', child: Text('停用')),
+        ],
+      ),
+    );
+  }
 
   String _label(Routine r) {
     final e = widget.controller.executionFor(r);
     final status = switch (e?.status) {
       RoutineExecutionStatus.running => '正在执行',
       RoutineExecutionStatus.paused => '已暂停',
+      RoutineExecutionStatus.waiting => '等待中',
       RoutineExecutionStatus.completed => '已完成',
       null => null,
     };
@@ -414,6 +402,10 @@ class _RoutinePageState extends State<RoutinePage> {
       showDialog<void>(
         context: c,
         builder: (d) => AlertDialog(
+          constraints: DesktopPolish.dialog(
+            d,
+            DesktopDialogSize.confirmation,
+          ),
           title: const Text('删除分类？'),
           content: const Text('分类中的日常会移到“未分类”，执行记录不会删除。'),
           actions: [
@@ -426,6 +418,7 @@ class _RoutinePageState extends State<RoutinePage> {
                 await widget.controller.deleteRoutineCategory(category.id);
                 if (d.mounted) Navigator.pop(d);
               },
+              style: PlanningTheme.destructive,
               child: const Text('删除'),
             ),
           ],
@@ -465,7 +458,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
   late final TextEditingController name, recommendationReason;
   late RoutineRecurrence recurrence;
   late RoutineType type;
-  late int mask, recommendationStart, recommendationEnd;
+  late int mask, recommendationStart, recommendationEnd, recommendationLatest;
   late bool timeRecommendationEnabled;
   late bool showInHomeQuickActions;
   String? category, error;
@@ -486,6 +479,8 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
         widget.routine?.timeRecommendation?.startMinute ?? 11 * 60;
     recommendationEnd =
         widget.routine?.timeRecommendation?.endMinute ?? 13 * 60;
+    recommendationLatest =
+        widget.routine?.timeRecommendation?.latestEndMinute ?? 17 * 60;
   }
 
   @override
@@ -497,17 +492,25 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
 
   @override
   Widget build(BuildContext c) => AlertDialog(
+    constraints: DesktopPolish.dialog(context, DesktopDialogSize.complex),
     title: Text(widget.routine == null ? '新建日常' : '编辑日常'),
+    insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
     content: SizedBox(
-      width: 420,
+      width: 520,
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _EditSectionTitle('基本信息'),
             TextField(
               controller: name,
+              minLines: 1,
+              maxLines: null,
+              style: Theme.of(c).textTheme.titleMedium,
               decoration: const InputDecoration(labelText: '名称'),
             ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
               initialValue: category,
               isExpanded: true,
@@ -523,7 +526,9 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
               ],
               onChanged: (v) => setState(() => category = v),
             ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<RoutineType>(
+              isExpanded: true,
               initialValue: type,
               decoration: const InputDecoration(labelText: '类型'),
               items: const [
@@ -541,18 +546,11 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                 type = value!;
               }),
             ),
-            if (type == RoutineType.onDemand)
-              SwitchListTile(
-                key: const ValueKey('routine-home-quick-action-toggle'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('首页快捷'),
-                subtitle: const Text('显示在首页快捷动作'),
-                value: showInHomeQuickActions,
-                onChanged: (value) =>
-                    setState(() => showInHomeQuickActions = value),
-              ),
-            if (type == RoutineType.scheduled)
+            if (type == RoutineType.scheduled) ...[
+              const SizedBox(height: 24),
+              _EditSectionTitle('重复规则'),
               DropdownButtonFormField<RoutineRecurrence>(
+                isExpanded: true,
                 initialValue: recurrence,
                 decoration: const InputDecoration(labelText: '重复'),
                 items: RoutineRecurrence.values
@@ -565,9 +563,12 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                     .toList(),
                 onChanged: (v) => setState(() => recurrence = v!),
               ),
+            ],
             if (type == RoutineType.scheduled &&
                 recurrence == RoutineRecurrence.selectedWeekdays)
               Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   for (var i = 0; i < 7; i++)
                     FilterChip(
@@ -580,7 +581,8 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                 ],
               ),
             if (type == RoutineType.scheduled) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 24),
+              _EditSectionTitle('时间推荐'),
               SwitchListTile(
                 key: const ValueKey('routine-time-recommendation-toggle'),
                 contentPadding: EdgeInsets.zero,
@@ -590,29 +592,39 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
                     setState(() => timeRecommendationEnabled = value),
               ),
               if (timeRecommendationEnabled) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('推荐时间', style: Theme.of(c).textTheme.labelMedium),
+                Text(
+                  '用于决定何时推荐，以及何时停止推荐该日常。',
+                  style: Theme.of(c).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    OutlinedButton(
-                      key: const ValueKey('routine-time-start'),
-                      onPressed: () => _pickTime(start: true),
-                      child: Text(_minuteLabel(recommendationStart)),
+                const SizedBox(height: 8),
+                for (final field in [
+                  ('开始推荐', 'routine-time-start', recommendationStart, 0),
+                  ('理想完成前', 'routine-time-end', recommendationEnd, 1),
+                  ('最晚完成前', 'routine-time-latest', recommendationLatest, 2),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(field.$1)),
+                        Flexible(
+                          child: TextButton(
+                            key: ValueKey(field.$2),
+                            onPressed: () => _pickTime(field: field.$4),
+                            child: Text(
+                              routineClockLabel(
+                                field.$3,
+                                relativeTo: field.$4 == 0
+                                    ? null
+                                    : recommendationStart,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const Text('—'),
-                    OutlinedButton(
-                      key: const ValueKey('routine-time-end'),
-                      onPressed: () => _pickTime(start: false),
-                      child: Text(_minuteLabel(recommendationEnd)),
-                    ),
-                  ],
-                ),
+                  ),
+                const SizedBox(height: 16),
                 TextField(
                   key: const ValueKey('routine-time-reason'),
                   controller: recommendationReason,
@@ -646,6 +658,7 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
         ? RoutineTimeRecommendation(
             startMinute: recommendationStart,
             endMinute: recommendationEnd,
+            latestEndMinute: recommendationLatest,
             reason: cleanReason.isEmpty ? null : cleanReason,
           )
         : null;
@@ -678,8 +691,12 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
     }
   }
 
-  Future<void> _pickTime({required bool start}) async {
-    final minute = start ? recommendationStart : recommendationEnd;
+  Future<void> _pickTime({required int field}) async {
+    final minute = [
+      recommendationStart,
+      recommendationEnd,
+      recommendationLatest,
+    ][field];
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: minute ~/ 60, minute: minute % 60),
@@ -687,17 +704,15 @@ class _RoutineEditDialogState extends State<_RoutineEditDialog> {
     if (picked == null || !mounted) return;
     setState(() {
       final value = picked.hour * 60 + picked.minute;
-      if (start) {
+      if (field == 0) {
         recommendationStart = value;
-      } else {
+      } else if (field == 1) {
         recommendationEnd = value;
+      } else {
+        recommendationLatest = value;
       }
     });
   }
-
-  String _minuteLabel(int minute) =>
-      '${(minute ~/ 60).toString().padLeft(2, '0')}:'
-      '${(minute % 60).toString().padLeft(2, '0')}';
 }
 
 class _OnDemandAction extends StatelessWidget {
@@ -709,13 +724,13 @@ class _OnDemandAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final execution = controller.executionFor(routine);
     if (execution?.status == RoutineExecutionStatus.running) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 8),
-        child: Text('正在执行'),
-      );
+      return const SizedBox.shrink();
     }
-    final paused = execution?.status == RoutineExecutionStatus.paused;
-    return TextButton.icon(
+    final waiting = execution?.status == RoutineExecutionStatus.waiting;
+    final paused =
+        waiting || execution?.status == RoutineExecutionStatus.paused;
+    return OutlinedButton.icon(
+      style: HomePilot.buttonStyle(outlined: true),
       key: ValueKey('routine-on-demand-start-${routine.id}'),
       onPressed: () async {
         final error = await controller.startRoutine(routine);
@@ -725,7 +740,23 @@ class _OnDemandAction extends StatelessWidget {
         }
       },
       icon: Icon(paused ? Icons.play_arrow : Icons.add, size: 18),
-      label: Text(paused ? '恢复' : '开始'),
+      label: Text(
+        waiting
+            ? '继续'
+            : paused
+            ? '继续'
+            : '开始',
+      ),
     );
   }
+}
+
+class _EditSectionTitle extends StatelessWidget {
+  const _EditSectionTitle(this.title);
+  final String title;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+  );
 }

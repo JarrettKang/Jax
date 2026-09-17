@@ -82,7 +82,7 @@ void main() {
       );
       File('${tool.path}${Platform.pathSeparator}sync_phase2b2.ps1')
           .writeAsStringSync(r'''
-param([string]$Action,[string]$Device,[int]$KeepWindowsProcessId,[switch]$NoLaunchPreview,[string]$StatusPath,[string]$ResultPath,[string]$StorageRoot,[int]$StorageLayoutVersion,[int]$BackupRetention)
+param([string]$Action,[string]$Device,[string]$Package,[string]$AdbPath,[string]$DartPath,[int]$KeepWindowsProcessId,[switch]$NoLaunchPreview,[string]$StatusPath,[string]$ResultPath,[string]$StorageRoot,[int]$StorageLayoutVersion,[int]$BackupRetention)
 $utf8 = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = $utf8
 Write-Output ([string]([char]0x68C0)+[char]0x67E5+[char]0x8D85+[char]0x7B97)

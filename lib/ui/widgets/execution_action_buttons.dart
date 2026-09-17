@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 
 /// Presentation-only actions shared by Event and Routine execution surfaces.
-enum ExecutionAction { start, resume, pause, complete }
+enum ExecutionAction { start, resume, pause, wait, continueWaiting, complete }
 
 extension on ExecutionAction {
   String get label => switch (this) {
     ExecutionAction.start => '开始',
     ExecutionAction.resume => '恢复',
     ExecutionAction.pause => '暂停',
+    ExecutionAction.wait => '等待',
+    ExecutionAction.continueWaiting => '继续',
     ExecutionAction.complete => '完成',
   };
 
   IconData get icon => switch (this) {
-    ExecutionAction.start || ExecutionAction.resume => Icons.play_arrow,
+    ExecutionAction.start ||
+    ExecutionAction.resume ||
+    ExecutionAction.continueWaiting => Icons.play_arrow,
+    ExecutionAction.wait => Icons.hourglass_empty,
     ExecutionAction.pause => Icons.pause,
     ExecutionAction.complete => Icons.check,
   };
@@ -25,11 +30,19 @@ class ExecutionActionButton extends StatelessWidget {
   const ExecutionActionButton({
     required this.action,
     required this.onPressed,
+    this.primary,
+    this.style,
+    this.label,
     super.key,
   });
 
   final ExecutionAction action;
   final VoidCallback? onPressed;
+
+  /// Optional scene-specific visual priority; existing callers keep defaults.
+  final bool? primary;
+  final ButtonStyle? style;
+  final String? label;
 
   static const _style = ButtonStyle(
     minimumSize: WidgetStatePropertyAll(Size(0, 44)),
@@ -39,20 +52,20 @@ class ExecutionActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final button = action.isPrimary
+    final button = (primary ?? action.isPrimary)
         ? FilledButton.icon(
             onPressed: onPressed,
-            style: _style,
+            style: style ?? _style,
             icon: Icon(action.icon, size: 18),
-            label: Text(action.label),
+            label: Text(label ?? action.label),
           )
         : OutlinedButton.icon(
             onPressed: onPressed,
-            style: _style,
+            style: style ?? _style,
             icon: Icon(action.icon, size: 18),
-            label: Text(action.label),
+            label: Text(label ?? action.label),
           );
-    return Tooltip(message: action.label, child: button);
+    return Tooltip(message: label ?? action.label, child: button);
   }
 }
 

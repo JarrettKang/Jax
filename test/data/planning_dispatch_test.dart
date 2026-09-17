@@ -423,7 +423,7 @@ void main() {
         )) {
           expect(restored[key], original[key], reason: key);
         }
-        expect(restored['status'], 'draft');
+        expect(restored['status'], 'next');
         expect(await app.database.query('plans'), planBefore);
         expect(await app.database.query('world_nodes'), worldBefore);
         final tombstones = await app.database.query('sync_tombstones');
@@ -468,7 +468,7 @@ void main() {
     };
     await app.database.execute(
       '''CREATE TRIGGER fail_withdraw BEFORE UPDATE ON plan_items
-      WHEN NEW.status = 'draft' BEGIN SELECT RAISE(ABORT, 'injected failure'); END''',
+      WHEN NEW.status = 'next' BEGIN SELECT RAISE(ABORT, 'injected failure'); END''',
     );
     await expectLater(
       planning.withdrawPlanItem(planItemId: 'target', now: now),
@@ -492,7 +492,7 @@ void main() {
     expect(await app.database.query('sync_tombstones'), isEmpty);
     expect(
       (await planning.getPlanItems(p.id)).single.status,
-      PlanItemStatus.draft,
+      PlanItemStatus.next,
     );
   });
 
@@ -513,7 +513,7 @@ void main() {
     expect(await app.database.query('sync_tombstones'), before);
     expect(
       (await planning.getPlanItems(p.id)).single.status,
-      PlanItemStatus.draft,
+      PlanItemStatus.next,
     );
   });
 
@@ -619,7 +619,7 @@ void main() {
     expect((await planning.getPlan(p.id))!.status, PlanStatus.ended);
     expect(
       (await planning.getPlanItems(p.id)).single.status,
-      PlanItemStatus.draft,
+      PlanItemStatus.next,
     );
     await expectLater(dispatcher()(['target']), throwsA(isA<DomainFailure>()));
   });

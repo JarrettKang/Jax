@@ -8,6 +8,7 @@ import 'package:jax/core/entities/routine.dart';
 import 'package:jax/data/database/app_database.dart';
 import 'package:jax/data/repositories/sqlite_event_repository.dart';
 import 'package:jax/data/services/sqlite_save_service.dart';
+import 'package:jax/ui/pages/routine_page.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
@@ -66,8 +67,16 @@ void main() {
     await tester.tap(find.text('日常'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('routine-up-C')));
-    await tester.tap(find.byKey(const ValueKey('routine-up-C')));
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('up');
+    tester
+        .widget<PopupMenuButton<String>>(
+          find.byKey(const ValueKey('routine-more-C')),
+        )
+        .onSelected!('up');
     await tester.pumpAndSettle();
     expect((await repository.getRoutines()).map((routine) => routine.id), [
       'C',
@@ -78,9 +87,15 @@ void main() {
     ]);
 
     for (var i = 0; i < 10; i++) {
+      await tester.tap(find.byKey(const ValueKey('routine-more-C')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('routine-down-C')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('routine-up-C')));
+      tester
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const ValueKey('routine-more-C')),
+          )
+          .onSelected!('up');
       await tester.pumpAndSettle();
     }
     expect((await repository.getRoutines()).map((routine) => routine.id), [
@@ -90,7 +105,23 @@ void main() {
       'D',
       'E',
     ]);
+    final controller = tester
+        .widget<RoutinePage>(find.byType(RoutinePage))
+        .controller;
+    for (
+      var attempt = 0;
+      attempt < 200 && controller.routines.first.id != 'C';
+      attempt++
+    ) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(controller.routines.first.id, 'C');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('routine-more-C')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('routine-up-C')), findsNothing);
+    await tester.tapAt(const Offset(2, 2));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }

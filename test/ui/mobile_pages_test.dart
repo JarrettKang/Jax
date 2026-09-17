@@ -50,6 +50,10 @@ void main() {
     await tester.tap(find.text('今日'));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('start-pending')),
+      100,
+    );
     final pendingName = find.text('这是一个很长的未开始事件名称用于验证手机布局');
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('start-pending'))).dy,
@@ -63,10 +67,22 @@ void main() {
       'pause-running',
     ]) {
       final action = find.byKey(ValueKey(key));
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(action, 100);
+      await tester.pumpAndSettle();
+      expect(action.hitTestable(), findsOneWidget);
       expect(action, findsOneWidget);
     }
     final newEvent = find.byKey(const ValueKey('add-standalone-event'));
+    tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position
+        .jumpTo(0);
+    await tester.pumpAndSettle();
     await tester.tap(newEvent);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);

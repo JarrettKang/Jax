@@ -1,8 +1,13 @@
+import '../theme/list_density.dart';
+
 import 'package:flutter/material.dart';
+
+import '../theme/world_theme.dart';
 
 /// World-only gesture policy. Pickers keep their node-selection interactions.
 class WorldNodeBrowsingRow extends StatelessWidget {
   const WorldNodeBrowsingRow({
+    this.density = JaxListDensity.standard,
     required this.mainKey,
     required this.leading,
     required this.hasChildren,
@@ -15,6 +20,7 @@ class WorldNodeBrowsingRow extends StatelessWidget {
     super.key,
   });
 
+  final JaxListDensity density;
   final Key mainKey;
   final Widget leading;
   final bool hasChildren;
@@ -38,19 +44,26 @@ class WorldNodeBrowsingRow extends StatelessWidget {
             container: true,
             onTap: hasChildren ? onBrowse : onAttention,
             onTapHint: browseHint,
-            child: InkWell(
-              onTap: hasChildren ? onBrowse : onAttention,
-              // One action shared by pointer, keyboard and accessibility.
-              excludeFromSemantics: true,
-              child: ListTile(
-                dense: true,
-                minTileHeight: 48,
-                minVerticalPadding: 0,
-                horizontalTitleGap: 0,
-                minLeadingWidth: 48,
-                contentPadding: const EdgeInsets.only(right: 16),
-                leading: hasChildren ? null : leading,
-                title: title,
+            child: MergeSemantics(
+              child: WorldRowSurface(
+                onTap: hasChildren ? onBrowse : onAttention,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      if (!hasChildren) leading,
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: density == JaxListDensity.compact ? 4 : 8,
+                            horizontal: 4,
+                          ),
+                          child: title,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

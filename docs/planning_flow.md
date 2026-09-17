@@ -1,5 +1,9 @@
 # Planning flow redesign
 
+Current behavior is documented in [Projected Today / start boundary](projected_today.md)
+(2026-09-14). The sections below preserve earlier implementation and rollout history;
+old draft/capture/manual-dispatch descriptions are superseded by that document.
+
 World previously changed attention without offering a target-specific route;
 Overview then required finding the node again, and every new item opened a
 context-obscuring modal. All entry points now use PlanDetailPage as the canonical

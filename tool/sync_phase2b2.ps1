@@ -6,7 +6,10 @@ param(
     [string]$Resolution,
     [string]$Confirmation,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
-    [string]$Package = 'com.example.jax',
+    [string]$Package,
+    [string]$AdbPath,
+    [string]$DartPath,
+    [switch]$Help,
     [string]$StorageRoot,
     [int]$StorageLayoutVersion = -1,
     [int]$BackupRetention = 0,
@@ -21,6 +24,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Help) { Write-Output 'WARNING developer-only Debug Sync. Default -Action Analyze creates private snapshots without business writes; apps may be stopped. Example: ./tool/sync_phase2b2.ps1 -Action Analyze -Package com.example.jax -Device <serial>. WindowsDatabase defaults to APPDATA/Jax/jax.db. Apply requires -Action Apply -Confirmation FIRST_REAL_DUAL_DEVICE_SYNC and verified backups; failure attempts rollback. Optional -Resolution, -WindowsDatabase, -StorageRoot, -BackupRoot, -OutputRoot, -Baseline, -BackupRetention, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md for all parameters and storage defaults.'; return }
+. (Join-Path $PSScriptRoot 'tool_locator.ps1')
+trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
+. (Join-Path $PSScriptRoot 'backup_retention.ps1')
+if ($Action -eq 'Apply' -and $Confirmation -ne 'FIRST_REAL_DUAL_DEVICE_SYNC') { throw 'CONFIRMATION_REQUIRED: no changes made.' }
+Assert-JaxPackage $Package
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 $OutputEncoding = $utf8NoBom
@@ -45,9 +54,8 @@ if (-not $Baseline) {
 }
 if (-not $BackupRoot) { $BackupRoot = if ($StorageLayoutVersion -eq 0) { Join-Path $StorageRoot 'sync_backups' } else { Join-Path $StorageRoot 'backups' } }
 if (-not $OutputRoot) { $OutputRoot = Join-Path $StorageRoot 'sessions' }
-$androidHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { '<android-sdk>' }
-$adb = Join-Path $androidHome 'platform-tools\adb.exe'
-$dart = '<flutter-sdk>\bin\dart.bat'
+$adb = Resolve-JaxTool adb $AdbPath
+$dart = Resolve-JaxTool dart $DartPath
 $remoteDatabase = 'databases/jax.db'
 $windowsExe = Join-Path $projectRoot 'build\windows\x64\runner\Debug\jax.exe'
 $lockPath = Join-Path $StorageRoot '.active_session.lock'
@@ -84,14 +92,14 @@ function Write-ExternalJson([string]$Path, [object]$Value) {
 function Invoke-Checked([string]$File, [string[]]$Arguments) {
     $lines = if ([IO.Path]::GetExtension($File) -in @('.bat', '.cmd')) { & $env:ComSpec /d /c $File @Arguments } else { & $File @Arguments }
     $code = $LASTEXITCODE
-    foreach ($line in $lines) { Write-Host $line }
-    if ($code -ne 0) { throw "Command failed ($code): $File $($Arguments -join ' ')" }
+    foreach ($line in $lines) { Write-Verbose $line }
+    if ($code -ne 0) { throw "Command failed ($code). Use -Verbose privately." }
     return @($lines)
 }
 
 function Get-AdbText([string[]]$Arguments) {
     $text = & $adb -s $script:serial @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "ADB failed: $($Arguments -join ' ')`n$($text -join "`n")" }
+    if ($LASTEXITCODE -ne 0) { throw 'ADB operation failed.' }
     return ($text -join "`n").Trim()
 }
 
@@ -134,8 +142,8 @@ function Export-Snapshot([string]$Database, [string]$Json) {
 }
 
 function Fingerprint([string]$SnapshotJson) {
-    $text = & $env:ComSpec /d /c $dart run tool/sync_phase2a.dart fingerprint $SnapshotJson
-    if ($LASTEXITCODE -ne 0) { throw "Could not fingerprint $SnapshotJson" }
+    $text = & $env:ComSpec /d /c $dart run tool/sync_phase2a.dart fingerprint $SnapshotJson --machine-private
+    if ($LASTEXITCODE -ne 0) { throw "Could not fingerprint $SnapshotJson --machine-private" }
     return ($text -join "`n").Trim()
 }
 
@@ -146,6 +154,10 @@ function Stop-Apps {
     & $adb -s $script:serial shell am force-stop $Package | Out-Null
     $jax = @(Get-Process jax -ErrorAction SilentlyContinue)
     $script:windowsWasRunning = $jax.Count -gt 0
+    foreach ($candidate in $jax) {
+        if ($candidate.Id -eq $KeepWindowsProcessId) { continue }
+        if (-not $candidate.Path -or [IO.Path]::GetFullPath($candidate.Path) -ne [IO.Path]::GetFullPath($windowsExe)) { throw 'Close other Jax installations before sync; unrelated processes are never terminated.' }
+    }
     foreach ($process in $jax) {
         if ($KeepWindowsProcessId -le 0 -or $process.Id -ne $KeepWindowsProcessId) { Stop-Process -Id $process.Id -Force }
     }
@@ -246,40 +258,30 @@ function Complete-BackupSession([string]$Status, [bool]$Cleanup) {
     if (-not $script:report.Contains('windowsBackup')) { return }
     $backupDirectory = Split-Path -Parent $script:report.windowsBackup
     Write-ExternalJson (Join-Path $backupDirectory 'metadata.json') ([ordered]@{
+        owner = 'jax-sync-backup'
+        metadataVersion = 1
+        sessionId = $script:session
+        createdAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+        schemaVersion = $script:backupSchema
+        protocolVersion = $script:backupProtocol
         status = $Status
         timestamp = $script:session
         report = (Join-Path $script:sessionDirectory 'sync_session_report.json')
     })
     if (-not $Cleanup) { return }
-    $sessions = @(Get-ChildItem -LiteralPath $BackupRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
-    $normalSeen = 0
-    foreach ($candidate in $sessions) {
-        if ($candidate.FullName -eq $backupDirectory) { $normalSeen++; continue }
-        $metadataPath = Join-Path $candidate.FullName 'metadata.json'
-        $candidateStatus = $null
-        if (Test-Path -LiteralPath $metadataPath) {
-            try { $candidateStatus = (Get-Content -LiteralPath $metadataPath -Raw -Encoding UTF8 | ConvertFrom-Json).status } catch { $candidateStatus = $null }
-        }
-        if ($candidateStatus -eq 'CRITICAL_ROLLBACK_FAILURE') { continue }
-        $normalSeen++
-        if ($normalSeen -gt $BackupRetention) { Remove-Item -LiteralPath $candidate.FullName -Recurse -Force }
-    }
+    Invoke-JaxBackupRetention -Root $BackupRoot -Keep $BackupRetention -ActiveSession $backupDirectory -Apply | ForEach-Object { Write-Host $_ }
 }
 
 if (-not (Test-Path -LiteralPath $adb)) { throw "adb not found: $adb" }
 if (-not (Test-Path -LiteralPath $WindowsDatabase)) { throw "Windows database not found: $WindowsDatabase" }
-$devices = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^([^\s]+)\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
-if ($Device) {
-    if ($Device -notin $devices) { throw "Requested device is not connected: $Device" }
-    $script:serial = $Device
-} elseif ($devices.Count -eq 1) { $script:serial = $devices[0] }
-elseif ($devices.Count -eq 0) { throw 'No authorized Android device is connected.' }
-else { throw 'Multiple Android devices are connected. Specify -Device.' }
+$script:serial = Select-JaxDevice $adb $Device
+Assert-JaxDebugDevice $adb $script:serial $Package
 $script:report.device = $script:serial
 $packagePath = Get-AdbText @('shell', 'pm', 'path', $Package)
 if (-not $packagePath.StartsWith('package:')) { throw "Package is not installed: $Package" }
 [void](Get-AdbText @('shell', 'run-as', $Package, 'pwd'))
 
+foreach ($privatePath in @($OutputRoot, $BackupRoot, $Baseline, $StatusPath, $ResultPath)) { if ($privatePath) { Assert-JaxPrivateOutput $privatePath } }
 $lockDirectory = Split-Path -Parent $lockPath
 New-Item -ItemType Directory -Path $lockDirectory -Force | Out-Null
 $lockStream = $null
@@ -289,7 +291,7 @@ try {
     } catch [IO.IOException] {
         throw 'SYNC_SESSION_ACTIVE: another real sync session is already running.'
     }
-    $script:session = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $script:session = (Get-Date -Format 'yyyyMMdd_HHmmss') + '_' + [guid]::NewGuid().ToString('N')
     $script:sessionDirectory = Join-Path $OutputRoot "sync_phase2b2_$($script:session)"
     New-Item -ItemType Directory -Path $script:sessionDirectory -Force | Out-Null
     $script:report.timestamp = $script:session
@@ -333,7 +335,7 @@ try {
         $script:report.resolutionTemplate = $template
         $script:report.status = 'AnalysisReady'
         Write-Report
-        Write-Host "SYNC_ANALYZE_READY plan=$planPath resolution=$template"
+        Write-Host 'SYNC_ANALYZE_READY: private plan and resolution written.'
         if ($NoLaunchPreview) {
             & $adb -s $script:serial shell am start -n "$Package/.MainActivity" | Out-Null
         } else {
@@ -354,6 +356,9 @@ try {
     $script:report.androidOperationSummary = $mutation.androidSummary
     $script:report.resolvedConflicts = $mutation.resolvedConflicts
     $script:report.expectedFinalFingerprint = $mutation.expectedFinalFingerprint
+    $snapshotMetadata = Get-Content -LiteralPath $windowsJson -Raw -Encoding UTF8 | ConvertFrom-Json
+    $script:backupSchema = [int]$snapshotMetadata.schemaVersion
+    $script:backupProtocol = [int]$snapshotMetadata.syncProtocolVersion
     $backupDirectory = Join-Path $BackupRoot $script:session
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
     $windowsBackup = Join-Path $backupDirectory 'windows_before_sync.db'
@@ -373,7 +378,7 @@ try {
 
     $script:applyStarted = $true
     Set-Stage 'ApplyingWindows'
-    Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'apply-windows', $WindowsDatabase, $mutationPath, $windowsBackup) | Out-Null
+    Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'apply-windows', $WindowsDatabase, $mutationPath, $windowsBackup, '--apply', '--confirm-sync') | Out-Null
     Set-Stage 'ValidatingWindows'
     Apply-Android $mutationPath
     Set-Stage 'FinalVerification'
@@ -383,7 +388,7 @@ try {
 
     Set-Stage 'WritingBaseline'
     try {
-        Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-write', $Baseline, $mutationPath) | Out-Null
+        Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-write', $Baseline, $mutationPath, '--apply') | Out-Null
         $baselineOutput = Invoke-Checked $dart @('run', 'tool/sync_phase2b2.dart', 'baseline-read', $Baseline)
         $script:report.baselineResult = ($baselineOutput -join "`n")
     } catch {
@@ -416,7 +421,7 @@ try {
     Write-Report
     Complete-BackupSession $script:report.status $true
     Start-Apps
-    Write-Host "FIRST_REAL_DUAL_DEVICE_SYNC_SUCCESS report=$(Join-Path $script:sessionDirectory 'sync_session_report.json')"
+    Write-Host 'FIRST_REAL_DUAL_DEVICE_SYNC_SUCCESS: report retained privately.'
 } catch {
     $failure = $_
     $script:report.error = "$failure"
@@ -438,23 +443,23 @@ try {
             Write-Report
             Complete-BackupSession $script:report.status $true
             Start-Apps
-            throw "SYNC_FAILED_ROLLED_BACK: $failure"
+            throw 'SYNC_FAILED_ROLLED_BACK: details retained in private report.'
         } catch {
             if ($script:report.status -ne 'SYNC_FAILED_ROLLED_BACK') {
                 $script:report.status = 'CRITICAL_ROLLBACK_FAILURE'
                 $script:report.rollbackError = "$_"
                 Write-Report
                 Complete-BackupSession $script:report.status $false
-                throw "CRITICAL_ROLLBACK_FAILURE: $_"
+                throw 'CRITICAL_ROLLBACK_FAILURE: preserve private evidence.'
             }
             throw
         }
     }
     $script:report.status = 'FailedBeforeApply'
     Write-Report
-    try { Start-Apps } catch { Write-Warning "Could not restart apps after pre-Apply failure: $_" }
-    throw
+    Write-Warning 'Apps remain stopped after failed validation; no implicit migration or repair.'
+    throw 'SYNC_FAILED_BEFORE_APPLY: see private report.'
 } finally {
     if ($null -ne $lockStream) { $lockStream.Dispose() }
-    if (Test-Path -LiteralPath $lockPath) { Remove-Item -LiteralPath $lockPath -Force }
+    if ($null -ne $lockStream -and (Test-Path -LiteralPath $lockPath)) { Remove-Item -LiteralPath $lockPath -Force }
 }

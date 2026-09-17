@@ -31,7 +31,7 @@ $required = @{
   'writes session output under storage root' = "Join-Path `$StorageRoot 'sessions'"
   'places the active lock under storage root' = "Join-Path `$StorageRoot '.active_session.lock'"
   'writes terminal backup metadata' = "Join-Path `$backupDirectory 'metadata.json'"
-  'protects critical rollback evidence' = "candidateStatus -eq 'CRITICAL_ROLLBACK_FAILURE'"
+  'protects critical rollback evidence' = 'Invoke-JaxBackupRetention'
   'cleans backup sessions only after terminal status' = 'Complete-BackupSession $script:report.status $true'
 }
 foreach ($entry in $required.GetEnumerator()) {

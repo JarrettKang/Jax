@@ -1,3 +1,9 @@
+import '../theme/operational_theme.dart';
+import '../theme/home_pilot_theme.dart';
+import '../theme/planning_theme.dart';
+import '../theme/desktop_polish.dart';
+import '../widgets/record_time_labels.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/entities/time_summary.dart';
@@ -28,144 +34,176 @@ class _SummaryPageState extends State<SummaryPage> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.controller,
-    builder: (context, _) => FutureBuilder<List<Object>>(
-      key: ValueKey(
-        'record-summary-${_week ? 'week' : 'day'}-${_anchor.year}-${_anchor.month}-${_anchor.day}',
-      ),
-      future: Future.wait([
-        _week
-            ? widget.controller.weeklySummary(_anchor)
-            : widget.controller.dailySummary(_anchor),
-        if (!_week) widget.controller.dailyExecutionSegments(_anchor),
-      ]),
-      builder: (context, snapshot) {
-        final summary = snapshot.data?.firstOrNull as TimeSummary?;
-        final segments = !_week && snapshot.data != null
-            ? snapshot.data![1] as List<DailyExecutionSegment>
-            : const <DailyExecutionSegment>[];
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-          children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  label: Text('日总结'),
-                  icon: Icon(Icons.today_outlined),
-                ),
-                ButtonSegment(
-                  value: true,
-                  label: Text('周总结'),
-                  icon: Icon(Icons.date_range_outlined),
-                ),
-              ],
-              selected: {_week},
-              onSelectionChanged: (value) =>
-                  setState(() => _week = value.single),
-            ),
-            const SizedBox(height: 20),
-            _navigator(),
-            if (summary == null)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              Text(
-                summary.isCurrent ? (_week ? '本周 · 进行中' : '今天 · 进行中') : '已结束',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${_time(summary.start)} – ${_time(summary.end)}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 20),
-              Text('已记录时间', style: Theme.of(context).textTheme.titleMedium),
-              Text(
-                _duration(summary.total),
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              if (summary.categories.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(_week ? '这一周没有记录到执行时间' : '这一天没有记录到执行时间'),
-                  ),
-                )
-              else ...[
-                if (_week && summary is WeeklyTimeSummary) ...[
-                  const SizedBox(height: 28),
-                  Text(
-                    '每日时间分配',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  _WeeklyBars(summary: summary),
-                ],
-                const SizedBox(height: 28),
-                Text(
-                  _week ? '本周分类汇总' : '各分类时间',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 12),
-                for (var i = 0; i < summary.categories.length; i++)
-                  _CategoryBar(
-                    item: summary.categories[i],
-                    total: summary.total,
-                    color: _color(context, summary.categories[i]),
-                  ),
-              ],
-              if (!_week) ...[
-                const SizedBox(height: 32),
-                Text('今日时间分布', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                DailyTimeDistribution(
-                  date: _anchor,
-                  segments: segments,
-                  now: widget.controller.currentTime,
-                  colorForSegment: (segment) => segment.categoryColorKey == null
-                      ? CategoryPaletteColors.neutral(context)
-                      : CategoryPaletteColors.resolve(
-                          context,
-                          segment.categoryColorKey!,
-                        ),
-                  onSegmentTap: (segment) =>
-                      _editSegment(context, segment, segments),
-                ),
-                const SizedBox(height: 32),
-                Row(
+  Widget build(BuildContext context) => OperationalVisualScope(
+    builder: (context) => AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) => FutureBuilder<List<Object>>(
+        key: ValueKey(
+          'record-summary-${_week ? 'week' : 'day'}-${_anchor.year}-${_anchor.month}-${_anchor.day}',
+        ),
+        future: Future.wait([
+          _week
+              ? widget.controller.weeklySummary(_anchor)
+              : widget.controller.dailySummary(_anchor),
+          if (!_week) widget.controller.dailyExecutionSegments(_anchor),
+        ]),
+        builder: (context, snapshot) {
+          final summary = snapshot.data?.firstOrNull as TimeSummary?;
+          final segments = !_week && snapshot.data != null
+              ? snapshot.data![1] as List<DailyExecutionSegment>
+              : const <DailyExecutionSegment>[];
+          return ColoredBox(
+            color: HomePilot.canvas,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1080),
+                child: ListView(
+                  key: const ValueKey("record-list"),
+                  padding: OperationalTheme.pagePadding(context),
                   children: [
                     Text(
-                      '执行记录',
-                      style: Theme.of(context).textTheme.titleMedium,
+                      '记录',
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => _addSegment(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('添加执行记录'),
+                    const SizedBox(height: 16),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          label: Text('日总结'),
+                          icon: Icon(Icons.today_outlined),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text('周总结'),
+                          icon: Icon(Icons.date_range_outlined),
+                        ),
+                      ],
+                      selected: {_week},
+                      onSelectionChanged: (value) =>
+                          setState(() => _week = value.single),
                     ),
+                    const SizedBox(height: 16),
+                    _navigator(),
+                    if (summary == null)
+                      const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else ...[
+                      Text(
+                        summary.isCurrent
+                            ? (_week ? '本周 · 进行中' : '今天 · 进行中')
+                            : '已结束',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_time(summary.start)} – ${_time(summary.end)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        '已记录时间',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        _duration(summary.total),
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      if (!_week) ...[
+                        const SizedBox(height: 16),
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '执行记录',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _addSegment(context),
+                              icon: const Icon(Icons.add),
+                              label: const Text('添加执行记录'),
+                            ),
+                          ],
+                        ),
+                        if (segments.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Text('这一天没有执行片段'),
+                          ),
+                        for (final segment in segments)
+                          _SegmentRow(
+                            segment: segment,
+                            day: _anchor,
+                            now: widget.controller.currentTime,
+                            onTap: () =>
+                                _editSegment(context, segment, segments),
+                          ),
+                      ],
+                      if (summary.categories.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text(
+                              _week ? '这一周没有记录到执行时间' : '这一天没有记录到执行时间',
+                            ),
+                          ),
+                        )
+                      else ...[
+                        if (_week && summary is WeeklyTimeSummary) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            '每日时间分配',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          _WeeklyBars(summary: summary),
+                        ],
+                        const SizedBox(height: 16),
+                        Text(
+                          _week ? '本周分类汇总' : '各分类时间',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 12),
+                        for (var i = 0; i < summary.categories.length; i++)
+                          _CategoryBar(
+                            item: summary.categories[i],
+                            total: summary.total,
+                            color: _color(context, summary.categories[i]),
+                          ),
+                      ],
+                      if (!_week) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          '今日时间分布',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 12),
+                        DailyTimeDistribution(
+                          date: _anchor,
+                          segments: segments,
+                          now: widget.controller.currentTime,
+                          colorForSegment: (segment) =>
+                              segment.categoryColorKey == null
+                              ? CategoryPaletteColors.neutral(context)
+                              : CategoryPaletteColors.resolve(
+                                  context,
+                                  segment.categoryColorKey!,
+                                ),
+                          onSegmentTap: (segment) =>
+                              _editSegment(context, segment, segments),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
-                if (segments.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text('这一天没有执行片段'),
-                  ),
-                for (final segment in segments)
-                  _SegmentRow(
-                    segment: segment,
-                    day: _anchor,
-                    onTap: () => _editSegment(context, segment, segments),
-                  ),
-              ],
-            ],
-          ],
-        );
-      },
+              ),
+            ),
+          );
+        },
+      ),
     ),
   );
 
@@ -188,75 +226,83 @@ class _SummaryPageState extends State<SummaryPage> {
     var start = segment.startedAt.toLocal();
     var end = segment.endedAt!.toLocal();
     final index = list.indexOf(segment);
-    await showModalBottomSheet<void>(
+    await _recordSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheet) => StatefulBuilder(
-        builder: (context, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(segment.name, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 16),
-              _timeButton(context, '开始', start, () async {
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(start),
-                );
-                if (t != null) setSheet(() => start = _onDay(t));
-              }),
-              _timeButton(context, '结束', end, () async {
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(end),
-                );
-                if (t != null) setSheet(() => end = _onDay(t));
-              }),
-              if (index > 0) _contextLine('上一项', list[index - 1]),
-              if (index >= 0 && index < list.length - 1)
-                _contextLine('下一项', list[index + 1]),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () async {
-                      final error = await widget.controller
-                          .deleteClosedExecutionSegment(segment);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        if (error != null) {
+        builder: (context, setSheet) => SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              24 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  segment.name,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                _timeButton(context, '开始', start, () async {
+                  final t = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(start),
+                  );
+                  if (t != null) setSheet(() => start = _onDay(t));
+                }),
+                _timeButton(context, '结束', end, () async {
+                  final t = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(end),
+                  );
+                  if (t != null) setSheet(() => end = _onDay(t));
+                }),
+                if (index > 0) _contextLine('上一项', list[index - 1]),
+                if (index >= 0 && index < list.length - 1)
+                  _contextLine('下一项', list[index + 1]),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        final error = await widget.controller
+                            .deleteClosedExecutionSegment(segment);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          if (error != null) {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(content: Text(error)));
+                          }
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: PlanningTheme.error,
+                      ),
+                      child: const Text('删除'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: () async {
+                        final error = await widget.controller
+                            .updateClosedExecutionSegment(segment, start, end);
+                        if (context.mounted && error == null) {
+                          Navigator.pop(context);
+                        }
+                        if (context.mounted && error != null) {
                           ScaffoldMessenger.of(context)
                               .showSnackBar(SnackBar(content: Text(error)));
                         }
-                      }
-                    },
-                    child: const Text('删除'),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () async {
-                      final error = await widget.controller
-                          .updateClosedExecutionSegment(segment, start, end);
-                      if (context.mounted && error == null) {
-                        Navigator.pop(context);
-                      }
-                      if (context.mounted && error != null) {
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(SnackBar(content: Text(error)));
-                      }
-                    },
-                    child: const Text('保存'),
-                  ),
-                ],
-              ),
-            ],
+                      },
+                      child: const Text('保存'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -266,31 +312,35 @@ class _SummaryPageState extends State<SummaryPage> {
   Future<void> _showOpenSegment(
     BuildContext context,
     DailyExecutionSegment segment,
-  ) => showModalBottomSheet<void>(
+  ) => _recordSheet<void>(
     context: context,
     builder: (context) {
       final elapsed = widget.controller.currentTime.difference(
         segment.startedAt.toLocal(),
       );
-      return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(segment.name, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            Text('${_clock(segment.startedAt)} → 现在'),
-            const SizedBox(height: 4),
-            Text(_duration(elapsed)),
-            const SizedBox(height: 4),
-            Text(segment.categoryName),
-            const SizedBox(height: 12),
-            Text(
-              '正在执行 · 请在 Today 中暂停或完成',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(segment.name, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              Text(
+                recordRange(segment, _anchor, widget.controller.currentTime),
+              ),
+              const SizedBox(height: 4),
+              Text(_duration(elapsed)),
+              const SizedBox(height: 4),
+              Text(segment.categoryName),
+              const SizedBox(height: 12),
+              Text(
+                '正在执行 · 请在 Today 中暂停或完成',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
       );
     },
@@ -299,7 +349,7 @@ class _SummaryPageState extends State<SummaryPage> {
   Widget _contextLine(String label, DailyExecutionSegment segment) => Padding(
     padding: const EdgeInsets.only(top: 12),
     child: Text(
-      '$label  ${segment.name}  ${_clock(segment.startedAt)}–${segment.endedAt == null ? '现在' : _clock(segment.endedAt!)}',
+      '$label  ${segment.name}  ${recordRange(segment, _anchor, widget.controller.currentTime)}',
     ),
   );
   Widget _timeButton(
@@ -349,7 +399,7 @@ class _SummaryPageState extends State<SummaryPage> {
           .showSnackBar(const SnackBar(content: Text('当天没有可补记的事项或日常')));
       return;
     }
-    final picked = await showModalBottomSheet<_Candidate>(
+    final picked = await _recordSheet<_Candidate>(
       context: context,
       isScrollControlled: true,
       builder: (context) => SafeArea(
@@ -388,7 +438,7 @@ class _SummaryPageState extends State<SummaryPage> {
     var end = _onDay(const TimeOfDay(hour: 12, minute: 30));
     var showAllGaps = false;
     String? rangeError;
-    await showModalBottomSheet<void>(
+    await _recordSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheet) => StatefulBuilder(
@@ -432,7 +482,7 @@ class _SummaryPageState extends State<SummaryPage> {
                     picked.context,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Text('可用空白时间', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   if (visibleGaps.isEmpty)
@@ -495,7 +545,7 @@ class _SummaryPageState extends State<SummaryPage> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -590,47 +640,72 @@ class _SegmentRow extends StatelessWidget {
   const _SegmentRow({
     required this.segment,
     required this.day,
+    required this.now,
     required this.onTap,
   });
   final DailyExecutionSegment segment;
-  final DateTime day;
+  final DateTime day, now;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 118,
-            child: Text(
-              '${_clock(segment.startedAt)} → ${segment.endedAt == null ? '现在' : _clock(segment.endedAt!)}',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(segment.name),
-                if (segment.detail != null || segment.isOpen)
-                  Text(
-                    segment.isOpen ? '正在执行' : segment.detail!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-              ],
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final range = Text(
+      recordRange(segment, day, now),
+      style: text.bodyMedium?.copyWith(
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
-    ),
-  );
+    );
+    final duration = recordDuration(
+      (segment.endedAt?.toLocal() ?? now.toLocal()).difference(
+        segment.startedAt.toLocal(),
+      ),
+    );
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(segment.name, style: text.titleMedium),
+        const SizedBox(height: 4),
+        Text(segment.detail ?? segment.categoryName, style: text.bodySmall),
+        const SizedBox(height: 4),
+        Text(
+          '$duration${segment.isOpen ? ' · 正在执行' : ''}',
+          style: text.bodySmall,
+        ),
+      ],
+    );
+    return PlanningRowSurface(
+      onTap: onTap,
+      child: ConstrainedBox(
+        key: ValueKey('record-segment-${segment.id}'),
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final wide =
+                  box.maxWidth >= 720 &&
+                  MediaQuery.textScalerOf(context).scale(16) <= 20;
+              if (wide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 224, child: range),
+                    const SizedBox(width: 16),
+                    Expanded(child: info),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [range, const SizedBox(height: 4), info],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }
-
-String _clock(DateTime value) =>
-    '${value.toLocal().hour.toString().padLeft(2, '0')}:${value.toLocal().minute.toString().padLeft(2, '0')}';
 
 class _Candidate {
   const _Candidate(this.id, this.name, this.context, this.routine);
@@ -659,13 +734,9 @@ class _CandidateTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
     key: ValueKey('segment-candidate-${candidate.id}'),
-    dense: true,
+    minTileHeight: 48,
     title: Text(candidate.name),
-    subtitle: Text(
-      candidate.context,
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    ),
+    subtitle: Text(candidate.context),
     onTap: () => Navigator.pop(context, candidate),
   );
 }
@@ -689,16 +760,19 @@ class _CategoryBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Expanded(child: Text(item.name, overflow: TextOverflow.ellipsis)),
+              Text(item.name, style: Theme.of(context).textTheme.titleMedium),
               Text(
                 '${SummaryPageState.duration(item.duration)} · ${(percent * 100).round()}%',
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           LinearProgressIndicator(
+            backgroundColor: HomePilot.surfaceSubtle,
             value: percent,
             color: color,
             minHeight: 8,
@@ -720,7 +794,7 @@ class _WeeklyBars extends StatelessWidget {
       (value, day) => value > day.total ? value : day.total,
     );
     return SizedBox(
-      height: 150,
+      height: 110 + MediaQuery.textScalerOf(context).scale(13) * 3,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -782,7 +856,7 @@ class _WeeklyBars extends StatelessWidget {
                     ),
                     Text(
                       '周${['一', '二', '三', '四', '五', '六', '日'][day]}',
-                      style: Theme.of(context).textTheme.labelSmall,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
@@ -802,4 +876,33 @@ class SummaryPageState {
         ? CategoryPaletteColors.neutral(context)
         : CategoryPaletteColors.resolve(context, item.colorKey!);
   }
+}
+
+Future<T?> _recordSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool isScrollControlled = false,
+}) {
+  if (Theme.of(context).platform != TargetPlatform.windows) {
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: isScrollControlled,
+      builder: builder,
+    );
+  }
+  return showDialog<T>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      constraints: DesktopPolish.dialog(
+        dialogContext,
+        DesktopDialogSize.complex,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(dialogContext).height * .84,
+        ),
+        child: builder(dialogContext),
+      ),
+    ),
+  );
 }

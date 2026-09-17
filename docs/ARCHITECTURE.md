@@ -1,5 +1,7 @@
 # Jax v0.1 架构
 
+UI 视觉规则统一引用 [Jax Design System v1.0](DESIGN.md)。该规范指导表现层迁移，不改变本文件的层间职责、业务边界或数据行为；各页面是否已迁移以其 Validation Status 为准。
+
 ## 分层与依赖
 
 Jax 遵循 `UI → Core ← Data`。Core 不依赖 Flutter、SQLite 或具体平台；Windows 与 Android 复用 Core 的实体、状态规则、用例和 Repository/Service 接口。

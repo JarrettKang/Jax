@@ -111,6 +111,12 @@ void main() {
           300,
           scrollable: find.byType(Scrollable).first,
         );
+        // Let lazy rows finish layout before targeting the editor's centre.
+        await settle(tester);
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('plan-item-title')),
+        );
+        await settle(tester);
         expect(
           find.byKey(const ValueKey('plan-item-initial-status')),
           findsNothing,
@@ -205,7 +211,7 @@ void main() {
           ]);
           expect(c.itemsFor(plan.id).map((i) => i.sortOrder), [0, 1, 2]);
           expect(
-            c.itemsFor(plan.id).every((i) => i.status == PlanItemStatus.draft),
+            c.itemsFor(plan.id).every((i) => i.status == PlanItemStatus.next),
             isTrue,
           );
           expect(
@@ -215,14 +221,8 @@ void main() {
           await tester.enterText(input, '检查平衡性');
           await tester.testTextInput.receiveAction(TextInputAction.done);
           await settle(tester);
-          expect(c.itemsFor(plan.id).last.status, PlanItemStatus.draft);
-          await tester.ensureVisible(
-            find.byKey(ValueKey('toggle-next-${c.itemsFor(plan.id).last.id}')),
-          );
-          await tester.tap(
-            find.byKey(ValueKey('toggle-next-${c.itemsFor(plan.id).last.id}')),
-          );
-          await settle(tester);
+          expect(c.itemsFor(plan.id).last.status, PlanItemStatus.next);
+          expect(find.text('设为下一步'), findsNothing);
           expect(c.itemsFor(plan.id).last.status, PlanItemStatus.next);
           expect(
             c.recommendationGroups.any(

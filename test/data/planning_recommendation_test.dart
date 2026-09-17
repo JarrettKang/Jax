@@ -115,7 +115,7 @@ void main() {
         controller.recommendationGroups
             .expand((value) => value.items)
             .map((value) => value.id),
-        ['a1-next', 'a2-next-1', 'a2-next-2'],
+        ['a1-next', 'a2-next-1', 'a2-draft', 'a2-next-2'],
       );
     },
   );

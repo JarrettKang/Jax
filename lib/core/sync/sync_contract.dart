@@ -4,7 +4,7 @@ import 'package:crypto/crypto.dart';
 
 import '../entities/world_node_ids.dart';
 
-const syncProtocolVersion = 8;
+const syncProtocolVersion = 11;
 
 enum SyncEntityKind {
   eventCategory,
@@ -197,9 +197,26 @@ class SyncSnapshot {
     final withTime = withAttention.protocolVersion == 6
         ? _upgradeProtocol6Baseline(withAttention)
         : withAttention;
-    return withTime.protocolVersion == 7
+    final withQuickActions = withTime.protocolVersion == 7
         ? _upgradeProtocol7Baseline(withTime)
         : withTime;
+    final withReferences = withQuickActions.protocolVersion == 8
+        ? _upgradeProtocol8Baseline(withQuickActions)
+        : withQuickActions;
+    final withTemporal = withReferences.protocolVersion == 9
+        ? _upgradeProtocol9Baseline(withReferences)
+        : withReferences;
+    return withTemporal.protocolVersion == 10
+        ? SyncSnapshot(
+            protocolVersion: 11,
+            schemaVersion: withTemporal.schemaVersion,
+            datasetGeneration: withTemporal.datasetGeneration,
+            exportedAtUtc: withTemporal.exportedAtUtc,
+            records: withTemporal.records,
+            lists: withTemporal.lists,
+            warnings: withTemporal.warnings,
+          )
+        : withTemporal;
   }
   factory SyncSnapshot.fromJsonString(String source) => SyncSnapshot.fromJson(
     (jsonDecode(source) as Map).cast<String, Object?>(),
@@ -507,18 +524,43 @@ SyncSnapshot _upgradeProtocol7Baseline(SyncSnapshot source) => SyncSnapshot(
   schemaVersion: source.schemaVersion,
   datasetGeneration: source.datasetGeneration,
   exportedAtUtc: source.exportedAtUtc,
-  records: source.records.map((record) =>
-      record.kind != SyncEntityKind.routine || record.isDeleted
-          ? record
-          : SyncRecord(
-              kind: record.kind,
-              metadata: record.metadata,
-              payload: Map<String, Object?>.from(record.payload)
-                ..putIfAbsent('showInHomeQuickActions', () => 0),
-            )),
+  records: source.records.map(
+    (record) => record.kind != SyncEntityKind.routine || record.isDeleted
+        ? record
+        : SyncRecord(
+            kind: record.kind,
+            metadata: record.metadata,
+            payload: Map<String, Object?>.from(record.payload)
+              ..putIfAbsent('showInHomeQuickActions', () => 0),
+          ),
+  ),
   lists: source.lists,
-  warnings: [...source.warnings,
-    'baseline-upgraded: sync protocol 7 normalized Routine home quick actions'],
+  warnings: [
+    ...source.warnings,
+    'baseline-upgraded: sync protocol 7 normalized Routine home quick actions',
+  ],
+);
+
+SyncSnapshot _upgradeProtocol8Baseline(SyncSnapshot source) => SyncSnapshot(
+  protocolVersion: 9,
+  schemaVersion: source.schemaVersion,
+  datasetGeneration: source.datasetGeneration,
+  exportedAtUtc: source.exportedAtUtc,
+  records: source.records.map(
+    (record) => record.kind != SyncEntityKind.planItem || record.isDeleted
+        ? record
+        : SyncRecord(
+            kind: record.kind,
+            metadata: record.metadata,
+            payload: Map<String, Object?>.from(record.payload)
+              ..putIfAbsent('promotedWorldNodeSyncId', () => null),
+          ),
+  ),
+  lists: source.lists,
+  warnings: [
+    ...source.warnings,
+    'baseline-upgraded: sync protocol 8 added PlanItem WorldNode references',
+  ],
 );
 
 Map<String, Object?> _sortedMap(Map<String, Object?> source) {
@@ -531,3 +573,28 @@ Map<String, Object?> _sortedMap(Map<String, Object?> source) {
   }
   return result;
 }
+
+SyncSnapshot _upgradeProtocol9Baseline(SyncSnapshot source) => SyncSnapshot(
+  protocolVersion: 10,
+  schemaVersion: source.schemaVersion,
+  datasetGeneration: source.datasetGeneration,
+  exportedAtUtc: source.exportedAtUtc,
+  records: source.records.map(
+    (record) => record.kind != SyncEntityKind.routine || record.isDeleted
+        ? record
+        : SyncRecord(
+            kind: record.kind,
+            metadata: record.metadata,
+            payload: Map<String, Object?>.from(record.payload)
+              ..putIfAbsent(
+                'timeRecommendationLatestEndMinute',
+                () => record.payload['timeRecommendationEndMinute'],
+              ),
+          ),
+  ),
+  lists: source.lists,
+  warnings: [
+    ...source.warnings,
+    'baseline-upgraded: sync protocol 9 added temporal latest endpoint',
+  ],
+);

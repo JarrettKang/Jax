@@ -67,6 +67,18 @@ class SqliteSyncMutationExecutor {
           );
         }
       }
+      final invalidPromotions = await transaction.rawQuery(
+        '''SELECT i.id FROM plan_items i
+        LEFT JOIN world_nodes n ON n.id = i.promoted_world_node_id
+        WHERE i.promoted_world_node_id IS NOT NULL AND
+          (n.id IS NULL OR i.status NOT IN ('next','draft') OR
+           EXISTS(SELECT 1 FROM events e WHERE e.source_plan_item_id = i.id))''',
+      );
+      if (invalidPromotions.isNotEmpty) {
+        throw StateError(
+          'Invalid promoted PlanItem relation: $invalidPromotions',
+        );
+      }
       final foreignKeys = await transaction.rawQuery(
         'PRAGMA foreign_key_check',
       );
@@ -405,6 +417,8 @@ class SqliteSyncMutationExecutor {
         'show_in_home_quick_actions': p['showInHomeQuickActions'],
         'time_recommendation_start_minute': p['timeRecommendationStartMinute'],
         'time_recommendation_end_minute': p['timeRecommendationEndMinute'],
+        'time_recommendation_latest_end_minute':
+            p['timeRecommendationLatestEndMinute'],
         'time_recommendation_reason': p['timeRecommendationReason'],
         'sort_order': p['order'],
         ...metadata,
@@ -413,7 +427,8 @@ class SqliteSyncMutationExecutor {
         'id': record.metadata.id,
         'routine_id': p['routineSyncId'],
         'occurrence_date': p['jaxDay'],
-        'status': p['status'],
+        'status': p['status'] == 'waiting' ? 'paused' : p['status'],
+        'is_waiting': p['status'] == 'waiting' ? 1 : 0,
         'completed_at_utc': p['completedAtUtc'],
         ...metadata,
       },
@@ -457,6 +472,7 @@ class SqliteSyncMutationExecutor {
         'plan_id': p['planSyncId'],
         'title': p['title'],
         'note': p['note'],
+        'promoted_world_node_id': p['promotedWorldNodeSyncId'],
         'status': p['status'],
         'sort_order': p['order'],
         ...metadata,

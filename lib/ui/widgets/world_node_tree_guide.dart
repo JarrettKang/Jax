@@ -50,6 +50,9 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
     this.maximumVisualDepth = 7,
     this.nodeLeadingWidth = 40,
     this.hasExpandedChildren = false,
+    this.guideColor,
+    this.continueAtMaximumDepth = false,
+    this.paintAboveChild = false,
     super.key,
   });
 
@@ -60,10 +63,16 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
   final int maximumVisualDepth;
   final double nodeLeadingWidth;
   final bool hasExpandedChildren;
+  final Color? guideColor;
+  final bool continueAtMaximumDepth;
+
+  /// World opts in so row hover never hides structural lines.
+  final bool paintAboveChild;
 
   @override
   Widget build(BuildContext context) => Stack(
     children: [
+      if (paintAboveChild) child,
       if (visualContext.depth > 0 || hasExpandedChildren)
         Positioned.fill(
           child: ExcludeSemantics(
@@ -71,19 +80,22 @@ class WorldNodeTreeGuideFrame extends StatelessWidget {
               child: CustomPaint(
                 painter: _WorldNodeTreeGuidePainter(
                   visualContext: visualContext,
-                  color: Theme.of(context).colorScheme.outlineVariant
-                      .withValues(alpha: 0.9),
+                  color:
+                      guideColor ??
+                      Theme.of(context).colorScheme.outlineVariant
+                          .withValues(alpha: 0.9),
                   baseIndent: baseIndent,
                   levelIndent: levelIndent,
                   maximumVisualDepth: maximumVisualDepth,
                   nodeLeadingWidth: nodeLeadingWidth,
                   hasExpandedChildren: hasExpandedChildren,
+                  continueAtMaximumDepth: continueAtMaximumDepth,
                 ),
               ),
             ),
           ),
         ),
-      child,
+      if (!paintAboveChild) child,
     ],
   );
 }
@@ -97,6 +109,7 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
     required this.maximumVisualDepth,
     required this.nodeLeadingWidth,
     required this.hasExpandedChildren,
+    required this.continueAtMaximumDepth,
   });
 
   final WorldNodeTreeVisualContext visualContext;
@@ -106,6 +119,7 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
   final int maximumVisualDepth;
   final double nodeLeadingWidth;
   final bool hasExpandedChildren;
+  final bool continueAtMaximumDepth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -143,10 +157,27 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
         paint,
       );
     }
-    if (hasExpandedChildren && visualContext.depth < maximumVisualDepth) {
+    if (hasExpandedChildren &&
+        (visualContext.depth < maximumVisualDepth || continueAtMaximumDepth)) {
       final x =
-          baseIndent + nodeLeadingWidth / 2 + visualContext.depth * levelIndent;
-      canvas.drawLine(Offset(x, middle + 9), Offset(x, size.height), paint);
+          baseIndent +
+          nodeLeadingWidth / 2 +
+          (continueAtMaximumDepth
+                  ? math.min(visualContext.depth, maximumVisualDepth - 1)
+                  : visualContext.depth) *
+              levelIndent;
+      canvas.drawLine(
+        Offset(
+          x,
+          middle +
+              (continueAtMaximumDepth &&
+                      visualContext.depth >= maximumVisualDepth
+                  ? 0
+                  : 9),
+        ),
+        Offset(x, size.height),
+        paint,
+      );
     }
   }
 
@@ -163,7 +194,8 @@ class _WorldNodeTreeGuidePainter extends CustomPainter {
       oldDelegate.levelIndent != levelIndent ||
       oldDelegate.maximumVisualDepth != maximumVisualDepth ||
       oldDelegate.nodeLeadingWidth != nodeLeadingWidth ||
-      oldDelegate.hasExpandedChildren != hasExpandedChildren;
+      oldDelegate.hasExpandedChildren != hasExpandedChildren ||
+      oldDelegate.continueAtMaximumDepth != continueAtMaximumDepth;
 
   static bool _sameContinuations(List<bool> left, List<bool> right) {
     if (left.length != right.length) return false;

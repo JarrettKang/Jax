@@ -1,3 +1,5 @@
+import 'private_tool_support.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,7 +15,15 @@ import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) => runPrivateTool(args, runCommand);
+
+Future<void> runCommand(List<String> args) async {
+  if (args.contains("--help") || args.contains("-help")) {
+    stdout.writeln(
+      "Developer-only sync_phase2b2. See docs/TOOLS.md for commands, private output and safety requirements. --verbose enables private diagnostics.",
+    );
+    return;
+  }
   if (args.isEmpty) _usage();
   switch (args.first) {
     case 'resolution-template' when args.length == 3:
@@ -27,11 +37,14 @@ Future<void> main(List<String> args) async {
         outputPath: args[5],
         baselinePath: args.length == 7 ? args[6] : null,
       );
-    case 'apply-windows' when args.length == 4:
+    case 'apply-windows'
+        when args.length == 6 &&
+            args[4] == '--apply' &&
+            args[5] == '--confirm-sync':
       await _applyWindows(args[1], args[2], args[3]);
     case 'verify' when args.length == 3:
       await _verify(args[1], args[2]);
-    case 'baseline-write' when args.length == 3:
+    case 'baseline-write' when args.length == 4 && args.last == '--apply':
       await _writeBaseline(args[1], args[2]);
     case 'baseline-read' when args.length == 2:
       await _readBaseline(args[1]);
@@ -70,7 +83,7 @@ Future<void> _resolutionTemplate(String planPath, String outputPath) async {
     'invariantResolutions': <String, Object?>{},
   };
   await _writeJson(outputPath, output);
-  stdout.writeln('RESOLUTION_TEMPLATE_WRITTEN $outputPath');
+  stdout.writeln('RESOLUTION_TEMPLATE_WRITTEN');
 }
 
 Future<void> _compile({
@@ -112,10 +125,7 @@ Future<void> _compile({
   stdout.writeln('PLAN_VALID');
   stdout.writeln('Windows operations: ${mutation.windowsOperations.length}');
   stdout.writeln('Android operations: ${mutation.androidOperations.length}');
-  stdout.writeln(
-    'Expected final fingerprint: '
-    '${mutation.expectedFinalSnapshot.businessFingerprintSha256}',
-  );
+  stdout.writeln('Final fingerprint calculated (private mutation plan).');
 }
 
 Map<String, int> _operationSummary(
@@ -187,26 +197,23 @@ Future<void> _verify(String databasePath, String mutationPath) async {
   final mutation = _mutationFile(mutationPath);
   final snapshot = await _databaseSnapshot(databasePath);
   await _verifySnapshot(snapshot, mutation.expectedFinalSnapshot);
-  stdout.writeln('FINAL_STATE_VERIFIED ${snapshot.businessFingerprintSha256}');
+  stdout.writeln('FINAL_STATE_VERIFIED');
 }
 
 Future<void> _writeBaseline(String path, String mutationPath) async {
   final mutation = _mutationFile(mutationPath);
+  requirePrivateOutput(path);
   final store = FileSyncBaselineStore(path);
   await store.writeSuccessfulBaseline(mutation.expectedFinalSnapshot);
   final persisted = await store.read();
-  stdout.writeln(
-    'BASELINE_WRITTEN path=$path '
-    'fingerprint=${persisted!.businessFingerprintSha256}',
-  );
+  if (persisted == null) throw StateError('Baseline verification failed.');
+  stdout.writeln('BASELINE_WRITTEN');
 }
 
 Future<void> _readBaseline(String path) async {
   final snapshot = await FileSyncBaselineStore(path).read();
   if (snapshot == null) throw StateError('Baseline does not exist: $path');
-  stdout.writeln(
-    'BASELINE_OK path=$path fingerprint=${snapshot.businessFingerprintSha256}',
-  );
+  stdout.writeln('BASELINE_OK');
 }
 
 SyncSnapshot _snapshotFile(String path) =>
@@ -218,7 +225,7 @@ SyncMutationPlan _mutationFile(String path) => SyncMutationPlan.fromJson(
 Future<SyncSnapshot> _databaseSnapshot(String path) async {
   sqfliteFfiInit();
   final db = await databaseFactoryFfi.openDatabase(
-    path,
+    File(path).absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {
@@ -242,6 +249,7 @@ Future<void> _verifySnapshot(SyncSnapshot actual, SyncSnapshot expected) async {
 }
 
 Future<void> _writeJson(String path, Object? value) async {
+  requirePrivateOutput(path);
   final file = File(path);
   await file.parent.create(recursive: true);
   await file.writeAsString(

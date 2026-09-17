@@ -1,3 +1,5 @@
+import 'ui/theme/desktop_polish.dart';
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +14,9 @@ import 'core/entities/jax_event.dart';
 import 'core/repositories/planning_repository.dart';
 import 'core/repositories/world_node_repository.dart';
 import 'core/preferences/world_category_collapse_store.dart';
+import 'core/preferences/app_preferences.dart';
+import 'ui/controllers/app_preferences_controller.dart';
+import 'ui/pages/settings_page.dart';
 import 'core/preferences/routine_category_collapse_store.dart';
 import 'core/services/save_service.dart';
 import 'core/use_cases/create_event.dart';
@@ -20,6 +25,7 @@ import 'ui/controllers/event_controller.dart';
 import 'ui/pages/events_page.dart';
 import 'ui/pages/summary_page.dart';
 import 'ui/pages/home_page.dart';
+import 'ui/controllers/home_view_state.dart';
 import 'ui/pages/world_page.dart';
 import 'ui/pages/routine_page.dart';
 import 'core/repositories/routine_repository.dart';
@@ -29,17 +35,22 @@ import 'ui/pages/sync_preview_page.dart';
 import 'ui/controllers/planning_controller.dart';
 import 'ui/pages/planning_page.dart';
 
-ThemeData buildJaxTheme(TargetPlatform platform) => ThemeData(
-  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
-  fontFamily: platform == TargetPlatform.windows ? 'Microsoft YaHei UI' : null,
-  platform: platform,
-  useMaterial3: true,
+ThemeData buildJaxTheme(TargetPlatform platform) => DesktopPolish.theme(
+  ThemeData(
+    colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF315C4C)),
+    fontFamily: platform == TargetPlatform.windows
+        ? 'Microsoft YaHei UI'
+        : null,
+    platform: platform,
+    useMaterial3: true,
+  ),
 );
 
 class JaxApp extends StatefulWidget {
   JaxApp({
     required this.repository,
     SaveService? saveService,
+    AppPreferencesStore? preferencesStore,
     WorldCategoryCollapseStore? worldCategoryCollapseStore,
     RoutineCategoryCollapseStore? routineCategoryCollapseStore,
     IdGenerator? newId,
@@ -53,7 +64,8 @@ class JaxApp extends StatefulWidget {
     this.planningRepository,
     this.worldNodeRepository,
     super.key,
-  }) : saveService = saveService ?? const _ImmediateSaveService(),
+  }) : preferencesStore = preferencesStore ?? InMemoryAppPreferencesStore(),
+       saveService = saveService ?? const _ImmediateSaveService(),
        worldCategoryCollapseStore =
            worldCategoryCollapseStore ?? InMemoryWorldCategoryCollapseStore(),
        routineCategoryCollapseStore =
@@ -64,6 +76,7 @@ class JaxApp extends StatefulWidget {
 
   final EventRepository repository;
   final SaveService saveService;
+  final AppPreferencesStore preferencesStore;
   final WorldCategoryCollapseStore worldCategoryCollapseStore;
   final RoutineCategoryCollapseStore routineCategoryCollapseStore;
   final IdGenerator newId;
@@ -83,17 +96,20 @@ class JaxApp extends StatefulWidget {
 
 class _JaxAppState extends State<JaxApp> {
   late final EventController _controller;
+  late final AppPreferencesController _preferences;
   late final PrepareForShutdown _prepareForShutdown;
   PlanningController? _planningController;
   AppLifecycleListener? _lifecycleListener;
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   var _selectedIndex = 0;
+  final _homeNavigation = HomeNavigationState();
   PlanningOpenRequest? _planningOpenRequest;
   var _saving = false;
 
   @override
   void initState() {
     super.initState();
+    _preferences = AppPreferencesController(widget.preferencesStore)..load();
     _controller = EventController(
       repository: widget.repository,
       newId: widget.newId,
@@ -275,6 +291,10 @@ class _JaxAppState extends State<JaxApp> {
     return showDialog<_PlanStepChoice>(
       context: dialogContext,
       builder: (context) => AlertDialog(
+        constraints: DesktopPolish.dialog(
+          context,
+          DesktopDialogSize.confirmation,
+        ),
         title: const Text('来源计划已经结束'),
         content: Text(
           hasCurrentPlan
@@ -315,9 +335,10 @@ class _JaxAppState extends State<JaxApp> {
     return showDialog<_PlanStepChoice>(
       context: dialogContext,
       builder: (context) => AlertDialog(
+        constraints: DesktopPolish.dialog(context, DesktopDialogSize.form),
         title: const Text('世界节点已经完成'),
         content: Text(
-          '“${target.node.name}”需要先在“世界”中恢复，才能创建新一轮或补充计划步骤。Jax 不会自动恢复节点。',
+          '“${target.node.name}”需要先在“世界”中恢复，才能创建新一轮或补充计划步骤。${_preferences.value.assistantName} 不会自动恢复节点。',
         ),
         actions: [
           TextButton(
@@ -338,6 +359,8 @@ class _JaxAppState extends State<JaxApp> {
   void dispose() {
     _lifecycleListener?.dispose();
     _controller.dispose();
+    _homeNavigation.dispose();
+    _preferences.dispose();
     _planningController?.dispose();
     super.dispose();
   }
@@ -347,6 +370,9 @@ class _JaxAppState extends State<JaxApp> {
     final pages = <Widget>[
       HomePage(
         controller: _controller,
+        planningController: _planningController,
+        navigation: _homeNavigation,
+        preferences: _preferences,
         now: widget.now,
         onOpenEvents: () => setState(() => _selectedIndex = 1),
         onAddPlanStep: _planningController == null
@@ -367,8 +393,6 @@ class _JaxAppState extends State<JaxApp> {
           ? const Center(child: Text('规划数据库不可用'))
           : PlanningPage(
               controller: _planningController!,
-              onAddEventToToday: _controller.addToToday,
-              isEventToday: _controller.isPlannedToday,
               openRequest: _planningOpenRequest,
               onOpenRequestConsumed: () {
                 if (mounted) setState(() => _planningOpenRequest = null);
@@ -384,6 +408,7 @@ class _JaxAppState extends State<JaxApp> {
     return MaterialApp(
       scaffoldMessengerKey: _messengerKey,
       title: 'Jax',
+      scrollBehavior: const JaxScrollBehavior(),
       debugShowCheckedModeBanner: false,
       theme: buildJaxTheme(defaultTargetPlatform),
       home: Builder(
@@ -391,7 +416,10 @@ class _JaxAppState extends State<JaxApp> {
           final compact = MediaQuery.sizeOf(context).width < 600;
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Jax'),
+              title: Text(
+                const ['首页', '今日', '世界', '规划', '日常', '记录'][_selectedIndex],
+                key: const ValueKey('current-module-title'),
+              ),
               actions: [
                 if (kDebugMode &&
                     Platform.isWindows &&
@@ -424,6 +452,16 @@ class _JaxAppState extends State<JaxApp> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Center(child: _saveStatus()),
                   ),
+                IconButton(
+                  key: const ValueKey('open-settings'),
+                  tooltip: '设置',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SettingsPage(controller: _preferences),
+                    ),
+                  ),
+                ),
                 _saveButton(),
               ],
               bottom: compact

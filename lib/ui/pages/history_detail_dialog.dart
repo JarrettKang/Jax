@@ -1,3 +1,5 @@
+import '../theme/desktop_polish.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/entities/jax_event.dart';
@@ -9,7 +11,8 @@ Future<void> showHistoryDetailDialog(
   required JaxEvent event,
 }) => showDialog<void>(
   context: context,
-  builder: (_) => AlertDialog(
+  builder: (context) => AlertDialog(
+    constraints: DesktopPolish.dialog(context, DesktopDialogSize.form),
     title: Text(event.name, maxLines: 2, overflow: TextOverflow.ellipsis),
     content: FutureBuilder<Duration>(
       future: controller.directDuration(event.id),

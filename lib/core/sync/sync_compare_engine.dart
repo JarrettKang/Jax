@@ -730,6 +730,7 @@ class SyncCompareEngine {
         (f) =>
             f.field == 'parentSyncId' ||
             f.field == 'parentWorldNodeSyncId' ||
+            f.field == 'promotedWorldNodeSyncId' ||
             f.field == 'categorySyncId',
       )
       ? SyncConflictType.hierarchy
@@ -773,6 +774,7 @@ class SyncCompareEngine {
       'parentSyncId',
       'sourcePlanItemSyncId',
       'parentWorldNodeSyncId',
+      'promotedWorldNodeSyncId',
       'categorySyncId',
       'routineCategorySyncId',
       'routineSyncId',

@@ -1,3 +1,5 @@
+import '../entities/jax_event.dart';
+import 'segment_lifecycle_log.dart';
 import '../entities/daily_execution_segment.dart';
 import '../entities/available_time_gap.dart';
 import '../entities/event_status.dart';
@@ -106,10 +108,109 @@ class ExecutionSegmentService {
   Future<void> validateCompletionEnd(
     String openSegmentId,
     DateTime start,
-    DateTime end,
-  ) async {
+    DateTime end, {
+    ExecutionSource? source,
+  }) async {
     _validateClosed(start, end);
-    await _validateOverlap(start, end, exceptId: openSegmentId);
+    await _validateOverlap(
+      start,
+      end,
+      exceptId: openSegmentId,
+      exceptSource: source,
+    );
+  }
+
+  /// The captured owner and segment survive dialog edits and Sync refreshes.
+  /// The repository rechecks their identity inside the write transaction.
+  Future<void> closeRunningEventAt({
+    required JaxEvent expected,
+    required RunSegment segment,
+    required DateTime end,
+    required bool pause,
+  }) async {
+    final current = await _events.getEvent(expected.id);
+    final open = (await _events.getRunSegments(expected.id))
+        .where((s) => s.endedAt == null)
+        .toList();
+    if (current?.status != EventStatus.running ||
+        current?.updatedAt != expected.updatedAt ||
+        open.length != 1 ||
+        open.single.id != segment.id ||
+        open.single.startedAt != segment.startedAt) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    await validateCompletionEnd(
+      segment.id,
+      segment.startedAt,
+      end,
+      source: ExecutionSource.event,
+    );
+    final timestamp = _now().toUtc();
+    await _events.pauseEvent(
+      current!.copyWith(
+        status: pause ? EventStatus.paused : EventStatus.completed,
+        completedAt: pause ? null : end.toUtc(),
+        updatedAt: timestamp,
+      ),
+      segment.copyWith(endedAt: end.toUtc()),
+      expectedUpdatedAt: expected.updatedAt,
+    );
+    SegmentLifecycleLog.close(
+      reason: pause ? 'event_pause' : 'event_complete',
+      ownerType: 'event',
+      ownerId: expected.id,
+      segmentId: segment.id,
+      startedAt: segment.startedAt,
+      endedAt: end.toUtc(),
+    );
+  }
+
+  Future<void> closeRunningRoutineAt({
+    required RoutineExecution expected,
+    required RoutineRunSegment segment,
+    required DateTime end,
+    required bool pause,
+  }) async {
+    final current = (await _routines!.getRoutineExecutions())
+        .where((e) => e.id == expected.id)
+        .firstOrNull;
+    final open = (await _routines.getRoutineRunSegments(expected.id))
+        .where((s) => s.endedAt == null)
+        .toList();
+    if (current?.status != RoutineExecutionStatus.running ||
+        current?.updatedAt != expected.updatedAt ||
+        open.length != 1 ||
+        open.single.id != segment.id ||
+        open.single.startedAt != segment.startedAt) {
+      throw const DomainFailure('当前执行状态已发生变化，请重新操作');
+    }
+    await validateCompletionEnd(
+      segment.id,
+      segment.startedAt,
+      end,
+      source: ExecutionSource.routine,
+    );
+    final timestamp = _now().toUtc();
+    await _routines.pauseRoutineExecution(
+      current!.copyWith(
+        status: pause
+            ? RoutineExecutionStatus.paused
+            : RoutineExecutionStatus.completed,
+        completedAt: pause ? null : end.toUtc(),
+        updatedAt: timestamp,
+      ),
+      segment.copyWith(endedAt: end.toUtc()),
+      expectedUpdatedAt: expected.updatedAt,
+    );
+    SegmentLifecycleLog.close(
+      reason: pause ? 'routine_pause' : 'routine_complete',
+      ownerType: 'routine',
+      ownerId: expected.routineId,
+      executionId: expected.id,
+      segmentId: segment.id,
+      startedAt: segment.startedAt,
+      endedAt: end.toUtc(),
+    );
   }
 
   Future<void> adjustRunningEventStart({

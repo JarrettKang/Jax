@@ -73,10 +73,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('create-routine-category')));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('routine-category-name')),
-      '日常起居',
-    );
+    await tester.enterText(find.byKey(const ValueKey('category-name')), '日常起居');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(find.text('日常起居'), findsOneWidget);
@@ -98,10 +95,12 @@ void main() {
     expect(find.text('今日备用执行'), findsNothing);
     expect(find.text('管理日常'), findsNothing);
     expect(find.text('未分类'), findsOneWidget);
-    expect(find.text('每天'), findsNWidgets(2));
+    expect(find.text('每日'), findsNWidgets(2));
     expect(find.text('开始'), findsNothing);
     expect(find.text('暂停'), findsNothing);
     expect(find.text('完成'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('routine-more-sleep')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('routine-up-sleep')));
     await tester.pumpAndSettle();
     expect((await repository.getRoutines()).first.id, 'sleep');
@@ -111,7 +110,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('已停用'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('重新启用').first);
+    final reactivate = find.text('重新启用').first;
+    await tester.ensureVisible(reactivate);
+    await tester.pumpAndSettle();
+    expect(reactivate.hitTestable(), findsOneWidget);
+    await tester.tap(reactivate);
     await tester.pumpAndSettle();
     expect(
       (await repository.getRoutines())
@@ -120,9 +123,17 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.byKey(const ValueKey('create-routine')));
+    final createRoutine = find.byKey(const ValueKey('create-routine'));
+    await tester.scrollUntilVisible(
+      createRoutine,
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '新增日常');
+    expect(createRoutine.hitTestable(), findsOneWidget);
+    await tester.tap(createRoutine);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '新增日常');
     await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(
@@ -137,7 +148,7 @@ void main() {
     expect(find.byKey(const ValueKey('today-routine-pause-wash')), findsOne);
     await tester.tap(find.text('日常'));
     await tester.pumpAndSettle();
-    expect(find.text('每天 · 正在执行'), findsOne);
+    expect(find.text('正在执行'), findsOne);
     expect(find.text('暂停'), findsNothing);
     expect(tester.takeException(), isNull);
   });

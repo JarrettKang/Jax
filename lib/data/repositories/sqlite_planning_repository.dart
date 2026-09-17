@@ -1,12 +1,16 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/entities/plan.dart';
+import '../../core/entities/world_node.dart';
+import '../../core/entities/world_node_ids.dart';
+import '../../core/repositories/planning_promotion_repository.dart';
 import '../../core/entities/plan_item.dart';
 import '../../core/entities/plan_review_note.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
 import '../../core/errors/domain_failure.dart';
 import '../../core/repositories/planning_dispatch_repository.dart';
+import '../../core/repositories/planning_execution_repository.dart';
 import '../../core/repositories/planning_repository.dart';
 import '../database/app_database.dart';
 
@@ -14,9 +18,191 @@ class SqlitePlanningRepository
     implements
         PlanningRepository,
         PlanningDispatchRepository,
+        PlanningExecutionRepository,
+        PlanningPromotionRepository,
         FirstPlanningStepRepository {
   const SqlitePlanningRepository(this._app);
   final AppDatabase _app;
+
+  @override
+  Future<WorldNode> promotePlanItem({
+    required String planItemId,
+    required String worldNodeId,
+    required DateTime now,
+  }) => _app.database.transaction((tx) async {
+    if (!WorldNodeIds.isValid(worldNodeId)) {
+      throw const DomainFailure('世界节点 ID 必须为 UUID');
+    }
+    final item = await _requireItem(tx, planItemId);
+    if (!item.isExecutable) {
+      throw const DomainFailure('只有尚未执行的普通计划步骤可以提升');
+    }
+    await _requireEditablePlan(tx, item.planId);
+    final linkedEvents = await tx.query(
+      'events',
+      columns: ['id'],
+      where: 'source_plan_item_id = ?',
+      whereArgs: [planItemId],
+      limit: 1,
+    );
+    if (linkedEvents.isNotEmpty) {
+      throw const DomainFailure('已有执行事项的步骤不能提升');
+    }
+    final parent = (await tx.rawQuery(
+      '''
+      SELECT n.id, n.is_focused FROM plans p
+      JOIN world_nodes n ON n.id = p.world_node_id WHERE p.id = ?
+      ''',
+      [item.planId],
+    )).single;
+    final nextOrder =
+        (await tx.rawQuery(
+              '''
+      SELECT COALESCE(MAX(sort_order), -1) + 1 value FROM world_nodes
+      WHERE parent_world_node_id = ?
+      ''',
+              [parent['id']],
+            )).single['value']!
+            as int;
+    final utc = now.toUtc();
+    final node = WorldNode(
+      id: worldNodeId,
+      name: item.title,
+      status: WorldNodeStatus.inProgress,
+      isFocused: parent['is_focused'] == 1,
+      parentWorldNodeId: parent['id']! as String,
+      sortOrder: nextOrder,
+      createdAt: utc,
+      updatedAt: utc,
+    );
+    await tx.insert('world_nodes', {
+      'id': node.id,
+      'name': node.name,
+      'status': 'inProgress',
+      'is_focused': node.isFocused ? 1 : 0,
+      'parent_world_node_id': node.parentWorldNodeId,
+      'category_id': null,
+      'sort_order': node.sortOrder,
+      'created_at_utc': utc.millisecondsSinceEpoch,
+      'updated_at_utc': utc.millisecondsSinceEpoch,
+    });
+    final changed = await tx.update(
+      'plan_items',
+      {
+        'promoted_world_node_id': node.id,
+        'updated_at_utc': utc.millisecondsSinceEpoch,
+      },
+      where: "id = ? AND status IN ('next','draft') AND promoted_world_node_id IS NULL",
+      whereArgs: [item.id],
+    );
+    if (changed != 1) throw const DomainFailure('步骤已变化，请刷新后重试');
+    return node;
+  });
+
+  @override
+  Future<JaxEvent> startPlanItem({
+    required String planItemId,
+    required String eventId,
+    required String segmentId,
+    required String dayKey,
+    required DateTime now,
+  }) => _app.database.transaction((tx) async {
+    final utc = now.toUtc();
+    final stamp = utc.millisecondsSinceEpoch;
+    final rows = await tx.rawQuery(
+      '''
+      SELECT i.title FROM plan_items i
+      JOIN plans p ON p.id = i.plan_id
+      JOIN world_nodes n ON n.id = p.world_node_id
+      WHERE i.id = ? AND i.status IN ('next', 'draft')
+        AND i.promoted_world_node_id IS NULL
+        AND p.status = 'current' AND n.status = 'inProgress'
+        AND n.is_focused = 1
+        AND NOT EXISTS (SELECT 1 FROM events e WHERE e.source_plan_item_id = i.id)
+      ''',
+      [planItemId],
+    );
+    if (rows.length != 1) {
+      throw const DomainFailure('计划步骤已变化，请刷新后重试');
+    }
+    // Pause the previous Event or Routine inside this same transaction. Reject
+    // incomplete timing facts, rather than silently manufacturing execution.
+    for (final owner in [
+      ('events', 'run_segments', 'event_id'),
+      ('routine_executions', 'routine_run_segments', 'routine_execution_id'),
+    ]) {
+      final running = await tx.query(owner.$1, where: "status = 'running'");
+      for (final previous in running) {
+        final open = await tx.query(
+          owner.$2,
+          where: '${owner.$3} = ? AND ended_at_utc IS NULL',
+          whereArgs: [previous['id']],
+        );
+        if (open.length != 1 ||
+            (open.single['started_at_utc']! as int) > stamp) {
+          throw const DomainFailure('执行计时数据不完整或开始时间无效');
+        }
+        await tx.update(
+          owner.$2,
+          {'ended_at_utc': stamp},
+          where: 'id = ?',
+          whereArgs: [open.single['id']],
+        );
+        await tx.update(
+          owner.$1,
+          {'status': 'paused', 'updated_at_utc': stamp},
+          where: 'id = ?',
+          whereArgs: [previous['id']],
+        );
+      }
+    }
+    final event = JaxEvent(
+      id: eventId,
+      name: rows.single['title']! as String,
+      status: EventStatus.running,
+      sourcePlanItemId: planItemId,
+      firstStartedAt: utc,
+      createdAt: utc,
+      updatedAt: utc,
+    );
+    await tx.insert('events', {
+      'id': eventId,
+      'name': event.name,
+      'status': 'running',
+      'source_plan_item_id': planItemId,
+      'category_id': null,
+      'first_started_at_utc': stamp,
+      'completed_at_utc': null,
+      'created_at_utc': stamp,
+      'updated_at_utc': stamp,
+    });
+    final updated = await tx.update(
+      'plan_items',
+      {'status': 'dispatched', 'updated_at_utc': stamp},
+      where: "id = ? AND status IN ('next','draft')",
+      whereArgs: [planItemId],
+    );
+    if (updated != 1) throw const DomainFailure('计划步骤开始冲突');
+    final order = await tx.rawQuery(
+      'SELECT COALESCE(MAX(order_index), -1) + 1 value FROM event_day_plans WHERE day_date = ?',
+      [dayKey],
+    );
+    await tx.insert('event_day_plans', {
+      'event_id': eventId,
+      'day_date': dayKey,
+      'order_index': order.single['value'],
+      'created_at_utc': stamp,
+      'updated_at_utc': stamp,
+    });
+    await tx.insert('run_segments', {
+      'id': segmentId,
+      'event_id': eventId,
+      'started_at_utc': stamp,
+      'ended_at_utc': null,
+      'created_at_utc': stamp,
+    });
+    return event;
+  });
 
   @override
   Future<Plan> createFirstPlanningStep({
@@ -25,7 +211,7 @@ class SqlitePlanningRepository
     required String worldNodeId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   }) => _app.database.transaction((tx) async {
     final history = await tx.query(
@@ -77,7 +263,7 @@ class SqlitePlanningRepository
         final dispatched = <JaxEvent>[];
         for (final entry in eventIdsByPlanItemId.entries) {
           final rows = await tx.rawQuery(
-            '''SELECT item.title, item.status item_status,
+            '''SELECT item.title, item.status item_status, item.promoted_world_node_id,
                       plan.status plan_status, node.status node_status,
                       node.is_focused node_is_focused
                FROM plan_items item
@@ -92,7 +278,8 @@ class SqlitePlanningRepository
               rows.single['node_is_focused'] != 1) {
             throw const DomainFailure('只有关注中世界节点的当前计划步骤可以加入今日');
           }
-          if (!{'draft', 'next'}.contains(rows.single['item_status'])) {
+          if (rows.single['promoted_world_node_id'] != null ||
+              !{'draft', 'next'}.contains(rows.single['item_status'])) {
             throw const DomainFailure('计划项已变化，请刷新后重试');
           }
           final linked = await tx.query(
@@ -183,7 +370,7 @@ class SqlitePlanningRepository
     final updated = await tx.update(
       'plan_items',
       {
-        'status': PlanItemStatus.draft.name,
+        'status': PlanItemStatus.next.name,
         'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
       },
       where: "id = ? AND status = 'dispatched'",
@@ -360,7 +547,7 @@ class SqlitePlanningRepository
     required String planId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   }) => _app.database.transaction(
     (tx) => _createPlanItem(
@@ -380,13 +567,13 @@ class SqlitePlanningRepository
     required String planId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   }) async {
     _requireTitle(title);
     if (initialStatus != PlanItemStatus.draft &&
         initialStatus != PlanItemStatus.next) {
-      throw const DomainFailure('新计划步骤只能保存为草稿或下一步');
+      throw const DomainFailure('新计划步骤必须为未执行状态');
     }
     await _requireEditablePlan(tx, planId);
     final order = await tx.rawQuery(
@@ -399,7 +586,7 @@ class SqlitePlanningRepository
       planId: planId,
       title: title.trim(),
       note: _cleanOptional(note),
-      status: initialStatus,
+      status: PlanItemStatus.next,
       sortOrder: (order.single['value'] as num).toInt(),
       createdAt: utc,
       updatedAt: utc,
@@ -414,58 +601,69 @@ class SqlitePlanningRepository
     required String title,
     String? note,
     required DateTime now,
-  }) async {
+  }) => _app.database.transaction((tx) async {
     _requireTitle(title);
-    final item = await _requireItem(id);
-    if (item.status != PlanItemStatus.draft &&
-        item.status != PlanItemStatus.next) {
+    final item = await _requireItem(tx, id);
+    if (!item.isExecutable) {
       throw const DomainFailure('当前状态的计划项不能编辑');
     }
-    await _requireEditablePlan(_app.database, item.planId);
-    await _updateOne('plan_items', id, {
-      'title': title.trim(),
-      'note': _cleanOptional(note),
-      'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
-    });
-  }
+    await _requireEditablePlan(tx, item.planId);
+    await tx.update(
+      'plan_items',
+      {
+        'title': title.trim(),
+        'note': _cleanOptional(note),
+        'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  });
 
   @override
   Future<void> setPlanItemStatus(
     String id,
     PlanItemStatus status,
     DateTime now,
-  ) async {
-    final item = await _requireItem(id);
-    await _requireEditablePlan(_app.database, item.planId);
+  ) => _app.database.transaction((tx) async {
+    final item = await _requireItem(tx, id);
+    await _requireEditablePlan(tx, item.planId);
+    if (item.isPromoted) throw const DomainFailure('世界节点引用不能恢复为普通步骤');
+    // Legacy callers may still supply draft; never persist it on new writes.
+    if (status == PlanItemStatus.draft) status = PlanItemStatus.next;
+    if (status == item.status) return;
     final allowed = switch (item.status) {
       PlanItemStatus.draft => {PlanItemStatus.next, PlanItemStatus.dropped},
-      PlanItemStatus.next => {PlanItemStatus.draft, PlanItemStatus.dropped},
-      PlanItemStatus.dropped => {PlanItemStatus.draft},
+      PlanItemStatus.next => {PlanItemStatus.dropped},
+      PlanItemStatus.dropped => {PlanItemStatus.next},
       PlanItemStatus.dispatched ||
       PlanItemStatus.done => const <PlanItemStatus>{},
     };
     if (!allowed.contains(status)) {
       throw const DomainFailure('该计划项状态不能由用户手工设置');
     }
-    await _updateOne('plan_items', id, {
-      'status': status.name,
-      'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
-    });
-  }
+    await tx.update(
+      'plan_items',
+      {
+        'status': status.name,
+        'updated_at_utc': now.toUtc().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  });
 
   @override
-  Future<void> deletePlanItem(String id) async {
-    final item = await _requireItem(id);
-    await _requireEditablePlan(_app.database, item.planId);
-    if (item.status != PlanItemStatus.draft &&
-        item.status != PlanItemStatus.next) {
-      throw const DomainFailure('只能删除从未派发的草稿或下一步');
-    }
-    await _app.database.transaction((tx) async {
-      await tx.delete('plan_items', where: 'id = ?', whereArgs: [id]);
-      await _normalizeOrder(tx, item.planId);
-    });
-  }
+  Future<void> deletePlanItem(String id) =>
+      _app.database.transaction((tx) async {
+        final item = await _requireItem(tx, id);
+        await _requireEditablePlan(tx, item.planId);
+        if (!item.isExecutable) {
+          throw const DomainFailure('只能删除从未执行的计划步骤');
+        }
+        await tx.delete('plan_items', where: 'id = ?', whereArgs: [id]);
+        await _normalizeOrder(tx, item.planId);
+      });
 
   @override
   Future<void> reorderPlanItem(String id, int targetIndex, DateTime now) =>
@@ -479,8 +677,7 @@ class SqlitePlanningRepository
         if (rows.isEmpty) throw const DomainFailure('计划项不存在');
         final item = _itemFromRow(rows.single);
         await _requireEditablePlan(tx, item.planId);
-        if (item.status != PlanItemStatus.draft &&
-            item.status != PlanItemStatus.next) {
+        if (!item.isExecutable) {
           throw const DomainFailure('当前状态的计划项不能排序');
         }
         final siblings = await tx.query(
@@ -571,8 +768,8 @@ class SqlitePlanningRepository
     if (deleted != 1) throw const DomainFailure('复盘不存在');
   }
 
-  Future<PlanItem> _requireItem(String id) async {
-    final rows = await _app.database.query(
+  Future<PlanItem> _requireItem(DatabaseExecutor tx, String id) async {
+    final rows = await tx.query(
       'plan_items',
       where: 'id = ?',
       whereArgs: [id],
@@ -678,6 +875,7 @@ class SqlitePlanningRepository
     'plan_id': item.planId,
     'title': item.title,
     'note': item.note,
+    'promoted_world_node_id': item.promotedWorldNodeId,
     'status': item.status.name,
     'sort_order': item.sortOrder,
     'created_at_utc': item.createdAt.millisecondsSinceEpoch,
@@ -689,7 +887,8 @@ class SqlitePlanningRepository
     planId: row['plan_id']! as String,
     title: row['title']! as String,
     note: row['note'] as String?,
-    status: PlanItemStatus.values.byName(row['status']! as String),
+    promotedWorldNodeId: row['promoted_world_node_id'] as String?,
+    status: readPlanItemStatus(row['status']! as String),
     sortOrder: (row['sort_order']! as num).toInt(),
     createdAt: _date(row['created_at_utc']),
     updatedAt: _date(row['updated_at_utc']),

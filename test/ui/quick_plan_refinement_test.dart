@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/app.dart';
+import 'package:jax/core/preferences/app_preferences.dart';
 import 'package:jax/core/entities/event_status.dart';
 import 'package:jax/core/entities/jax_event.dart';
 import 'package:jax/core/entities/plan.dart';
@@ -100,7 +101,7 @@ void main() {
       final added = fixture.planning.items.last;
       expect(added.title, '补实验图');
       expect(added.note, isNull);
-      expect(added.status, PlanItemStatus.draft);
+      expect(added.status, PlanItemStatus.next);
       expect(added.sortOrder, 1);
       expect(fixture.events.events.single, eventBefore);
       expect(fixture.events.segments.single.id, segmentBefore.id);
@@ -222,7 +223,9 @@ void main() {
     tester,
   ) async {
     final fixture = _Fixture.endedWithoutCurrent(completed: true);
-    await tester.pumpWidget(fixture.app());
+    final preferences = InMemoryAppPreferencesStore();
+    await preferences.save(AppPreferences.named('Alfred'));
+    await tester.pumpWidget(fixture.app(preferencesStore: preferences));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('home-running-more')));
     await tester.pumpAndSettle();
@@ -230,6 +233,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('世界节点已经完成'), findsOneWidget);
     expect(find.textContaining('先在“世界”中恢复'), findsOneWidget);
+    expect(find.textContaining('Alfred 不会自动恢复节点'), findsOneWidget);
+    expect(find.textContaining('Jax 不会'), findsNothing);
     expect(find.text('添加新一轮'), findsNothing);
     expect(fixture.world.nodes.single.status, WorldNodeStatus.completed);
   });
@@ -323,10 +328,11 @@ class _Fixture {
   final _PlanningRepository planning;
   final _WorldRepository world;
 
-  Widget app() {
+  Widget app({AppPreferencesStore? preferencesStore}) {
     var sequence = 0;
     return JaxApp(
       repository: events,
+      preferencesStore: preferencesStore,
       planningRepository: planning,
       worldNodeRepository: world,
       newId: () => 'generated-${sequence++}',
@@ -391,7 +397,7 @@ class _PlanningRepository implements PlanningRepository {
     required String planId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   }) async {
     final plan = await getPlan(planId);

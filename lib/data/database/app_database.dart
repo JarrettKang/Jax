@@ -7,7 +7,7 @@ class AppDatabase {
   factory AppDatabase.fromOpenDatabase(Database database) =>
       AppDatabase._(database);
   final Database database;
-  static const schemaVersion = 21;
+  static const schemaVersion = 24;
 
   static Future<AppDatabase> inMemory() => _open(inMemoryDatabasePath);
   static Future<AppDatabase> open(String path) => _open(path);
@@ -43,10 +43,13 @@ class AppDatabase {
     )''');
     await WorldNodeShadowMigration.createWorldNodeTable(database);
     await _createPlanningTables(database);
+    await _addPlanItemPromotionReference(database);
     await _createFlatEventTable(database, 'events');
     await _createRunSegments(database);
     await _createRoutineCategoryTables(database);
     await _createRoutineTables(database);
+    await _addTemporalLifecycle(database);
+    await _addRoutineWaiting(database);
     await _createEventDayPlans(database);
     await _createJaxDayCarryOverInitializations(database);
     await _createWorldCategoryCollapsePreferences(database);
@@ -120,13 +123,87 @@ class AppDatabase {
     if (oldVersion < 21) {
       final columns = await database.rawQuery('PRAGMA table_info(routines)');
       if (columns.isNotEmpty &&
-          !columns.any((column) => column['name'] == 'show_in_home_quick_actions')) {
-        await database.execute('ALTER TABLE routines ADD COLUMN '
-            'show_in_home_quick_actions INTEGER NOT NULL DEFAULT 0 '
-            'CHECK(show_in_home_quick_actions IN (0,1) AND '
-            "(show_in_home_quick_actions = 0 OR routine_type = 'onDemand'))");
+          !columns.any(
+            (column) => column['name'] == 'show_in_home_quick_actions',
+          )) {
+        await database.execute(
+          'ALTER TABLE routines ADD COLUMN '
+          'show_in_home_quick_actions INTEGER NOT NULL DEFAULT 0 '
+          'CHECK(show_in_home_quick_actions IN (0,1) AND '
+          "(show_in_home_quick_actions = 0 OR routine_type = 'onDemand'))",
+        );
       }
     }
+    if (oldVersion < 22) await _addPlanItemPromotionReference(database);
+    if (oldVersion < 23) await _addTemporalLifecycle(database);
+    if (oldVersion < 24) await _addRoutineWaiting(database);
+  }
+
+  static Future<void> _addRoutineWaiting(Database database) async {
+    final columns = await database.rawQuery(
+      'PRAGMA table_info(routine_executions)',
+    );
+    if (columns.isEmpty || columns.any((c) => c['name'] == 'is_waiting')) {
+      return;
+    }
+    // Preserve the original table and its CHECK constraint. Only the storage
+    // adapter knows this encoding; domain and Sync expose a single status.
+    await database.execute(
+      "ALTER TABLE routine_executions ADD COLUMN is_waiting INTEGER NOT NULL DEFAULT 0 CHECK(is_waiting IN (0,1) AND (is_waiting = 0 OR status = 'paused'))",
+    );
+  }
+
+  static Future<void> _addTemporalLifecycle(Database database) async {
+    final columns = await database.rawQuery('PRAGMA table_info(routines)');
+    if (columns.isEmpty) return;
+    if (!columns.any(
+      (c) => c['name'] == 'time_recommendation_latest_end_minute',
+    )) {
+      await database.execute(
+        'ALTER TABLE routines ADD COLUMN time_recommendation_latest_end_minute INTEGER CHECK(time_recommendation_latest_end_minute BETWEEN 0 AND 1439)',
+      );
+      final updateTrigger = await database.rawQuery(
+        "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'routines_sync_update'",
+      );
+      await database.execute('DROP TRIGGER IF EXISTS routines_sync_update');
+      await database.execute(
+        'UPDATE routines SET time_recommendation_latest_end_minute = time_recommendation_end_minute WHERE time_recommendation_enabled = 1',
+      );
+      if (updateTrigger.isNotEmpty) {
+        await database.execute(updateTrigger.single['sql']! as String);
+      }
+    }
+    for (final operation in ['INSERT', 'UPDATE']) {
+      await database.execute(
+        """CREATE TRIGGER IF NOT EXISTS routine_temporal_${operation.toLowerCase()}
+      BEFORE $operation ON routines WHEN
+      (NEW.time_recommendation_enabled = 0 AND NEW.time_recommendation_latest_end_minute IS NOT NULL) OR
+      (NEW.time_recommendation_enabled = 1 AND (NEW.routine_type <> 'scheduled' OR
+        NEW.time_recommendation_start_minute IS NULL OR NEW.time_recommendation_end_minute IS NULL OR
+        NEW.time_recommendation_latest_end_minute IS NULL OR
+        ((NEW.time_recommendation_end_minute - NEW.time_recommendation_start_minute + 1440) % 1440) = 0 OR
+        ((NEW.time_recommendation_end_minute - NEW.time_recommendation_start_minute + 1440) % 1440) >
+        ((NEW.time_recommendation_latest_end_minute - NEW.time_recommendation_start_minute + 1440) % 1440)))
+      BEGIN SELECT RAISE(ABORT, 'Invalid temporal recommendation lifecycle'); END""",
+      );
+    }
+  }
+
+  static Future<void> _addPlanItemPromotionReference(Database database) async {
+    final columns = await database.rawQuery('PRAGMA table_info(plan_items)');
+    if (columns.isEmpty) return;
+    if (!columns.any((column) => column['name'] == 'promoted_world_node_id')) {
+      await database.execute(
+        'ALTER TABLE plan_items ADD COLUMN '
+        'promoted_world_node_id TEXT REFERENCES world_nodes(id) ON DELETE RESTRICT '
+        "CHECK(promoted_world_node_id IS NULL OR status IN ('draft','next'))",
+      );
+    }
+    await database.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS '
+      'plan_items_promoted_world_node ON plan_items(promoted_world_node_id) '
+      'WHERE promoted_world_node_id IS NOT NULL',
+    );
   }
 
   static Future<void> _createFlatEventTable(

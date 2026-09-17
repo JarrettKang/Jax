@@ -1,14 +1,29 @@
+import '../theme/desktop_polish.dart';
+import '../theme/list_density.dart';
+import '../widgets/paused_routine_row.dart';
+import '../../core/entities/execution_capabilities.dart';
+
+import 'dart:async';
+
+import '../../core/services/temporal_routine.dart';
+import '../controllers/today_temporal_view.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/entities/category.dart';
 import '../../core/entities/event_status.dart';
 import '../../core/entities/jax_event.dart';
+import '../../core/entities/plan_item.dart';
 import '../../core/entities/routine.dart';
 import '../controllers/event_controller.dart';
 import '../controllers/planning_controller.dart';
-import '../theme/category_palette_colors.dart';
+import '../theme/operational_theme.dart';
+import '../theme/home_pilot_theme.dart';
+import '../widgets/execution_row_shell.dart';
 import '../widgets/execution_action_buttons.dart';
+import '../widgets/waiting_routine_row.dart';
 import '../widgets/event_more_menu_button.dart';
+import '../widgets/standalone_event_dialog.dart';
 
 class EventsPage extends StatefulWidget {
   const EventsPage({
@@ -23,162 +38,307 @@ class EventsPage extends StatefulWidget {
   State<EventsPage> createState() => _EventsPageState();
 }
 
-class _EventsPageState extends State<EventsPage> {
-  final Set<String> _selectedRecommendations = {};
+class _EventsPageState extends State<EventsPage> with WidgetsBindingObserver {
+  List<String>? _transitionOrder;
+  Timer? _boundaryTimer;
+  DateTime? _scheduledBoundary;
+  TodayTemporalView _temporal() => TodayTemporalView.derive(
+    routines: widget.controller.routines,
+    day: widget.controller.currentJaxDay,
+    time: widget.controller.currentTime,
+    executionFor: widget.controller.executionForOccurrence,
+    runningRoutineId: widget.controller.runningRoutine?.id,
+    waitingRoutineIds: {
+      ...widget.controller.waitingRoutines.map((r) => r.id),
+      ...widget.controller.pausedRoutineExecutions.map((e) => e.routineId),
+    },
+  );
+  void _scheduleBoundary() {
+    final boundary = _temporal().nextBoundary;
+    if (boundary == _scheduledBoundary && _boundaryTimer?.isActive == true) {
+      return;
+    }
+    _boundaryTimer?.cancel();
+    _scheduledBoundary = boundary;
+    if (boundary == null) return;
+    _boundaryTimer = Timer(
+      boundary.difference(widget.controller.currentTime),
+      () {
+        if (!mounted) return;
+        _scheduledBoundary = null;
+        setState(() {});
+        _scheduleBoundary();
+      },
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      widget.controller.load();
+      widget.planningController?.load();
+      _scheduleBoundary();
+    }
+  }
+
+  @override
+  void didUpdateWidget(EventsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_scheduleBoundary);
+      widget.controller.addListener(_scheduleBoundary);
+    }
+    _scheduleBoundary();
+  }
+
+  @override
+  void dispose() {
+    _boundaryTimer?.cancel();
+    widget.controller.removeListener(_scheduleBoundary);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
     widget.planningController?.load();
+    WidgetsBinding.instance.addObserver(this);
+    widget.controller.addListener(_scheduleBoundary);
+    _scheduleBoundary();
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([
-      widget.controller,
-      if (widget.planningController != null) widget.planningController!,
-    ]),
-    builder: (context, _) {
-      final controller = widget.controller;
-      final planning = widget.planningController;
-      if (controller.loading || planning?.loading == true) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      final events = controller.todayEvents;
-      final routines = controller.todayRoutines;
-      final day = controller.currentJaxDay;
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1080),
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 72),
-            children: [
-              Text('今日', style: Theme.of(context).textTheme.headlineMedium),
-              Text(
-                '${day.displayDate.month}月${day.displayDate.day}日 · 23:00 结束',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 22),
-              _SectionHeader(
-                title: '今日事项',
-                count: events.length,
-                action: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextButton.icon(
-                      key: const ValueKey('today-add-existing'),
-                      onPressed: () => _addExisting(context),
-                      icon: const Icon(Icons.playlist_add, size: 18),
-                      label: const Text('已有事项'),
-                    ),
-                    TextButton.icon(
-                      key: const ValueKey('add-standalone-event'),
-                      onPressed: () => _createStandalone(context),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('临时事项'),
-                    ),
-                  ],
+  Widget build(BuildContext context) => OperationalVisualScope(
+    builder: (context) => ColoredBox(
+      color: HomePilot.canvas,
+      child: AnimatedBuilder(
+        animation: Listenable.merge([
+          widget.controller,
+          if (widget.planningController != null) widget.planningController!,
+        ]),
+        builder: (context, _) {
+          final controller = widget.controller;
+          final planning = widget.planningController;
+          if ((controller.loading || planning?.loading == true) &&
+              controller.todayEvents.isEmpty &&
+              (planning?.projectedTodayItems.isEmpty ?? true)) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final events = [
+            for (final event in controller.todayEvents)
+              if (event.status != EventStatus.completed) event,
+            if (controller.runningEvent != null &&
+                !controller.todayEvents.any(
+                  (e) => e.id == controller.runningEvent!.id,
+                ))
+              controller.runningEvent!,
+          ];
+          // Suppress only when the replacement can actually render, including a
+          // running Event loaded before its EventDayPlan during the start transaction.
+          final linked = events.map((e) => e.sourcePlanItemId).toSet();
+          final projected = (planning?.projectedTodayItems ?? <PlanItem>[])
+              .where((item) => !linked.contains(item.id))
+              .toList();
+          final persistentEvents = events
+              .where((e) => e.status != EventStatus.running)
+              .toList();
+          final rows = <String, Widget>{
+            for (final event in persistentEvents)
+              _eventIdentity(event): _EventRow(
+                key: ValueKey(_eventIdentity(event)),
+                controller: controller,
+                planning: planning,
+                event: event,
+                index: controller.todayEvents.indexWhere(
+                  (e) => e.id == event.id,
                 ),
+                count: controller.todayEvents.length,
+                onReorder: () => setState(() => _transitionOrder = null),
+                allowUp: persistentEvents.indexOf(event) > 0,
+                allowDown:
+                    persistentEvents.indexOf(event) <
+                    persistentEvents.length - 1,
+                upTarget: persistentEvents.indexOf(event) > 0
+                    ? controller.todayEvents.indexWhere(
+                        (e) =>
+                            e.id ==
+                            persistentEvents[persistentEvents.indexOf(event) -
+                                    1]
+                                .id,
+                      )
+                    : null,
+                downTarget:
+                    persistentEvents.indexOf(event) <
+                        persistentEvents.length - 1
+                    ? controller.todayEvents.indexWhere(
+                        (e) =>
+                            e.id ==
+                            persistentEvents[persistentEvents.indexOf(event) +
+                                    1]
+                                .id,
+                      )
+                    : null,
               ),
-              if (events.isEmpty)
-                const _CompactEmptyState(text: '暂无今日事项')
-              else
-                _ExecutionList(
-                  children: [
-                    for (var i = 0; i < events.length; i++)
-                      _EventRow(
-                        controller: controller,
-                        planning: planning,
-                        event: events[i],
-                        index: i,
-                        count: events.length,
+            for (final item in projected)
+              'plan-${item.id}': _TodayExecutionRow(
+                key: ValueKey('plan-${item.id}'),
+                name: item.title,
+                secondary:
+                    planning!.plans
+                        .where((p) => p.id == item.planId)
+                        .map((p) => planning.nodeFor(p.worldNodeId)?.name ?? '')
+                        .firstOrNull ??
+                    '',
+                status: '',
+                statusKind: _TodayStatusKind.unstarted,
+                actions: [
+                  ExecutionActionButton(
+                    key: ValueKey('today-plan-start-${item.id}'),
+                    action: ExecutionAction.start,
+                    primary: false,
+                    style: HomePilot.buttonStyle(outlined: true),
+                    onPressed: planning.startingPlanItem
+                        ? null
+                        : () => _startPlanItem(item),
+                  ),
+                ],
+              ),
+          };
+          final order = [
+            ...?_transitionOrder?.where(rows.containsKey),
+            ...rows.keys.where(
+              (id) => !(_transitionOrder?.contains(id) ?? false),
+            ),
+          ];
+          final temporal = _temporal();
+          final ordinary = controller.todayRoutines
+              .where(
+                (r) =>
+                    !controller.waitingRoutines.any((w) => w.id == r.id) &&
+                    !controller.pausedRoutineExecutions.any(
+                      (e) => e.routineId == r.id,
+                    ) &&
+                    r.timeRecommendation == null &&
+                    controller.executionFor(r)?.status !=
+                        RoutineExecutionStatus.completed &&
+                    controller.executionFor(r)?.status !=
+                        RoutineExecutionStatus.running,
+              )
+              .toList();
+          final running = <Widget>[
+            for (final event in events.where(
+              (e) => e.status == EventStatus.running,
+            ))
+              _EventRow(
+                key: ValueKey(_eventIdentity(event)),
+                controller: controller,
+                planning: planning,
+                event: event,
+                index: 0,
+                count: 1,
+              ),
+            if (controller.runningRoutine != null)
+              _RoutineRow(
+                controller: controller,
+                routine: controller.runningRoutine!,
+              ),
+          ];
+          Widget temporalRow(TodayTemporalEntry entry) => _RoutineRow(
+            key: ValueKey(entry.identity),
+            controller: controller,
+            routine: entry.routine,
+            temporal: entry,
+          );
+          List<Widget> section(
+            String title,
+            String key,
+            List<Widget> children,
+          ) => children.isEmpty
+              ? []
+              : [
+                  const SizedBox(height: 16),
+                  _SectionHeader(title: title),
+                  Container(
+                    key: ValueKey(key),
+                    child: _ExecutionList(children: children),
+                  ),
+                ];
+          final day = controller.currentJaxDay;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1080),
+              child: ListView(
+                key: const ValueKey('dynamic-today'),
+                padding: OperationalTheme.pagePadding(context),
+                children: [
+                  Text('今日', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(
+                    '${day.displayDate.month}月${day.displayDate.day}日',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        key: const ValueKey('today-add-existing'),
+                        onPressed: () => _addExisting(context),
+                        icon: const Icon(Icons.playlist_add, size: 18),
+                        label: const Text('已有事项'),
                       ),
-                  ],
-                ),
-              const SizedBox(height: 20),
-              if (planning != null &&
-                  planning.recommendationGroups.isNotEmpty) ...[
-                _RecommendationSection(
-                  groups: planning.recommendationGroups,
-                  selected: _selectedRecommendations,
-                  dispatching: planning.dispatching,
-                  onChanged: (id, selected) => setState(() {
-                    selected
-                        ? _selectedRecommendations.add(id)
-                        : _selectedRecommendations.remove(id);
-                  }),
-                  onDispatch: () => _dispatchSelected(context),
-                ),
-                const SizedBox(height: 20),
-              ],
-              _SectionHeader(title: '今日日常', count: routines.length),
-              if (routines.isEmpty)
-                const _CompactEmptyState(text: '今天没有符合 recurrence 的日常')
-              else
-                _ExecutionList(
-                  children: [
-                    for (final routine in routines)
+                      TextButton.icon(
+                        key: const ValueKey('add-standalone-event'),
+                        onPressed: () => _createStandalone(context),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('临时事项'),
+                      ),
+                    ],
+                  ),
+                  ...section('正在进行', 'today-running', running),
+                  ...section('现在需要处理', 'today-now', [
+                    for (final e in temporal.now) temporalRow(e),
+                  ]),
+                  ...section('持续事项', 'today-persistent', [
+                    for (final e in controller.pausedRoutineExecutions)
+                      PausedRoutineRow(
+                        key: ValueKey('today-paused-${e.id}'),
+                        operationalVisuals: true,
+                        controller: controller,
+                        execution: e,
+                      ),
+                    for (final e in controller.waitingRoutineExecutions)
+                      WaitingRoutineRow(
+                        key: ValueKey('today-waiting-${e.id}'),
+                        operationalVisuals: true,
+                        controller: controller,
+                        execution: e,
+                      ),
+                    for (final id in order) rows[id]!,
+                    for (final routine in ordinary)
                       _RoutineRow(controller: controller, routine: routine),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      );
-    },
+                  ]),
+                  ...section('稍后', 'today-later', [
+                    for (final e in temporal.later) temporalRow(e),
+                  ]),
+                  if (running.isEmpty &&
+                      rows.isEmpty &&
+                      ordinary.isEmpty &&
+                      controller.waitingRoutineExecutions.isEmpty &&
+                      controller.pausedRoutineExecutions.isEmpty &&
+                      temporal.now.isEmpty &&
+                      temporal.later.isEmpty)
+                    const _CompactEmptyState(text: '当前没有待处理事项'),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
   );
 
   Future<void> _createStandalone(BuildContext context) async {
-    var name = '';
-    String? categoryId;
-    final result = await showDialog<(String, String?)>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('添加临时事项'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                key: const ValueKey('standalone-event-name'),
-                autofocus: true,
-                onChanged: (value) => name = value,
-                decoration: const InputDecoration(labelText: '名称'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
-                key: const ValueKey('standalone-event-category'),
-                initialValue: categoryId,
-                decoration: const InputDecoration(labelText: '分类（可选）'),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('未分类'),
-                  ),
-                  for (final category in widget.controller.categories)
-                    DropdownMenuItem<String?>(
-                      value: category.id,
-                      child: Text(category.name),
-                    ),
-                ],
-                onChanged: (value) => setState(() => categoryId = value),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              key: const ValueKey('save-standalone-event'),
-              onPressed: () => Navigator.pop(dialogContext, (name, categoryId)),
-              child: const Text('添加到今日'),
-            ),
-          ],
-        ),
-      ),
-    );
+    final result = await showStandaloneEventDialog(context, widget.controller);
     if (result == null) return;
     final error = await widget.controller.createStandaloneForToday(
       result.$1,
@@ -190,20 +350,23 @@ class _EventsPageState extends State<EventsPage> {
     }
   }
 
-  Future<void> _dispatchSelected(BuildContext context) async {
+  String _eventIdentity(JaxEvent event) => event.sourcePlanItemId == null
+      ? 'event-${event.id}'
+      : 'plan-${event.sourcePlanItemId}';
+
+  Future<void> _startPlanItem(PlanItem item) async {
     final planning = widget.planningController!;
-    final selected = [
-      for (final group in planning.recommendationGroups)
-        for (final item in group.items)
-          if (_selectedRecommendations.contains(item.id)) item.id,
+    _transitionOrder ??= [
+      ...widget.controller.todayEvents.map(_eventIdentity),
+      ...planning.projectedTodayItems.map((i) => 'plan-${i.id}'),
     ];
-    if (selected.isEmpty) return;
     try {
-      await planning.dispatchRecommendations(selected);
-      await widget.controller.load();
-      if (mounted) setState(_selectedRecommendations.clear);
+      await planning.startPlanItem(
+        item.id,
+        refreshExecution: widget.controller.load,
+      );
     } catch (error) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));
       }
@@ -228,6 +391,10 @@ class _EventsPageState extends State<EventsPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          constraints: DesktopPolish.dialog(
+            dialogContext,
+            DesktopDialogSize.form,
+          ),
           title: const Text('已有事项'),
           content: SizedBox(
             width: 480,
@@ -273,111 +440,13 @@ class _EventsPageState extends State<EventsPage> {
   }
 }
 
-class _RecommendationSection extends StatelessWidget {
-  const _RecommendationSection({
-    required this.groups,
-    required this.selected,
-    required this.dispatching,
-    required this.onChanged,
-    required this.onDispatch,
-  });
-
-  final List<PlanningRecommendationGroup> groups;
-  final Set<String> selected;
-  final bool dispatching;
-  final void Function(String id, bool selected) onChanged;
-  final VoidCallback onDispatch;
-
-  @override
-  Widget build(BuildContext context) {
-    final visibleIds = {
-      for (final group in groups)
-        for (final item in group.items) item.id,
-    };
-    final visibleSelected = selected.where(visibleIds.contains).toSet();
-    return Column(
-      key: const ValueKey('today-recommendations'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('今日建议', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        for (final group in groups) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 4, 2),
-            child: Text(
-              '${group.category == null ? '' : '${group.category!.name} · '}'
-              '${group.node.name} · ${group.plan.displayTitle}',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-          ),
-          for (final item in group.items)
-            CheckboxListTile(
-              key: ValueKey('recommendation-${item.id}'),
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              value: visibleSelected.contains(item.id),
-              title: Text(item.title),
-              subtitle: item.note == null ? null : Text(item.note!),
-              onChanged: dispatching
-                  ? null
-                  : (value) => onChanged(item.id, value == true),
-            ),
-        ],
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            key: const ValueKey('dispatch-recommendations'),
-            onPressed: visibleSelected.isEmpty || dispatching
-                ? null
-                : onDispatch,
-            icon: dispatching
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.today_outlined),
-            label: const Text('加入今日'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.count, this.action});
+  const _SectionHeader({required this.title});
   final String title;
-  final int count;
-  final Widget? action;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final label = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(width: 8),
-          Text('$count', style: Theme.of(context).textTheme.labelSmall),
-        ],
-      );
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: action != null && constraints.maxWidth < 400
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  label,
-                  Align(alignment: Alignment.centerRight, child: action),
-                ],
-              )
-            : Row(
-                children: [
-                  label,
-                  if (action != null) ...[const Spacer(), action!],
-                ],
-              ),
-      );
-    },
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(title, style: Theme.of(context).textTheme.titleLarge),
   );
 }
 
@@ -387,10 +456,7 @@ class _ExecutionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      for (var i = 0; i < children.length; i++) ...[
-        children[i],
-        if (i < children.length - 1) const Divider(height: 1),
-      ],
+      for (var i = 0; i < children.length; i++) ...[children[i]],
     ],
   );
 }
@@ -411,6 +477,12 @@ class _CompactEmptyState extends StatelessWidget {
 
 class _EventRow extends StatelessWidget {
   const _EventRow({
+    super.key,
+    this.onReorder,
+    this.allowUp = false,
+    this.allowDown = false,
+    this.upTarget,
+    this.downTarget,
     required this.controller,
     required this.planning,
     required this.event,
@@ -419,7 +491,10 @@ class _EventRow extends StatelessWidget {
   });
   final EventController controller;
   final PlanningController? planning;
+  final VoidCallback? onReorder;
   final JaxEvent event;
+  final bool allowUp, allowDown;
+  final int? upTarget, downTarget;
   final int index;
   final int count;
 
@@ -429,8 +504,24 @@ class _EventRow extends StatelessWidget {
     return _TodayExecutionRow(
       key: ValueKey('today-event-${event.id}'),
       name: event.name,
-      secondary: category?.name ?? '未分类',
+      secondary:
+          planning?.plans
+              .where(
+                (p) => planning!
+                    .itemsFor(p.id)
+                    .any((i) => i.id == event.sourcePlanItemId),
+              )
+              .map((p) => planning!.nodeFor(p.worldNodeId)?.name)
+              .firstOrNull ??
+          category?.name ??
+          '临时事项',
       status: _status(event),
+      time: event.status == EventStatus.running
+          ? ExecutionTimeLabel(
+              executionDurationLabel(controller.elapsedFor(event)),
+              caption: '主动用时',
+            )
+          : null,
       statusKind: switch (event.status) {
         EventStatus.pending => _TodayStatusKind.unstarted,
         EventStatus.running => _TodayStatusKind.running,
@@ -438,20 +529,26 @@ class _EventRow extends StatelessWidget {
         EventStatus.waiting => _TodayStatusKind.waiting,
         EventStatus.completed => _TodayStatusKind.completed,
       },
-      colorKey: category?.colorKey,
+
       actions: [
-        if (index > 0)
+        if (allowUp)
           IconButton(
             key: ValueKey('today-up-${event.id}'),
             tooltip: '今日上移',
-            onPressed: () => controller.moveToday(event.id, index - 1),
+            onPressed: () {
+              onReorder?.call();
+              controller.moveToday(event.id, upTarget!);
+            },
             icon: const Icon(Icons.arrow_upward),
           ),
-        if (index < count - 1)
+        if (allowDown)
           IconButton(
             key: ValueKey('today-down-${event.id}'),
             tooltip: '今日下移',
-            onPressed: () => controller.moveToday(event.id, index + 1),
+            onPressed: () {
+              onReorder?.call();
+              controller.moveToday(event.id, downTarget!);
+            },
             icon: const Icon(Icons.arrow_downward),
           ),
         ..._actions(context),
@@ -477,13 +574,19 @@ class _EventRow extends StatelessWidget {
               }
             },
           ),
-        if (event.status != EventStatus.running &&
-            event.status != EventStatus.completed)
-          IconButton(
-            key: ValueKey('today-remove-${event.id}'),
-            tooltip: '移出今日',
-            onPressed: () => controller.removeFromToday(event.id),
-            icon: const Icon(Icons.today_outlined),
+        if (controller.canDeferToday(event))
+          EventMoreMenuButton<String>(
+            key: ValueKey('today-defer-more-${event.id}'),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'defer', child: Text('今天先不处理')),
+            ],
+            onSelected: (_) async {
+              final error = await controller.removeFromToday(event.id);
+              if (error != null && context.mounted) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(error)));
+              }
+            },
           ),
       ],
     );
@@ -511,6 +614,13 @@ class _EventRow extends StatelessWidget {
         ExecutionAction.resume,
         () => controller.resume(event.id),
       ),
+      if (event.status.canComplete)
+        _button(
+          context,
+          'complete',
+          ExecutionAction.complete,
+          () => controller.complete(event.id),
+        ),
     ],
     EventStatus.running => [
       _button(
@@ -551,6 +661,12 @@ class _EventRow extends StatelessWidget {
   ) => ExecutionActionButton(
     key: ValueKey('$keyName-${event.id}'),
     action: action,
+    label: action == ExecutionAction.resume ? '继续' : null,
+    primary: action == ExecutionAction.pause,
+    style: HomePilot.buttonStyle(
+      outlined: action != ExecutionAction.pause,
+      primary: action == ExecutionAction.pause,
+    ),
     onPressed: () async {
       final error = await callback();
       if (error != null && context.mounted) {
@@ -561,7 +677,7 @@ class _EventRow extends StatelessWidget {
   );
 
   String _status(JaxEvent event) => switch (event.status) {
-    EventStatus.pending => '未开始',
+    EventStatus.pending => '',
     EventStatus.running => '正在执行',
     EventStatus.paused => '已暂停',
     EventStatus.waiting => '等待中',
@@ -570,58 +686,123 @@ class _EventRow extends StatelessWidget {
 }
 
 class _RoutineRow extends StatelessWidget {
-  const _RoutineRow({required this.controller, required this.routine});
+  const _RoutineRow({
+    required this.controller,
+    required this.routine,
+    this.temporal,
+    super.key,
+  });
+  final TodayTemporalEntry? temporal;
   final EventController controller;
   final Routine routine;
   @override
   Widget build(BuildContext context) {
-    final execution = controller.executionFor(routine);
+    final execution = temporal == null
+        ? controller.executionFor(routine)
+        : temporal!.execution;
     final category = controller.routineCategories
         .where((c) => c.id == routine.routineCategoryId)
         .firstOrNull;
     return _TodayExecutionRow(
       key: ValueKey('today-routine-${routine.id}'),
       name: routine.name,
-      secondary:
-          '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
+      secondary: temporal == null
+          ? '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}'
+          : switch (temporal!.state) {
+              TemporalRecommendationState.active =>
+                '理想完成前 ${_windowTime(temporal!.window.idealEndDateTime)}',
+              TemporalRecommendationState.overdue =>
+                '已超过理想时间 · 最晚 ${_windowTime(temporal!.window.latestEndDateTime)}',
+              _ =>
+                '${category?.name ?? '未分类'} · ${_recurrence(routine.recurrence)}',
+            },
       status: _status(execution),
+      warning: temporal?.state == TemporalRecommendationState.overdue,
+      time: execution?.status == RoutineExecutionStatus.running
+          ? ExecutionTimeLabel(
+              executionDurationLabel(controller.routineElapsed(routine)),
+              caption: '主动用时',
+            )
+          : temporal?.state == TemporalRecommendationState.inactive
+          ? ExecutionTimeLabel(
+              _time(temporal!.window.startDateTime),
+              caption: '开始推荐',
+            )
+          : null,
       statusKind: switch (execution?.status) {
         null => _TodayStatusKind.unstarted,
         RoutineExecutionStatus.running => _TodayStatusKind.running,
         RoutineExecutionStatus.paused => _TodayStatusKind.paused,
+        RoutineExecutionStatus.waiting => _TodayStatusKind.waiting,
         RoutineExecutionStatus.completed => _TodayStatusKind.completed,
       },
-      colorKey: category?.colorKey,
+
       actions: switch (execution?.status) {
         null => [
           _button(
+            context,
             'start',
             ExecutionAction.start,
-            () => controller.startRoutine(routine),
+            () => temporal == null
+                ? controller.startRoutine(routine)
+                : controller.startRoutineOccurrence(
+                    routine,
+                    temporal!.window.occurrenceKey,
+                  ),
           ),
         ],
         RoutineExecutionStatus.running => [
           _button(
+            context,
+            'wait',
+            ExecutionAction.wait,
+            () => controller.waitRoutine(routine),
+          ),
+          _button(
+            context,
             'pause',
             ExecutionAction.pause,
-            () => controller.pauseRoutine(routine),
+            () => temporal == null
+                ? controller.pauseRoutine(routine)
+                : controller.pauseRoutineOccurrence(
+                    routine,
+                    temporal!.window.occurrenceKey,
+                  ),
           ),
           _button(
+            context,
             'complete',
             ExecutionAction.complete,
-            () => controller.completeRoutine(routine),
+            () => temporal == null
+                ? controller.completeRoutine(routine)
+                : controller.completeRoutineOccurrence(
+                    routine,
+                    temporal!.window.occurrenceKey,
+                  ),
           ),
         ],
-        RoutineExecutionStatus.paused => [
+        RoutineExecutionStatus.paused || RoutineExecutionStatus.waiting => [
           _button(
+            context,
             'resume',
             ExecutionAction.resume,
-            () => controller.startRoutine(routine),
+            () => temporal == null
+                ? controller.startRoutine(routine)
+                : controller.startRoutineOccurrence(
+                    routine,
+                    temporal!.window.occurrenceKey,
+                  ),
           ),
           _button(
+            context,
             'complete',
             ExecutionAction.complete,
-            () => controller.completeRoutine(routine),
+            () => temporal == null
+                ? controller.completeRoutine(routine)
+                : controller.completeRoutineOccurrence(
+                    routine,
+                    temporal!.window.occurrenceKey,
+                  ),
           ),
         ],
         RoutineExecutionStatus.completed => const [],
@@ -630,18 +811,36 @@ class _RoutineRow extends StatelessWidget {
   }
 
   Widget _button(
+    BuildContext context,
     String keyName,
     ExecutionAction action,
-    VoidCallback callback,
+    Future<String?> Function() callback,
   ) => ExecutionActionButton(
     key: ValueKey('today-routine-$keyName-${routine.id}'),
     action: action,
-    onPressed: callback,
+    label: action == ExecutionAction.resume ? '继续' : null,
+    primary: action == ExecutionAction.pause,
+    style: HomePilot.buttonStyle(
+      outlined: action != ExecutionAction.pause,
+      primary: action == ExecutionAction.pause,
+    ),
+    onPressed: () async {
+      final error = await callback();
+      if (error != null && context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+      }
+    },
   );
+  String _windowTime(DateTime t) =>
+      '${DateUtils.isSameDay(t, temporal!.window.startDateTime) ? '' : '次日 '}${_time(t)}';
+  String _time(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   String _status(RoutineExecution? execution) => switch (execution?.status) {
-    null => '未开始',
+    null => '',
     RoutineExecutionStatus.running => '正在执行',
     RoutineExecutionStatus.paused => '已暂停',
+    RoutineExecutionStatus.waiting => '等待中',
     RoutineExecutionStatus.completed => '已完成',
   };
   String _recurrence(RoutineRecurrence recurrence) => switch (recurrence) {
@@ -654,195 +853,40 @@ class _RoutineRow extends StatelessWidget {
 
 enum _TodayStatusKind { unstarted, running, paused, waiting, completed }
 
-class _TodayExecutionRow extends StatefulWidget {
+class _TodayExecutionRow extends StatelessWidget {
   const _TodayExecutionRow({
     required this.name,
     required this.secondary,
     required this.status,
     required this.statusKind,
     required this.actions,
-    this.colorKey,
+    this.warning = false,
+    this.time,
     super.key,
   });
-  final String name;
-  final String secondary;
-  final String status;
-  final int? colorKey;
+  final String name, secondary, status;
   final _TodayStatusKind statusKind;
   final List<Widget> actions;
+  final bool warning;
+  final Widget? time;
   @override
-  State<_TodayExecutionRow> createState() => _TodayExecutionRowState();
-}
-
-class _TodayExecutionRowState extends State<_TodayExecutionRow> {
-  var hovering = false;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final running = widget.statusKind == _TodayStatusKind.running;
-    final completed = widget.statusKind == _TodayStatusKind.completed;
-    final accent = widget.colorKey == null
-        ? CategoryPaletteColors.neutral(context)
-        : CategoryPaletteColors.resolve(context, widget.colorKey!);
-    return MouseRegion(
-      onEnter: (_) => setState(() => hovering = true),
-      onExit: (_) => setState(() => hovering = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        decoration: BoxDecoration(
-          color: running
-              ? accent.withValues(alpha: .10)
-              : hovering
-              ? colors.surfaceContainerHighest.withValues(alpha: .55)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: running ? accent : Colors.transparent,
-              width: 3,
-            ),
+  Widget build(BuildContext context) => ExecutionRowShell(
+    density: JaxListDensity.compact,
+    title: name,
+    state: switch (statusKind) {
+      _TodayStatusKind.unstarted => ExecutionVisualState.idle,
+      _TodayStatusKind.running => ExecutionVisualState.running,
+      _TodayStatusKind.paused => ExecutionVisualState.paused,
+      _TodayStatusKind.waiting => ExecutionVisualState.waiting,
+      _TodayStatusKind.completed => ExecutionVisualState.completed,
+    },
+    metadata: secondary.isEmpty
+        ? null
+        : Text(
+            secondary,
+            style: warning ? const TextStyle(color: HomePilot.warning) : null,
           ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final info = _info(context, accent);
-            final status = _StatusLabel(
-              text: widget.status,
-              kind: widget.statusKind,
-            );
-            final actions = IconTheme.merge(
-              data: IconThemeData(
-                color: completed
-                    ? colors.onSurfaceVariant.withValues(alpha: .62)
-                    : null,
-              ),
-              child: Wrap(spacing: 8, runSpacing: 6, children: widget.actions),
-            );
-            if (constraints.maxWidth >= 700) {
-              return Row(
-                children: [
-                  Expanded(child: info),
-                  const SizedBox(width: 20),
-                  SizedBox(width: 88, child: status),
-                  const SizedBox(width: 12),
-                  actions,
-                ],
-              );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                info,
-                const SizedBox(height: 7),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    status,
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: actions,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _info(BuildContext context, Color accent) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        widget.name,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: widget.statusKind == _TodayStatusKind.running
-              ? FontWeight.w700
-              : widget.statusKind == _TodayStatusKind.completed
-              ? FontWeight.w500
-              : FontWeight.w600,
-          color: widget.statusKind == _TodayStatusKind.completed
-              ? Theme.of(context).colorScheme.onSurfaceVariant
-                    .withValues(alpha: .72)
-              : null,
-        ),
-      ),
-      const SizedBox(height: 2),
-      Row(
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              color: widget.statusKind == _TodayStatusKind.completed
-                  ? accent.withValues(alpha: .45)
-                  : accent,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              widget.secondary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant
-                    .withValues(
-                      alpha: widget.statusKind == _TodayStatusKind.completed
-                          ? .55
-                          : 1,
-                    ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ],
+    time: time,
+    actions: actions,
   );
-}
-
-class _StatusLabel extends StatelessWidget {
-  const _StatusLabel({required this.text, required this.kind});
-  final String text;
-  final _TodayStatusKind kind;
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final running = kind == _TodayStatusKind.running;
-    final completed = kind == _TodayStatusKind.completed;
-    final icon = switch (kind) {
-      _TodayStatusKind.unstarted => Icons.radio_button_unchecked,
-      _TodayStatusKind.running => Icons.play_circle_fill,
-      _TodayStatusKind.paused => Icons.pause_circle_outline,
-      _TodayStatusKind.waiting => Icons.hourglass_empty,
-      _TodayStatusKind.completed => Icons.check_circle_outline,
-    };
-    final color = running
-        ? colors.primary
-        : completed
-        ? colors.onSurfaceVariant.withValues(alpha: .68)
-        : colors.outline;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 5),
-        Text(
-          text,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            fontWeight: running ? FontWeight.w700 : FontWeight.w400,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
 }

@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as path;
+
+import 'data/preferences/file_app_preferences_store.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,6 +112,8 @@ Future<void> main(List<String> args) async {
               script,
               '-Action',
               'Apply',
+              '-Package',
+              'com.example.jax',
               '-Device',
               device,
               '-Resolution',
@@ -128,6 +134,14 @@ Future<void> main(List<String> args) async {
   runApp(
     JaxApp(
       repository: eventRepository,
+      preferencesStore: FileAppPreferencesStore(
+        File(
+          path.join(
+            path.dirname(database.database.path),
+            'app_preferences.json',
+          ),
+        ),
+      ),
       planningRepository: planningRepository,
       worldNodeRepository: SqliteWorldNodeRepository(database),
       saveService: SqliteSaveService(database),

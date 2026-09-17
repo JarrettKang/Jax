@@ -63,6 +63,8 @@ void main() {
       expect(find.text('已停用'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
+      await tester.tap(find.byKey(const ValueKey('routine-more-sleep')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('routine-up-sleep')));
       await tester.pumpAndSettle();
       expect((await repo.getRoutines()).map((item) => item.id), [
@@ -92,7 +94,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('日常'));
       await tester.pumpAndSettle();
-      expect(find.text('每日 · 正在执行'), findsOneWidget);
+      expect(find.text('每日'), findsWidgets);
+      expect(find.text('正在执行'), findsOneWidget);
       expect(find.text('开始'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -146,7 +149,7 @@ void main() {
       await tester.tap(find.text('日常'));
       await tester.pumpAndSettle();
 
-      expect(find.text('2 项'), findsOneWidget);
+      expect(find.text('2 项'), findsNothing);
       expect(find.text('每日'), findsOneWidget);
       expect(find.text('周一 · 周三 · 周五'), findsOneWidget);
       expect(
@@ -214,23 +217,28 @@ void main() {
       double x(String prefix, String id) =>
           tester.getTopLeft(find.byKey(ValueKey('$prefix-$id'))).dx;
       final recurrenceXs = [for (final id in ids) x('routine-recurrence', id)];
-      final reorderXs = [for (final id in ids) x('routine-reorder-slot', id)];
       final moreXs = [for (final id in ids) x('routine-more', id)];
       expect(recurrenceXs.toSet(), hasLength(1));
-      expect(reorderXs.toSet(), hasLength(1));
       expect(moreXs.toSet(), hasLength(1));
-      expect(find.byKey(const ValueKey('routine-up-wash')), findsNothing);
-      expect(find.byKey(const ValueKey('routine-down-wash')), findsOneWidget);
-      expect(find.byKey(const ValueKey('routine-up-sleep')), findsOneWidget);
-      expect(find.byKey(const ValueKey('routine-down-sleep')), findsOneWidget);
-      expect(find.byKey(const ValueKey('routine-up-dinner')), findsOneWidget);
-      expect(find.byKey(const ValueKey('routine-down-dinner')), findsNothing);
-      expect(find.byKey(const ValueKey('routine-up-only')), findsNothing);
-      expect(find.byKey(const ValueKey('routine-down-only')), findsNothing);
-      expect(
-        x('routine-category-reorder-slot', 'life'),
-        x('routine-category-reorder-slot', 'single'),
-      );
+      for (final (id, up, down) in [
+        ('wash', false, true),
+        ('sleep', true, true),
+        ('dinner', true, false),
+        ('only', false, false),
+      ]) {
+        await tester.tap(find.byKey(ValueKey('routine-more-$id')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(ValueKey('routine-up-$id')),
+          up ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('routine-down-$id')),
+          down ? findsOneWidget : findsNothing,
+        );
+        await tester.tapAt(const Offset(2, 2));
+        await tester.pumpAndSettle();
+      }
       expect(
         x('routine-category-more', 'life'),
         x('routine-category-more', 'single'),
@@ -281,7 +289,8 @@ void main() {
         repo.routineExecutions.single.status,
         RoutineExecutionStatus.running,
       );
-      expect(find.text('按需 · 正在执行'), findsOneWidget);
+      expect(find.text('按需'), findsOneWidget);
+      expect(find.text('正在执行'), findsOneWidget);
     },
   );
 
@@ -305,7 +314,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '整理思路');
     expect(find.text('重复'), findsOneWidget);
-    expect(find.byKey(const ValueKey('routine-home-quick-action-toggle')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('routine-home-quick-action-toggle')),
+      findsNothing,
+    );
     expect(
       find.byKey(const ValueKey('routine-time-recommendation-toggle')),
       findsOneWidget,
@@ -319,21 +331,21 @@ void main() {
       find.byKey(const ValueKey('routine-time-recommendation-toggle')),
       findsNothing,
     );
-    final quickToggle = find.byKey(const ValueKey('routine-home-quick-action-toggle'));
-    expect(tester.widget<SwitchListTile>(quickToggle).value, isFalse);
-    await tester.tap(quickToggle);
-    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('routine-home-quick-action-toggle')),
+      findsNothing,
+    );
     await tester.tap(find.text('创建'));
     await tester.pumpAndSettle();
     expect(repo.routines.single.type, RoutineType.onDemand);
-    expect(repo.routines.single.showInHomeQuickActions, isTrue);
+    expect(repo.routines.single.showInHomeQuickActions, isFalse);
     expect(find.text('整理思路'), findsOneWidget);
     expect(find.text('按需'), findsOneWidget);
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
-    expect(find.text('快捷动作'), findsOneWidget);
-    expect(find.text('整理思路'), findsOneWidget);
-    expect(find.text('未分类 · 按需'), findsOneWidget);
+    expect(find.text('快捷动作'), findsNothing);
+    expect(find.text('整理思路'), findsNothing);
+    expect(find.byKey(const ValueKey('home-root-ask')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -85,25 +85,38 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
   WindowsDebugSyncCoordinator({
     required this.projectRoot,
     SyncStorageService? storageService,
-  }) : storageService = storageService ?? SyncStorageService();
+    this.adbPath,
+    this.dartPath,
+    Map<String, String>? environment,
+  }) : environment = environment ?? Platform.environment,
+       storageService = storageService ?? SyncStorageService();
 
   @override
   final String projectRoot;
   final SyncStorageService storageService;
+  final String? adbPath;
+  final String? dartPath;
+  final Map<String, String> environment;
   bool _running = false;
   @override
   bool get running => _running;
 
   String? findAdb() {
-    final roots = [
-      Platform.environment['ANDROID_HOME'],
-      Platform.environment['ANDROID_SDK_ROOT'],
-      r'<android-sdk>',
-    ].whereType<String>();
-    for (final root in roots) {
-      final value =
-          '$root${Platform.pathSeparator}platform-tools'
-          '${Platform.pathSeparator}adb.exe';
+    final explicit = adbPath ?? environment['JAX_ADB_PATH'];
+    if (explicit != null) return File(explicit).existsSync() ? explicit : null;
+    final candidates = [
+      for (final folder in (environment['PATH'] ?? '').split(
+        Platform.isWindows ? ';' : ':',
+      ))
+        if (folder.isNotEmpty)
+          '$folder${Platform.pathSeparator}adb${Platform.isWindows ? '.exe' : ''}',
+      for (final root in [
+        environment['ANDROID_HOME'],
+        environment['ANDROID_SDK_ROOT'],
+      ].whereType<String>())
+        '$root${Platform.pathSeparator}platform-tools${Platform.pathSeparator}adb${Platform.isWindows ? '.exe' : ''}',
+    ];
+    for (final value in candidates) {
       if (File(value).existsSync()) return value;
     }
     return null;
@@ -279,7 +292,7 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
   @override
   Future<void> updateBackupRetention(int count) async {
     await storageService.updateRetention(count);
-    await storageService.cleanupBackups();
+    await storageService.cleanupBackups(apply: true);
   }
 
   @override
@@ -312,6 +325,10 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
       '& ${quote(script)}',
       '-Action ${quote(action)}',
       '-Device ${quote(serial)}',
+      '-Package ${quote('com.example.jax')}',
+      if (findAdb() case final String resolvedAdb)
+        '-AdbPath ${quote(resolvedAdb)}',
+      if (dartPath != null) '-DartPath ${quote(dartPath!)}',
       '-KeepWindowsProcessId ${quote('$pid')}',
       '-NoLaunchPreview',
       '-StatusPath ${quote(statusPath)}',

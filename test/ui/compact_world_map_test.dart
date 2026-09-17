@@ -85,7 +85,7 @@ void main() {
           }
           await tester.pumpAndSettle();
           expect(controller.error, isNull);
-          expect(find.text('2 个下一步'), findsOneWidget);
+          expect(find.text('2 个下一步'), findsNothing);
           expect(find.text('尚无计划'), findsNothing);
           final guide = tester.widget<WorldNodeTreeGuideFrame>(
             find.byKey(ValueKey('world-node-guide-${mapNodeId(4)}')),

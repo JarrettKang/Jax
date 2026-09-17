@@ -1,3 +1,5 @@
+import '../theme/desktop_polish.dart';
+
 import 'package:flutter/material.dart';
 
 import 'category_color_picker.dart';
@@ -39,6 +41,7 @@ class _CategoryEditDialogState extends State<CategoryEditDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    constraints: DesktopPolish.dialog(context, DesktopDialogSize.form),
     title: Text(widget.title),
     content: SingleChildScrollView(
       child: Column(

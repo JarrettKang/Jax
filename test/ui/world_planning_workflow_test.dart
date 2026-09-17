@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/category.dart';
 import 'package:jax/core/entities/plan.dart';
+import 'package:jax/core/entities/plan_review_note.dart';
 import 'package:jax/core/entities/plan_item.dart';
 import 'package:jax/core/entities/world_node.dart';
 import 'package:jax/core/preferences/world_category_collapse_store.dart';
@@ -10,6 +11,7 @@ import 'package:jax/core/repositories/world_node_repository.dart';
 import 'package:jax/ui/controllers/planning_controller.dart';
 import 'package:jax/ui/pages/planning_page.dart';
 import 'package:jax/ui/pages/world_page.dart';
+import 'package:jax/ui/theme/world_theme.dart';
 import 'package:jax/ui/widgets/world_node_tree_guide.dart';
 
 import '../support/memory_repository.dart';
@@ -340,14 +342,6 @@ void main() {
         find.byKey(const ValueKey('move-selector-category-a')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const ValueKey('move-selector-category-b')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('move-selector-category-unclassified')),
-        findsOneWidget,
-      );
       expect(find.byKey(ValueKey('move-target-${root.id}')), findsOneWidget);
       expect(find.text('当前节点'), findsOneWidget);
       expect(find.byKey(ValueKey('move-target-${child.id}')), findsOneWidget);
@@ -359,6 +353,10 @@ void main() {
         findsNothing,
       );
 
+      await tester.ensureVisible(
+        find.byKey(ValueKey('move-selector-branch-${child.id}')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(ValueKey('move-selector-branch-${child.id}')),
       );
@@ -369,13 +367,21 @@ void main() {
       );
       expect(
         tester
-            .widget<ListTile>(
+            .widget<WorldRowSurface>(
               find.byKey(ValueKey('move-target-${grandchild.id}')),
             )
-            .enabled,
-        isFalse,
+            .onTap,
+        isNull,
       );
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('move-selector-category-b')),
+        100,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('world-move-tree')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.tap(find.byKey(const ValueKey('move-selector-category-b')));
       await _pumpFrames(tester);
       expect(
@@ -421,15 +427,25 @@ void main() {
       expect(find.text('当前上层'), findsOneWidget);
       expect(
         tester
-            .widget<ListTile>(find.byKey(ValueKey('move-target-${rootA.id}')))
-            .enabled,
-        isFalse,
+            .widget<WorldRowSurface>(
+              find.byKey(ValueKey('move-target-${rootA.id}')),
+            )
+            .onTap,
+        isNull,
       );
       expect(
         tester
             .widget<ListTile>(find.byKey(const ValueKey('move-target-root')))
             .enabled,
         isTrue,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('move-selector-category-b')),
+        100,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('world-move-tree')),
+          matching: find.byType(Scrollable),
+        ),
       );
       await tester.tap(find.byKey(const ValueKey('move-selector-category-b')));
       await _pumpFrames(tester);
@@ -474,7 +490,7 @@ void main() {
   );
 
   testWidgets(
-    'compact map persists branch state, shows useful summary and increases density',
+    'compact map persists branch state without plan statistics and preserves density',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -564,7 +580,7 @@ void main() {
       );
       await controller.load();
       await _pumpFrames(tester);
-      expect(find.text('当前计划'), findsOneWidget);
+      expect(find.text('当前计划'), findsNothing);
       expect(
         tester
             .widget<WorldNodeTreeGuideFrame>(
@@ -853,6 +869,8 @@ class _WorldRepository implements WorldNodeRepository {
 }
 
 class _PlanningRepository implements PlanningRepository {
+  @override
+  Future<List<PlanReviewNote>> getPlanReviewNotes(String planId) async => [];
   final plans = <Plan>[];
 
   @override

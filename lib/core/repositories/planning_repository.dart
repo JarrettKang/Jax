@@ -10,7 +10,7 @@ abstract interface class FirstPlanningStepRepository {
     required String worldNodeId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   });
 }
@@ -36,7 +36,7 @@ abstract interface class PlanningRepository {
     required String planId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   });
   Future<void> editPlanItem(

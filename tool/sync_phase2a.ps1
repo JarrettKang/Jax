@@ -2,34 +2,40 @@
 param(
     [string]$Device,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
-    [string]$Package = 'com.example.jax',
+    [string]$Package,
+    [string]$AdbPath,
+    [string]$DartPath,
+    [switch]$Help,
     [string]$Baseline,
-    [string]$OutputRoot = (Join-Path $PSScriptRoot '..\.debug_snapshots')
+    [string]$OutputRoot = (Join-Path $PSScriptRoot '..\.local_private\sync-exports')
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Help) { Write-Output 'Read-only developer Debug comparison: stops apps and creates private snapshots; no business writes or apply mode. Example: ./tool/sync_phase2a.ps1 -Package com.example.jax -Device <serial> -WindowsDatabase <db>. WindowsDatabase defaults to APPDATA/Jax/jax.db; OutputRoot defaults to .local_private/sync-exports. Optional -Baseline, -OutputRoot, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md.'; return }
+. (Join-Path $PSScriptRoot 'tool_locator.ps1')
+trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
+Assert-JaxPackage $Package
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$androidHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { '<android-sdk>' }
-$adb = Join-Path $androidHome 'platform-tools\adb.exe'
-$dart = '<flutter-sdk>\bin\dart.bat'
+$adb = Resolve-JaxTool adb $AdbPath
+$dart = Resolve-JaxTool dart $DartPath
 $remoteDatabase = 'databases/jax.db'
 
 function Invoke-Checked([string]$File, [string[]]$Arguments) {
     $lines = if ([IO.Path]::GetExtension($File) -in @('.bat', '.cmd')) { & $env:ComSpec /d /c $File @Arguments } else { & $File @Arguments }
     $code = $LASTEXITCODE
-    foreach ($line in $lines) { Write-Host $line }
-    if ($code -ne 0) { throw "Command failed ($code): $File $($Arguments -join ' ')" }
+    foreach ($line in $lines) { Write-Verbose $line }
+    if ($code -ne 0) { throw "Command failed ($code). Use -Verbose privately." }
 }
 function Get-AdbText([string[]]$Arguments) {
     $text = & $adb -s $script:serial @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "ADB failed: $($Arguments -join ' ')`n$($text -join "`n")" }
+    if ($LASTEXITCODE -ne 0) { throw 'ADB operation failed.' }
     return ($text -join "`n").Trim()
 }
 function Export-AdbFile([string]$Remote, [string]$Destination) {
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $adb; $start.UseShellExecute = $false; $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
-    foreach ($argument in @('-s', $script:serial, 'exec-out', 'run-as', $Package, 'cat', $Remote)) { [void]$start.ArgumentList.Add($argument) }
+    $start.Arguments = "-s $($script:serial) exec-out run-as $Package cat $Remote"
     $process = [Diagnostics.Process]::Start($start)
     $stream = [IO.File]::Create($Destination)
     try { $process.StandardOutput.BaseStream.CopyTo($stream) } finally { $stream.Dispose() }
@@ -50,30 +56,26 @@ function Capture-Android([string]$Directory, [string]$Name) {
 }
 function Export-Snapshot([string]$Database, [string]$Json) { Invoke-Checked $dart @('run', 'tool/sync_phase2a.dart', 'export', $Database, $Json) }
 function Fingerprint([string]$Json) {
-    $result = & $env:ComSpec /d /c $dart run tool/sync_phase2a.dart fingerprint $Json
+    $result = & $env:ComSpec /d /c $dart run tool/sync_phase2a.dart fingerprint $Json --machine-private
     if ($LASTEXITCODE -ne 0) { throw 'Could not fingerprint snapshot.' }
     return ($result -join "`n").Trim()
 }
 
 if (-not (Test-Path -LiteralPath $adb)) { throw "adb not found: $adb" }
 if (-not (Test-Path -LiteralPath $WindowsDatabase)) { throw "Windows database not found: $WindowsDatabase" }
-$devices = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^([^\s]+)\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
-if ($Device) {
-    if ($Device -notin $devices) { throw "Requested device is not connected: $Device" }
-    $script:serial = $Device
-} elseif ($devices.Count -eq 1) { $script:serial = $devices[0] }
-elseif ($devices.Count -eq 0) { throw 'No authorized Android device is connected.' }
-else { throw 'Multiple Android devices are connected. Rerun with -Device <serial>.' }
-
+$script:serial = Select-JaxDevice $adb $Device
+Assert-JaxDebugDevice $adb $script:serial $Package
 $packagePath = Get-AdbText @('shell', 'pm', 'path', $Package)
 if (-not $packagePath.StartsWith('package:')) { throw "Package is not installed: $Package" }
 [void](Get-AdbText @('shell', 'run-as', $Package, 'pwd'))
 $runningPid = & $adb -s $script:serial shell pidof $Package 2>$null
 $wasRunning = ($runningPid -join '').Trim() -ne ''
+Assert-JaxPrivateOutput $OutputRoot
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $directory = Join-Path $OutputRoot "sync_phase2a_$timestamp"
 New-Item -ItemType Directory -Path $directory -Force | Out-Null
 
+$safeToRestart = $false
 try {
     & $adb -s $script:serial shell am force-stop $Package | Out-Null
     $windowsBefore = Join-Path $directory 'windows_before.db'
@@ -93,9 +95,10 @@ try {
     Export-Snapshot $windowsAfter $windowsAfterJson; Export-Snapshot $androidAfter $androidAfterJson
     if ((Fingerprint $windowsJson) -ne (Fingerprint $windowsAfterJson)) { throw 'Windows business facts changed during Analyze.' }
     if ((Fingerprint $androidJson) -ne (Fingerprint $androidAfterJson)) { throw 'Android business facts changed during Analyze.' }
+    $safeToRestart = $true
     Write-Host 'READ_ONLY_VERIFIED Windows=unchanged Android=unchanged' -ForegroundColor Green
-    Write-Host "Preview plan: $plan"
-    Write-Host "Windows Debug UI: `$env:JAX_SYNC_PLAN='$plan'; .\build\windows\x64\runner\Debug\jax.exe"
+    Write-Host 'Preview plan written privately.'
+    Write-Verbose 'Use Debug Sync UI or private plan.'
 } finally {
-    if ($wasRunning) { & $adb -s $script:serial shell am start -n "$Package/.MainActivity" | Out-Null }
+    if ($wasRunning -and $safeToRestart) { & $adb -s $script:serial shell am start -n "$Package/.MainActivity" | Out-Null }
 }

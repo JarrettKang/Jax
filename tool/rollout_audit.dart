@@ -1,3 +1,5 @@
+import 'private_tool_support.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,7 +22,16 @@ const _businessTables = [
   'dataset_metadata',
 ];
 
-Future<void> main(List<String> arguments) async {
+Future<void> main(List<String> arguments) =>
+    runPrivateTool(arguments, runCommand);
+
+Future<void> runCommand(List<String> arguments) async {
+  if (arguments.contains("--help") || arguments.contains("-help")) {
+    stdout.writeln(
+      "Developer-only rollout_audit. See docs/TOOLS.md for commands, private output and safety requirements. --verbose enables private diagnostics.",
+    );
+    return;
+  }
   if (arguments.length != 2) {
     stderr.writeln(
       'Usage: dart run tool/rollout_audit.dart <database> <output.json>',
@@ -28,9 +39,11 @@ Future<void> main(List<String> arguments) async {
     exitCode = 64;
     return;
   }
+  requirePrivateOutput(arguments[1]);
+  if (File(arguments[1]).existsSync()) throw StateError("Output must be new.");
   sqfliteFfiInit();
   final database = await databaseFactoryFfi.openDatabase(
-    arguments[0],
+    File(arguments[0]).absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {

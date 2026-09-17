@@ -1,3 +1,5 @@
+import 'private_tool_support.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,13 +9,22 @@ import 'package:jax/data/sync/sqlite_sync_snapshot_adapter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Recovery audit: never opens through AppDatabase, upgrades, or repairs.
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) => runPrivateTool(args, runCommand);
+
+Future<void> runCommand(List<String> args) async {
+  if (args.contains("--help") || args.contains("-help")) {
+    stdout.writeln(
+      "Developer-only read_only_database_audit. See docs/TOOLS.md for commands, private output and safety requirements. --verbose enables private diagnostics.",
+    );
+    return;
+  }
   if (args.length != 2) {
     throw ArgumentError(
       'Usage: read_only_database_audit.dart <db> <new-report.json>',
     );
   }
   final source = File(args[0]).absolute;
+  requirePrivateOutput(args[1]);
   final output = File(args[1]).absolute;
   if (!source.existsSync() || output.existsSync()) {
     throw StateError('Source must exist and report destination must be new.');
@@ -21,7 +32,7 @@ Future<void> main(List<String> args) async {
   final before = sha256.convert(await source.readAsBytes()).toString();
   sqfliteFfiInit();
   final db = await databaseFactoryFfi.openDatabase(
-    source.path,
+    source.absolute.path,
     options: OpenDatabaseOptions(readOnly: true),
   );
   try {
@@ -71,7 +82,7 @@ Future<void> main(List<String> args) async {
     await output.writeAsString(
       const JsonEncoder.withIndent('  ').convert(report),
     );
-    stdout.writeln(jsonEncode(Map.of(report)..remove('tables')));
+    stdout.writeln('AUDIT_OK: full report is private; source bytes unchanged.');
   } finally {
     await db.close();
     if (sha256.convert(await source.readAsBytes()).toString() != before) {

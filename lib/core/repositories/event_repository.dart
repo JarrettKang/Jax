@@ -7,7 +7,7 @@ abstract interface class EventRepository {
   Future<List<JaxEvent>> getIncompleteEvents();
   Future<List<JaxEvent>> getCompletedEvents();
   Future<JaxEvent?> getEvent(String id);
-  Future<void> updateEvent(JaxEvent event);
+  Future<void> updateEvent(JaxEvent event, {JaxEvent? expectedPaused});
   Future<void> deleteEvent(String id);
   Future<void> startEvent(JaxEvent event, RunSegment segment);
   Future<List<RunSegment>> getRunSegments(String eventId);
@@ -22,7 +22,11 @@ abstract interface class EventRepository {
     required DateTime updatedAt,
   });
   Future<void> deleteClosedRunSegment(String id);
-  Future<void> pauseEvent(JaxEvent event, RunSegment segment);
+  Future<void> pauseEvent(
+    JaxEvent event,
+    RunSegment segment, {
+    DateTime? expectedUpdatedAt,
+  });
   Future<void> restoreCompletedEvents(List<JaxEvent> events);
   Future<void> switchRunningEvent({
     required JaxEvent pausedRunning,

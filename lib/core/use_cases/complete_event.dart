@@ -1,3 +1,4 @@
+import '../entities/execution_capabilities.dart';
 import '../entities/completed_record.dart';
 import '../entities/event_status.dart';
 import '../errors/domain_failure.dart';
@@ -12,24 +13,36 @@ class CompleteEvent {
   Future<CompletedRecord> call(String id, {DateTime? endTime}) async {
     final current = await repository.getEvent(id);
     if (current == null) throw const DomainFailure('事件不存在');
-    if (current.status != EventStatus.running &&
-        current.status != EventStatus.waiting) {
-      throw const DomainFailure('只有正在进行或等待中的事件可以完成');
+    if (!current.status.canComplete) {
+      throw const DomainFailure('只有正在进行、已暂停或等待中的事件可以完成');
     }
     if (current.status == EventStatus.completed) {
       throw const DomainFailure('事件已经完成');
     }
     final timestamp = now().toUtc();
+    final segments = await repository.getRunSegments(id);
     if (current.status != EventStatus.running) {
+      if (current.status == EventStatus.paused &&
+          segments.any((s) => s.endedAt == null)) {
+        throw const DomainFailure('暂停状态存在未关闭的执行段，请检查执行数据');
+      }
       final completed = current.copyWith(
         status: EventStatus.completed,
         completedAt: timestamp,
         updatedAt: timestamp,
       );
-      await repository.updateEvent(completed);
-      return CompletedRecord(event: completed, duration: Duration.zero);
+      await repository.updateEvent(
+        completed,
+        expectedPaused: current.status == EventStatus.paused ? current : null,
+      );
+      return CompletedRecord(
+        event: completed,
+        duration: segments.fold(
+          Duration.zero,
+          (total, s) => total + s.durationAt(timestamp),
+        ),
+      );
     }
-    final segments = await repository.getRunSegments(id);
     final open = segments
         .where((segment) => segment.endedAt == null)
         .firstOrNull;

@@ -1,3 +1,5 @@
+import '../entities/routine.dart';
+import '../services/temporal_routine.dart';
 import 'sync_contract.dart';
 import '../entities/world_node_ids.dart';
 
@@ -60,34 +62,61 @@ class SyncSnapshotValidator {
           }
           final enabled = p['timeRecommendationEnabled'];
           final quickAction = p['showInHomeQuickActions'];
-          if (quickAction is! int || !{0, 1}.contains(quickAction) ||
+          if (quickAction is! int ||
+              !{0, 1}.contains(quickAction) ||
               (quickAction == 1 && p['routineType'] != 'onDemand')) {
             issues.add('routine-home-quick-action:${record.metadata.id}');
           }
           final start = p['timeRecommendationStartMinute'];
           final end = p['timeRecommendationEndMinute'];
+          final latest = p['timeRecommendationLatestEndMinute'];
           final reason = p['timeRecommendationReason'];
           bool validMinute(Object? value) =>
               value is int && value >= 0 && value < 1440;
           if (enabled is! int || !{0, 1}.contains(enabled)) {
             issues.add('routine-time-enabled:${record.metadata.id}');
           } else if (enabled == 0) {
-            if (start != null || end != null || reason != null) {
+            if (start != null ||
+                end != null ||
+                latest != null ||
+                reason != null) {
               issues.add('routine-time-disabled-fields:${record.metadata.id}');
             }
           } else if (p['routineType'] != 'scheduled' ||
               !validMinute(start) ||
               !validMinute(end) ||
+              !validMinute(latest) ||
               start == end ||
               (reason != null &&
                   (reason is! String || reason.trim().isEmpty))) {
             issues.add('routine-time-configuration:${record.metadata.id}');
           }
+          if (enabled == 1 &&
+              validMinute(start) &&
+              validMinute(end) &&
+              validMinute(latest)) {
+            try {
+              TemporalRoutine.validate(
+                RoutineTimeRecommendation(
+                  startMinute: start as int,
+                  endMinute: end as int,
+                  latestEndMinute: latest as int,
+                ),
+              );
+            } on Object {
+              issues.add('routine-temporal-order:${record.metadata.id}');
+            }
+          }
         case SyncEntityKind.routineExecution:
           if (!has(SyncEntityKind.routine, p['routineSyncId'])) {
             issues.add('execution-owner:${record.metadata.id}');
           }
-          if (!{'running', 'paused', 'completed'}.contains(p['status'])) {
+          if (!{
+            'running',
+            'paused',
+            'waiting',
+            'completed',
+          }.contains(p['status'])) {
             issues.add('execution-status:${record.metadata.id}');
           }
         case SyncEntityKind.routineRunSegment:
@@ -157,6 +186,16 @@ class SyncSnapshotValidator {
             issues.add('plan-round:${record.metadata.id}');
           }
         case SyncEntityKind.planItem:
+          final promotedId = p['promotedWorldNodeSyncId'];
+          if (promotedId != null) {
+            if (promotedId is! String ||
+                !has(SyncEntityKind.worldNode, promotedId)) {
+              issues.add('plan-item-promoted-world-node:${record.metadata.id}');
+            }
+            if (!{'next', 'draft'}.contains(p['status'])) {
+              issues.add('plan-item-reference-status:${record.metadata.id}');
+            }
+          }
           if (!has(SyncEntityKind.plan, p['planSyncId'])) {
             issues.add('plan-item-plan:${record.metadata.id}');
           }
@@ -235,6 +274,15 @@ class SyncSnapshotValidator {
       if (event != null &&
           (status == 'done') != (event.payload['status'] == 'completed')) {
         issues.add('plan-item-event-status-mismatch:${item.metadata.id}');
+      }
+    }
+    final references = <String>{};
+    for (final item in live.values.where(
+      (r) => r.kind == SyncEntityKind.planItem,
+    )) {
+      final target = item.payload['promotedWorldNodeSyncId'];
+      if (target is String && !references.add(target)) {
+        issues.add('duplicate-promotion-reference:$target');
       }
     }
     final activeByNode = <String, int>{};

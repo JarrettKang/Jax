@@ -14,7 +14,7 @@ class GreetingResolver {
       >= 14 && < 17 => '下午好',
       _ => '晚上好',
     };
-    return '$period，我是 Jax';
+    return period;
   }
 
   DateTime nextChangeAfter(DateTime instant) {

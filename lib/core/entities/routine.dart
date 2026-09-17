@@ -7,10 +7,15 @@ class RoutineTimeRecommendation {
     required this.startMinute,
     required this.endMinute,
     this.reason,
-  });
+    int? latestEndMinute,
+  }) : latestEndMinute = latestEndMinute ?? endMinute;
 
   final int startMinute;
   final int endMinute;
+  final int latestEndMinute;
+  int get recommendStartTime => startMinute;
+  int get idealEndTime => endMinute;
+  int get latestEndTime => latestEndMinute;
   final String? reason;
 }
 
@@ -84,7 +89,7 @@ class Routine {
   );
 }
 
-enum RoutineExecutionStatus { running, paused, completed }
+enum RoutineExecutionStatus { running, paused, completed, waiting }
 
 class RoutineExecution {
   const RoutineExecution({

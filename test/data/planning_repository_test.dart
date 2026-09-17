@@ -126,7 +126,7 @@ void main() {
     expect((await plans.getPlanItems(planA.id)).map((i) => i.id), ['b', 'a']);
   });
 
-  test('quick refinement appends atomically as draft or next', () async {
+  test('quick refinement appends atomically as next', () async {
     final node = _node('11111111-1111-4111-8111-111111111111', 'A');
     await nodes.insertWorldNode(node);
     final plan = await plans.createPlan(
@@ -156,7 +156,7 @@ void main() {
       now: _time(4),
     );
 
-    expect(draft.status, PlanItemStatus.draft);
+    expect(draft.status, PlanItemStatus.next);
     expect(next.status, PlanItemStatus.next);
     expect((await plans.getPlanItems(plan.id)).map((item) => item.id), [
       'source',
@@ -258,7 +258,7 @@ void main() {
       await plans.setPlanStatus(plan.id, PlanStatus.ended, _time(4));
       expect((await plans.getPlanItems(plan.id)).map((i) => i.status), [
         PlanItemStatus.next,
-        PlanItemStatus.draft,
+        PlanItemStatus.next,
         PlanItemStatus.dropped,
       ]);
       expect(

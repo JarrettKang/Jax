@@ -9,7 +9,7 @@ import '../support/memory_repository.dart';
 import '../support/ui_navigation.dart';
 
 void main() {
-  testWidgets('completed flat Event remains in Today with completed state', (
+  testWidgets('completed flat Event exits Today and preserves history', (
     tester,
   ) async {
     final start = DateTime.utc(2026);
@@ -39,7 +39,9 @@ void main() {
     await openEventMenu(tester, 'one');
     await tester.tap(find.byKey(const ValueKey('complete-one')));
     await tester.pumpAndSettle();
-    expect(find.text('完成任务'), findsOneWidget);
-    expect(find.text('已完成'), findsOneWidget);
+    expect(find.text('完成任务'), findsNothing);
+    expect(find.text('已完成'), findsNothing);
+    expect(repository.events.single.status, EventStatus.completed);
+    expect(repository.segments.single.endedAt, end);
   });
 }

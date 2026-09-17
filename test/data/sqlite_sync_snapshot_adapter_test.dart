@@ -171,6 +171,7 @@ void main() {
           'showInHomeQuickActions',
           'timeRecommendationStartMinute',
           'timeRecommendationEndMinute',
+          'timeRecommendationLatestEndMinute',
           'timeRecommendationReason',
           'order',
         },

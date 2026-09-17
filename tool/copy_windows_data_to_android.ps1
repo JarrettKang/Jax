@@ -1,19 +1,37 @@
+<#
+.SYNOPSIS
+WARNING: destructive ONE-WAY developer copy, not Sync.
+.DESCRIPTION
+Default dry-run. Requires explicit source, device, package and -Apply -ConfirmOverwrite.
+Source and target backups are verified before overwrite; round-trip verification and rollback follow.
+No build, install, migration, uninstall or clear. See docs/TOOLS.md.
+.EXAMPLE
+./tool/copy_windows_data_to_android.ps1 -SourceDatabase <db> -Device <serial> -Package com.example.jax
+#>
 [CmdletBinding()]
 param(
-    [string]$Device,
-    [string]$SourceDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
-    [string]$Package = 'com.example.jax',
-    [string]$BackupRoot = (Join-Path $PSScriptRoot '..\.debug_backups\android'),
-    [switch]$SkipBuild,
-    [switch]$RestoreLatest
+ [string]$Device, [string]$SourceDatabase, [string]$Package,
+ [string]$BackupRoot = (Join-Path $PSScriptRoot '..\.local_private\backups\android-copy'),
+ [string]$AdbPath, [string]$DartPath,
+ [switch]$Apply, [switch]$ConfirmOverwrite, [switch]$Help
 )
-
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$expectedSchema = 11
-$databaseRelativePath = 'databases/jax.db'
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
+. (Join-Path $PSScriptRoot 'tool_locator.ps1')
+trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
+if (-not $SourceDatabase -or -not $Device -or -not $Package) { throw 'Explicit -SourceDatabase, -Device and -Package required. Multiple Android devices are connected only by explicit serial.' }
+Assert-JaxPackage $Package
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-
+$databaseRelativePath = 'databases/jax.db'
+$script:adbPath = Resolve-JaxTool adb $AdbPath
+$script:dartPath = Resolve-JaxTool dart $DartPath
+$script:deviceSerial = Select-JaxDevice $script:adbPath $Device
+Assert-JaxDebugDevice $script:adbPath $script:deviceSerial $Package
+Assert-JaxPrivateOutput $BackupRoot
+Write-Host "WARNING: destructive one-way overwrite, NOT Sync.`nPLAN: replace database`nTARGET: <selected-device> / $Package / <explicit-source>`nCHANGES: overwrite Android database`nSAFETY CHECKS: Debug identity, current schema, verified backup, round-trip"
+Write-Verbose "Source=$SourceDatabase Device=$Device Package=$Package"
+if (-not $Apply -or -not $ConfirmOverwrite) { Write-Host 'DRY_RUN: no device writes. Both -Apply -ConfirmOverwrite required.'; return }
 function Write-Step([string]$Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
 function Invoke-Checked([string]$File, [string[]]$Arguments) {
     if ([IO.Path]::GetExtension($File) -in @('.bat', '.cmd')) {
@@ -22,7 +40,7 @@ function Invoke-Checked([string]$File, [string[]]$Arguments) {
         $commandOutput = & $File @Arguments
     }
     $commandExitCode = $LASTEXITCODE
-    foreach ($line in $commandOutput) { Write-Host $line }
+    foreach ($line in $commandOutput) { Write-Verbose $line }
     if ($commandExitCode -ne 0) { throw "Command failed ($commandExitCode): $File $($Arguments -join ' ')" }
 }
 function Invoke-Adb([string[]]$Arguments) { Invoke-Checked $script:adbPath (@('-s', $script:deviceSerial) + $Arguments) }
@@ -37,21 +55,13 @@ function Export-AdbFile([string]$RemoteRelativePath, [string]$Destination) {
     $start.UseShellExecute = $false
     $start.RedirectStandardOutput = $true
     $start.RedirectStandardError = $true
-    foreach ($argument in @('-s', $script:deviceSerial, 'exec-out', 'run-as', $Package, 'cat', $RemoteRelativePath)) { [void]$start.ArgumentList.Add($argument) }
+    $start.Arguments = "-s $($script:deviceSerial) exec-out run-as $Package cat $RemoteRelativePath"
     $process = [Diagnostics.Process]::Start($start)
     $stream = [IO.File]::Create($Destination)
     try { $process.StandardOutput.BaseStream.CopyTo($stream) } finally { $stream.Dispose() }
     $errorText = $process.StandardError.ReadToEnd()
     $process.WaitForExit()
     if ($process.ExitCode -ne 0) { Remove-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue; throw "Could not back up $RemoteRelativePath`: $errorText" }
-}
-function Get-Tool([string]$Name, [string[]]$Candidates) {
-    foreach ($candidate in $Candidates) {
-        if ($candidate -and (Test-Path -LiteralPath $candidate)) { return (Resolve-Path -LiteralPath $candidate).Path }
-    }
-    $command = Get-Command $Name -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
-    throw "$Name was not found."
 }
 function Assert-SafePackage {
     $path = Get-AdbText @('shell', 'pm', 'path', $Package)
@@ -65,7 +75,7 @@ function Test-AndroidFile([string]$RelativePath) {
 }
 function New-AndroidBackup([string]$Directory) {
     New-Item -ItemType Directory -Path $Directory -Force | Out-Null
-    if (-not (Test-AndroidFile $databaseRelativePath)) { Write-Host 'Android app has no existing database; no backup is required.'; return $null }
+    if (-not (Test-AndroidFile $databaseRelativePath)) { throw 'Existing target database required for verified backup.' }
     $rawMain = Join-Path $Directory 'jax.db'
     Export-AdbFile $databaseRelativePath $rawMain
     foreach ($suffix in @('-wal', '-shm')) {
@@ -73,22 +83,10 @@ function New-AndroidBackup([string]$Directory) {
         if (Test-AndroidFile $remote) { Export-AdbFile $remote (Join-Path $Directory "jax.db$suffix") }
     }
     $normalized = Join-Path $Directory 'jax_android_before_import.db'
-    Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'snapshot-any', $rawMain, $normalized)
+    Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'snapshot', $rawMain, $normalized)
     foreach ($file in @($rawMain, "$rawMain-wal", "$rawMain-shm")) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
-    Write-Host "Android backup: $normalized"
+    Write-Host 'Android backup verified privately.'
     return $normalized
-}
-function Assert-AndroidCurrentSchema {
-    $temporary = Join-Path ([IO.Path]::GetTempPath()) "jax-android-schema-$([guid]::NewGuid().ToString('N')).db"
-    try {
-        Export-AdbFile $databaseRelativePath $temporary
-        foreach ($suffix in @('-wal', '-shm')) {
-            if (Test-AndroidFile "$databaseRelativePath$suffix") { Export-AdbFile "$databaseRelativePath$suffix" "$temporary$suffix" }
-        }
-        Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'verify', $temporary)
-    } finally {
-        foreach ($file in @($temporary, "$temporary-wal", "$temporary-shm")) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
-    }
 }
 function Install-Database([string]$Database, [switch]$AllowAnySchema) {
     $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
@@ -110,70 +108,26 @@ function Install-Database([string]$Database, [switch]$AllowAnySchema) {
     } finally { Invoke-Adb @('shell', 'rm', '-f', $remote) }
 }
 
-$androidHome = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { '<android-sdk>' }
-$script:adbPath = Get-Tool 'adb' @((Join-Path $androidHome 'platform-tools\adb.exe'))
-$script:dartPath = Get-Tool 'dart' @('<flutter-sdk>\bin\dart.bat')
-$flutterPath = Get-Tool 'flutter' @('<flutter-sdk>\bin\flutter.bat')
-
-$deviceLines = & $script:adbPath devices | Select-Object -Skip 1 | Where-Object { $_ -match '\S' }
-$ready = @($deviceLines | Where-Object { $_ -match '^([^\s]+)\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
-$unauthorized = @($deviceLines | Where-Object { $_ -match '\s+unauthorized$' })
-if ($unauthorized.Count -gt 0) { throw 'An Android device is unauthorized. Accept the USB debugging prompt, then rerun.' }
-if ($Device) {
-    if ($ready -notcontains $Device) { throw "Requested device is not connected and authorized: $Device" }
-    $script:deviceSerial = $Device
-} elseif ($ready.Count -eq 0) { throw 'No authorized Android device is connected.'
-} elseif ($ready.Count -gt 1) { throw 'Multiple Android devices are connected. Rerun with -Device <serial>.'
-} else { $script:deviceSerial = $ready[0] }
 
 Push-Location $projectRoot
-$snapshot = $null
+$backup = $null
+$overwriteStarted = $false
 try {
-    Write-Step "Target device: $script:deviceSerial"
-    if (-not $SkipBuild -and -not $RestoreLatest) {
-        Write-Step 'Building and updating the current Android Debug APK'
-        Invoke-Checked $flutterPath @('build', 'apk', '--debug')
-        Invoke-Adb @('install', '-r', (Join-Path $projectRoot 'build\app\outputs\flutter-apk\app-debug.apk'))
-    }
-    Assert-SafePackage
-    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    if (-not $RestoreLatest) {
-        if (-not (Test-Path -LiteralPath $SourceDatabase)) { throw "Windows source database does not exist: $SourceDatabase" }
-        $snapshotDirectory = Join-Path $projectRoot '.debug_snapshots'
-        New-Item -ItemType Directory -Path $snapshotDirectory -Force | Out-Null
-        $snapshot = Join-Path $snapshotDirectory "jax_windows_$timestamp.db"
-        Write-Step 'Creating a transaction-consistent Windows snapshot'
-        Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'snapshot', $SourceDatabase, $snapshot)
-    }
-    $backupDirectory = Join-Path $BackupRoot $timestamp
-    Write-Step 'Stopping Android Debug app and backing up its database'
-    Invoke-Adb @('shell', 'am', 'force-stop', $Package)
-    $backup = New-AndroidBackup $backupDirectory
-    Write-Step 'Starting the current Debug app once to apply its normal schema migrations'
-    Invoke-Adb @('shell', 'monkey', '-p', $Package, '-c', 'android.intent.category.LAUNCHER', '1')
-    Start-Sleep -Seconds 2
-    Invoke-Adb @('shell', 'am', 'force-stop', $Package)
-    Assert-AndroidCurrentSchema
-
-    if ($RestoreLatest) {
-        $restore = Get-ChildItem -LiteralPath $BackupRoot -Filter 'jax_android_before_import.db' -File -Recurse |
-            Where-Object { $_.DirectoryName -ne $backupDirectory } |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if (-not $restore) { throw "No Android backup found under $BackupRoot" }
-        Write-Step "Restoring Android backup: $($restore.FullName)"
-        Install-Database $restore.FullName -AllowAnySchema
-    } else {
-        Write-Host "Source: $SourceDatabase"
-        Write-Host "Destination: $script:deviceSerial / $Package / $databaseRelativePath"
-        Write-Step 'Installing verified snapshot into Android Debug sandbox'
-        Install-Database $snapshot
-    }
-    Write-Step 'Launching Android Jax'
-    Invoke-Adb @('shell', 'monkey', '-p', $Package, '-c', 'android.intent.category.LAUNCHER', '1')
-    Write-Host '数据已复制到 Android。'
-    Write-Host '这不是双向同步；此后 Windows 和 Android 的新记录不会自动合并。'
-    if ($backup) { Write-Host "导入前备份保存在：$backup" }
-} finally {
-    if ($snapshot -and (Test-Path -LiteralPath $snapshot)) { Remove-Item -LiteralPath $snapshot -Force }
-    Pop-Location
-}
+ $session = (Get-Date -Format 'yyyyMMdd_HHmmss') + '_' + [guid]::NewGuid().ToString('N')
+ $directory = Join-Path $BackupRoot $session
+ New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
+ $snapshot = Join-Path $directory 'source.db'
+ Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'snapshot', $SourceDatabase, $snapshot)
+ Invoke-Adb @('shell', 'am', 'force-stop', $Package)
+ $backup = New-AndroidBackup $directory
+ Invoke-Checked $script:dartPath @('run', 'tool/database_snapshot.dart', 'verify', $backup)
+ $overwriteStarted = $true
+ Install-Database $snapshot
+ Write-Host 'COPY_COMPLETE: schema/integrity/FK/round-trip verified. Private backup retained; app remains stopped.'
+} catch {
+ if ($overwriteStarted -and $backup) {
+  try { Install-Database $backup; Write-Host 'ROLLBACK_VERIFIED: app remains stopped.' }
+  catch { throw 'CRITICAL_ROLLBACK_FAILURE: stop and preserve backup. No automatic retry.' }
+ }
+ throw 'COPY_FAILED: stopped; private backup retained if acquired. No destructive install fallback.'
+} finally { Pop-Location }

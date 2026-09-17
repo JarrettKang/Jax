@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jax/core/entities/plan.dart';
+import 'package:jax/core/entities/plan_review_note.dart';
 import 'package:jax/core/entities/plan_item.dart';
 import 'package:jax/core/entities/world_node.dart';
 import 'package:jax/core/repositories/planning_repository.dart';
@@ -43,13 +44,17 @@ void main() {
       find.byKey(const ValueKey('focused-world-node-$nodeId')),
       findsOneWidget,
     );
-    expect(find.textContaining('暂无当前计划'), findsOneWidget);
-    expect(find.byKey(const ValueKey('add-plan-for-$nodeId')), findsOneWidget);
+    expect(find.textContaining('暂无当前计划'), findsNothing);
+    expect(find.text('未分类'), findsOneWidget);
+    expect(find.byIcon(Icons.visibility_outlined), findsNothing);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('focused-world-node-$nodeId')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('plan-detail')), findsOneWidget);
+    expect(controller.plans, isEmpty);
   });
 
-  testWidgets('creates Plan and quickly toggles a PlanItem next state', (
-    tester,
-  ) async {
+  testWidgets('creates next PlanItem without a status toggle', (tester) async {
     const nodeId = '11111111-1111-4111-8111-111111111111';
     final node = WorldNode(
       id: nodeId,
@@ -94,10 +99,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add-plan-item')));
     await tester.pumpAndSettle();
     expect(find.text('设计 schema'), findsOneWidget);
-    expect(plans.items.single.status, PlanItemStatus.draft);
+    expect(plans.items.single.status, PlanItemStatus.next);
 
-    await tester.tap(find.byKey(const ValueKey('toggle-next-generated-1')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('toggle-next-generated-1')), findsNothing);
+    expect(find.text('草稿'), findsNothing);
+    expect(find.text('设为下一步'), findsNothing);
+    expect(find.text('加入今日'), findsNothing);
     expect(plans.items.single.status, PlanItemStatus.next);
   });
 }
@@ -114,6 +121,8 @@ class _WorldRepository implements WorldNodeRepository {
 }
 
 class _PlanningRepository implements PlanningRepository {
+  @override
+  Future<List<PlanReviewNote>> getPlanReviewNotes(String planId) async => [];
   final plans = <Plan>[];
   final items = <PlanItem>[];
 
@@ -154,7 +163,7 @@ class _PlanningRepository implements PlanningRepository {
     required String planId,
     required String title,
     String? note,
-    PlanItemStatus initialStatus = PlanItemStatus.draft,
+    PlanItemStatus initialStatus = PlanItemStatus.next,
     required DateTime now,
   }) async {
     final item = PlanItem(

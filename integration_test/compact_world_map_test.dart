@@ -52,7 +52,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('看分层倾斜角'), findsOneWidget);
-    expect(find.text('2 个下一步'), findsOneWidget);
+    expect(find.text('2 个下一步'), findsNothing);
+    expect(
+      controller
+          .itemsFor('fixture-plan')
+          .where((item) => item.status.name == 'next'),
+      hasLength(2),
+    );
     expect(find.text('尚无计划'), findsNothing);
     await exerciseWorldTreeBrowsing(
       tester,
