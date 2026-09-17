@@ -13,7 +13,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../test/support/world_map_fixture.dart';
 
-/// Install only as com.example.jax.worldfixture through the guarded installer.
+/// Install only as com.jarrett.jax.worldfixture through the guarded installer.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final directory = await Directory.systemTemp.createTemp('world-qa-');

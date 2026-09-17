@@ -2,15 +2,15 @@
 .SYNOPSIS
 WARNING: destructive ONE-WAY developer copy, not Sync.
 .DESCRIPTION
-Default dry-run. Requires explicit source, device, package and -Apply -ConfirmOverwrite.
+Default dry-run. Requires explicit source, device and -Apply -ConfirmOverwrite.
 Source and target backups are verified before overwrite; round-trip verification and rollback follow.
 No build, install, migration, uninstall or clear. See docs/TOOLS.md.
 .EXAMPLE
-./tool/copy_windows_data_to_android.ps1 -SourceDatabase <db> -Device <serial> -Package com.example.jax
+./tool/copy_windows_data_to_android.ps1 -SourceDatabase <db> -Device <serial> -Package com.jarrett.jax
 #>
 [CmdletBinding()]
 param(
- [string]$Device, [string]$SourceDatabase, [string]$Package,
+ [string]$Device, [string]$SourceDatabase, [string]$Package = 'com.jarrett.jax',
  [string]$BackupRoot = (Join-Path $PSScriptRoot '..\.local_private\backups\android-copy'),
  [string]$AdbPath, [string]$DartPath,
  [switch]$Apply, [switch]$ConfirmOverwrite, [switch]$Help
@@ -20,7 +20,7 @@ Set-StrictMode -Version Latest
 if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 . (Join-Path $PSScriptRoot 'tool_locator.ps1')
 trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
-if (-not $SourceDatabase -or -not $Device -or -not $Package) { throw 'Explicit -SourceDatabase, -Device and -Package required. Multiple Android devices are connected only by explicit serial.' }
+if (-not $SourceDatabase -or -not $Device -or -not $Package) { throw 'Explicit -SourceDatabase and -Device required; Package must be valid. Multiple Android devices are connected only by explicit serial.' }
 Assert-JaxPackage $Package
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $databaseRelativePath = 'databases/jax.db'

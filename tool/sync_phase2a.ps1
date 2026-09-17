@@ -2,7 +2,7 @@
 param(
     [string]$Device,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
-    [string]$Package,
+    [string]$Package = 'com.jarrett.jax',
     [string]$AdbPath,
     [string]$DartPath,
     [switch]$Help,
@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($Help) { Write-Output 'Read-only developer Debug comparison: stops apps and creates private snapshots; no business writes or apply mode. Example: ./tool/sync_phase2a.ps1 -Package com.example.jax -Device <serial> -WindowsDatabase <db>. WindowsDatabase defaults to APPDATA/Jax/jax.db; OutputRoot defaults to .local_private/sync-exports. Optional -Baseline, -OutputRoot, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md.'; return }
+if ($Help) { Write-Output 'Read-only developer Debug comparison: stops apps and creates private snapshots; no business writes or apply mode. Example: ./tool/sync_phase2a.ps1 -Package com.jarrett.jax -Device <serial> -WindowsDatabase <db>. WindowsDatabase defaults to APPDATA/Jax/jax.db; OutputRoot defaults to .local_private/sync-exports. Optional -Baseline, -OutputRoot, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md.'; return }
 . (Join-Path $PSScriptRoot 'tool_locator.ps1')
 trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
 Assert-JaxPackage $Package

@@ -6,7 +6,7 @@ param(
     [string]$Resolution,
     [string]$Confirmation,
     [string]$WindowsDatabase = (Join-Path $env:APPDATA 'Jax\jax.db'),
-    [string]$Package,
+    [string]$Package = 'com.jarrett.jax',
     [string]$AdbPath,
     [string]$DartPath,
     [switch]$Help,
@@ -24,7 +24,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($Help) { Write-Output 'WARNING developer-only Debug Sync. Default -Action Analyze creates private snapshots without business writes; apps may be stopped. Example: ./tool/sync_phase2b2.ps1 -Action Analyze -Package com.example.jax -Device <serial>. WindowsDatabase defaults to APPDATA/Jax/jax.db. Apply requires -Action Apply -Confirmation FIRST_REAL_DUAL_DEVICE_SYNC and verified backups; failure attempts rollback. Optional -Resolution, -WindowsDatabase, -StorageRoot, -BackupRoot, -OutputRoot, -Baseline, -BackupRetention, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md for all parameters and storage defaults.'; return }
+if ($Help) { Write-Output 'WARNING developer-only Debug Sync. Default -Action Analyze creates private snapshots without business writes; apps may be stopped. Example: ./tool/sync_phase2b2.ps1 -Action Analyze -Package com.jarrett.jax -Device <serial>. WindowsDatabase defaults to APPDATA/Jax/jax.db. Apply requires -Action Apply -Confirmation FIRST_REAL_DUAL_DEVICE_SYNC and verified backups; failure attempts rollback. Optional -Resolution, -WindowsDatabase, -StorageRoot, -BackupRoot, -OutputRoot, -Baseline, -BackupRetention, -AdbPath, -DartPath, -Verbose (private diagnostics). Multiple devices require -Device. See docs/TOOLS.md for all parameters and storage defaults.'; return }
 . (Join-Path $PSScriptRoot 'tool_locator.ps1')
 trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
 . (Join-Path $PSScriptRoot 'backup_retention.ps1')

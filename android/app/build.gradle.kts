@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -12,8 +14,50 @@ check(!worldFixture || gradle.startParameter.taskNames.none { it.contains("relea
     "World fixture entry points are Debug-only; never publish a fixture as Jax."
 }
 
+// Secrets are local only. Environment values take precedence per field.
+val localSigning = Properties()
+val localSigningFile = rootProject.file("key.properties")
+if (localSigningFile.isFile) {
+    localSigningFile.inputStream().use { localSigning.load(it) }
+}
+fun signingValue(environment: String, property: String): String? =
+    providers.environmentVariable(environment).orNull?.takeIf { it.isNotBlank() }
+        ?: localSigning.getProperty(property)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = signingValue("JAX_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = signingValue("JAX_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = signingValue("JAX_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = signingValue("JAX_KEY_PASSWORD", "keyPassword")
+val releaseStoreFile = releaseStorePath?.let { rootProject.file(it) }
+
+val validateJaxReleaseSigning = tasks.register("validateJaxReleaseSigning") {
+    group = "verification"
+    description = "Require private release signing credentials; never use the debug key."
+    doLast {
+        if (releaseStorePath == null || releaseStorePassword == null ||
+            releaseKeyAlias == null || releaseKeyPassword == null) {
+            throw GradleException(
+                "Release signing credentials not configured. Set JAX_KEYSTORE_PATH, " +
+                "JAX_KEYSTORE_PASSWORD, JAX_KEY_ALIAS and JAX_KEY_PASSWORD, or create " +
+                "ignored android/key.properties from key.properties.example. " +
+                "Debug builds do not require these credentials."
+            )
+        }
+        if (releaseStoreFile?.isFile != true) {
+            throw GradleException("Configured release keystore is missing or is not a file.")
+        }
+    }
+}
+// Covers assembleRelease/bundleRelease and aggregate tasks that include Release.
+// The check also precedes AGP's signing validation, yielding a useful error.
+tasks.configureEach {
+    if (name == "preReleaseBuild" || name == "validateSigningRelease") {
+        dependsOn(validateJaxReleaseSigning)
+    }
+}
+
 android {
-    namespace = "com.example.jax"
+    namespace = "com.jarrett.jax"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -23,9 +67,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.jax"
-        manifestPlaceholders["jaxAppLabel"] = "jax"
+        applicationId = "com.jarrett.jax"
+        manifestPlaceholders["jaxAppLabel"] = "Jax"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -38,6 +81,15 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseStoreFile
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
     buildTypes {
         debug {
             if (worldFixture) {
@@ -46,9 +98,7 @@ android {
             }
         }
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

@@ -2,29 +2,30 @@
 
 ## Candidate identity
 
-Verification date: 2026-09-17. This is a local public-source candidate, not a
-published release. The candidate consists of **160 cleaned historical commits
-plus one RC consolidation commit: 161 commits**. The historical base is
-`cab33a7d1d1f604aea9aa002b4ceb91c811bc031`; no historical commit was rewritten again.
-Author and committer are Jarrett <212651844+JarrettKang@users.noreply.github.com>.
+Verification dates: 2026-09-17 (baseline/native tests) and 2026-09-18 (release signing). This is a local public-source candidate, not a
+published release. Phase 4 froze 161 commits at
+`1c202e00d207b4f2e379523ae749f4ddb4b74362` (160 cleaned historical commits plus
+one RC consolidation). Phase 5 adds one normal commit,
+`Establish Jax release identity and MIT licensing`, for a total of 162 commits.
+Resolve that commit with git log; its exact hash is recorded in the private final
+report. No historical commit has been rewritten again.
+Author and committer identity remains Jarrett <212651844+JarrettKang@users.noreply.github.com>.
 
-Final candidate reference: **HEAD, the commit adding this document update**, with
-subject `Prepare release candidate for public source`. Resolve its exact object
-ID using `git rev-parse HEAD` at this freeze, or locate that subject after later
-work. A commit cannot embed its own final hash; the exact hash and post-commit
-scan results are recorded in the separate final verification report, avoiding
-another documentation-only commit or an amend cycle.
+Phase 5 establishes product name **Jax**, Android applicationId and namespace
+**com.jarrett.jax**, and the root **MIT License, Copyright (c) 2026 Jarrett**.
+The version remains **0.1.0+1**. The configurable assistantName still defaults to
+**Butler**. Windows technical executable/package identifiers remain jax/jax.exe.
+See [Release identity](RELEASE_IDENTITY.md) and
+[Android release signing](ANDROID_RELEASE_SIGNING.md).
 
-The approved public tree contains **389 files**. Product source, platform files,
-unit/widget tests, approved native tests, Phase 2 safety tooling, selected public
-documents and ignore rules are included. Private audit material, replacement/blob
-maps, old-to-new commit maps, raw logs, databases, backups and runtime screenshots
-are excluded. Two temporary Phase 4A diagnostic entrypoints remain in private
-verification evidence rather than extending the frozen public Include List.
-
-The existing package version remains `0.1.0+1`; package identity, license,
-production signing and publication are later decisions. No remote, tag or GitHub
-push was created.
+Release signing is configured independently of Debug, with private environment
+or ignored local configuration. Missing credentials fail explicitly; there is
+no Debug fallback. The normal Release APK builds successfully, passes apksigner
+verification, matches the configured release key certificate and differs from
+Debug. Release is not debuggable. Key-backup completion still requires owner
+confirmation; successful signing is not proof of offline backup.
+No remote, tag or GitHub push was created. Private audit evidence, keystores,
+passwords, raw logs, databases and backups remain outside the public source tree.
 
 ## Supported platforms
 
@@ -38,8 +39,8 @@ physical-device or clean-machine release certification.
 | Item | Source / observed fact |
 |---|---|
 | Dart package | `jax` in pubspec.yaml |
-| Android applicationId / namespace | `com.example.jax` / `com.example.jax` |
-| Windows native window title / executable | `jax` / `jax.exe` |
+| Android applicationId / namespace | `com.jarrett.jax` / `com.jarrett.jax` |
+| Windows native window title / executable | `Jax` / `jax.exe` |
 | Flutter used | 3.47.1 stable, revision 6655482ec06e547f90abf8ae7590466f4415978d |
 | Flutter lower bound | pubspec.lock reports >=3.44.0; no separate Flutter constraint in pubspec.yaml; lower bound not runtime-tested |
 | Dart constraint / used | ^3.13.1 / 3.13.1 |
@@ -96,52 +97,43 @@ These are implementation and automated-test facts, not a claim that every page
 has received physical-device subjective acceptance. Recommendations are rules
 implemented in local code; no AI service is present.
 
-## Final verification results
+## Phase 5 verification results
 
-The final candidate source was freshly checked with `flutter analyze` and
-`flutter test`: **No issues found; 695 passed, 0 failed, 0 skipped**, across
-129 test files. The count is unchanged; native visibility fixes and host async completion
-synchronization update existing tests without adding cases. Parameterized tests account for the
-difference between source declarations and executed cases.
+Fresh checks after the identity/signing changes: `flutter analyze` reported no
+issues; `flutter test` completed **695 passed, 0 failed, 0 skipped**, across
+129 files, with no late error events. No database schema/business behavior was
+changed for Phase 5.
 
-Seven PowerShell tool contract groups passed: android_data_transfer, copy_safety,
-install_android_debug, sync_phase2a, sync_phase2b2, tool_safety and
-windows_debug_acceptance. These use isolated fake/fixture dependencies; they do
-not establish real-user-device Sync acceptance.
+All seven PowerShell tool contract groups passed: android_data_transfer,
+copy_safety, install_android_debug, sync_phase2a, sync_phase2b2, tool_safety and
+windows_debug_acceptance. Installer cases additionally verify the new default
+package and rejection of the legacy package before ADB invocation. These are
+isolated fixture checks, not real-user-device Sync acceptance.
 
 ### Native verification
 
+All executions below were rerun for Phase 5, using isolated synthetic data.
+Android started on a fresh API 36 emulator with the new package absent.
+
 | Scenario | Windows | Android API 36 emulator |
 |---|---|---|
-| Clean real main entry, defaults, schema and navigation | Pass, retained baseline | Pass, retained baseline |
-| Native SQLite persistence contract | Not applicable | Pass once with DDS, Phase 4A |
-| Today execution, Record and database restart | Pass, rerun after visibility fix | Pass, final run |
-| Routine management | Pass, rerun after final visibility fix | Pass, final run |
-| Routine rapid/alternating reorder persistence | Pass, retained baseline | Pass, final run |
-| Compact World leaves business fingerprint unchanged | Pass, retained baseline | Pass, final run |
-| World focus gestures | Pass, retained baseline | Pass, final run |
-| Legacy category preference compatibility | Pass, retained baseline | Pass, final run |
+| Clean real main entry, defaults, schema and navigation | Pass | Pass |
+| Native SQLite persistence contract | Not applicable | Pass with DDS |
+| Today execution, Record and database restart | Pass | Pass |
+| Routine management | Pass | Pass |
+| Routine rapid/alternating reorder persistence | Pass | Pass |
+| Compact World leaves business fingerprint unchanged | Pass | Pass |
+| World focus gestures | Pass | Pass |
+| Legacy category preference compatibility | Pass | Pass |
 
-Final evidence covers **7 Windows and 8 Android platform executions**, with
-0 unresolved case failures and 0 skipped cases. This combines unchanged-code
-baseline evidence with the explicitly identified reruns; it is not a claim that
-all 15 executions occurred in this final invocation.
+**7 Windows and 8 Android executions passed**, with zero failed/skipped cases.
+No VM-service-disappearance exception occurred in these runs. That observation
+does not erase the earlier intermittent harness limitation described below.
+No old-package data migration, real-device uninstall, clear-data operation or
+real database overwrite was performed.
 
-The first Android Today/Record and Routine management attempts missed controls
-outside the visible scrolling viewport or behind bottom navigation. Test-only
-fixes scroll controls into view and assert hit-testability before tapping. After
-scrolling to reactivate a routine, the test also scrolls back to the lazily built
-creation control. All business-state, database, duration, restart and integrity
-assertions remain; no product UI or database code was changed. The affected
-Windows tests were rerun. Initial failures remain in private verification records.
-
-The first final host run emitted 695 success events but subsequently failed on
-a PlanningController notification after the test disposed the app. It is not
-counted as a pass. The affected home-category navigation test used a fixed delay
-for native database work; it now waits for both controllers to finish loading
-before teardown and checks for framework exceptions. The affected file and the
-complete final suite were rerun. This test-only synchronization does not claim
-to prove production cancellation semantics for disposal during a pending load.
+The following three-layer database evidence is retained from Phase 4/4A;
+the SQLite integration contract additionally passed in the Phase 5 run above.
 
 ### Three layers of database evidence
 
@@ -167,28 +159,23 @@ or sqflite bug. The exact underlying intermittent RPC cause is not fully closed.
 The database-specific RC blocker was explicitly released based on the three
 independent evidence layers; the limitation has not been hidden or called fixed.
 
-## Build results
-
-The final Android build sequence was `flutter clean`, `flutter pub get`,
-`flutter analyze`, `flutter build apk --debug`, then `flutter build apk --release`.
-Both APKs were generated from the normal **lib/main.dart** entry, replacing the
-previous diagnostic/test APK. A fresh final analyze and full test followed.
+## Phase 5 build results
 
 | Artifact / check | Result and boundary |
 |---|---|
-| Android Debug APK | Pass, clean normal-entry build |
-| Android Release APK | Pass; **uses Debug signing**, not production signed or Play Store ready |
-| Package / version | com.example.jax; 0.1.0+1, unchanged |
-| Windows native verification | Seven-case baseline passed; both changed test paths rerun successfully |
-| Windows Release | Prior Phase 4 x64 build and complete bundle verification retained; product and Windows platform code unchanged |
-| Windows fresh-data startup | Retained isolated Release launch survived startup, created schema24, integrity=ok, FK violations=0 |
+| Android Debug APK | Pass without signing secrets; normal lib/main.dart entry restored after native tests |
+| Android Release without credentials | Expected failure with explicit missing-signing-credentials message; no Debug fallback |
+| Android Release with real credentials | Pass; normal entry, valid signature matching intended key and distinct from Debug; not debuggable |
+| Package / label / version | com.jarrett.jax / Jax / 0.1.0+1 |
+| Windows Release | Fresh x64 build passed |
+| Windows metadata | ProductName/FileDescription Jax; CompanyName Jarrett; Copyright (C) 2026 Jarrett; jax.exe; 0.1.0+1 |
 
-The Windows Release process was explicitly stopped after inspection; this is not
-proof of graceful release shutdown. Its complete verified bundle was retained
-privately before the final clean. Tests that changed only test helpers do not
-invalidate the unchanged production Release binary. No final Android Release
-runtime or physical-device claim is made. Local installed SDKs and dependency
-caches were used; a fresh Windows VM/dependency installation remains unverified.
+The earlier Phase 4 APK used the old package and Debug signing; it is not a
+Phase 5 Release artifact. The Phase 5 Release certificate was verified against both the intended
+private key and Debug certificate. This is a locally release-signed APK, not a
+Play Store submission or real-device Release-runtime acceptance claim.
+Local installed SDKs and dependency caches were used; clean-machine setup
+remains outside this phase.
 
 ## Privacy and Git boundary
 
@@ -206,9 +193,11 @@ Ignore rules and safety tools may mention generic private-output directories or
 synthetic fixtures. Such policy references do not include those directories or
 private evidence in Git. They are distinguished from sensitive-value hits.
 
-## Remaining release work (Phase 5)
+## Remaining release work
 
-- Decide LICENSE, final package identity/version and production signing.
+- Confirm offline key backup with its owner; a checklist alone is not backup evidence.
+- Replace Flutter template launcher icons before claiming finished Jax branding.
+- Complete distribution-level dependency/license review; see THIRD_PARTY_NOTICES.md.
 - Rewrite README and reconcile stale public architecture/data-model links.
 - Prepare synthetic-data screenshots and CI; no publishing has happened.
 - Verify clean-machine setup, packaging/installer and scoped manual acceptance.

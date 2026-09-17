@@ -1,3 +1,5 @@
+> Historical record: package identities and commands below describe the pre-Phase-5 application. Current identity and safe migration boundaries are documented in docs/RELEASE_IDENTITY.md (or RELEASE_IDENTITY.md from this directory). Do not use these old commands for a current release.
+
 # Jax 开发计划
 
 ## 真机安装硬规则：NO_AUTO_UNINSTALL_REAL_DATA

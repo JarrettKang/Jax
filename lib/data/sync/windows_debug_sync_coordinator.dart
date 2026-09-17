@@ -180,16 +180,16 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
     if (!File(windowsDb).existsSync()) return 'Windows Jax 数据库不可读取。';
     Future<ProcessResult> run(List<String> args) =>
         Process.run(adb, ['-s', serial, ...args]);
-    final package = await run(['shell', 'pm', 'path', 'com.example.jax']);
+    final package = await run(['shell', 'pm', 'path', 'com.jarrett.jax']);
     if (package.exitCode != 0 || !'${package.stdout}'.contains('package:')) {
       return '手机上未安装 Jax Debug。';
     }
-    final access = await run(['shell', 'run-as', 'com.example.jax', 'pwd']);
+    final access = await run(['shell', 'run-as', 'com.jarrett.jax', 'pwd']);
     if (access.exitCode != 0) return 'Jax Debug 无法通过 run-as 读取。';
     final database = await run([
       'shell',
       'run-as',
-      'com.example.jax',
+      'com.jarrett.jax',
       'test',
       '-r',
       'databases/jax.db',
@@ -325,7 +325,7 @@ class WindowsDebugSyncCoordinator implements DebugSyncCoordinator {
       '& ${quote(script)}',
       '-Action ${quote(action)}',
       '-Device ${quote(serial)}',
-      '-Package ${quote('com.example.jax')}',
+      '-Package ${quote('com.jarrett.jax')}',
       if (findAdb() case final String resolvedAdb)
         '-AdbPath ${quote(resolvedAdb)}',
       if (dartPath != null) '-DartPath ${quote(dartPath!)}',

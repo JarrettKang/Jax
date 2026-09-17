@@ -56,7 +56,7 @@ Future<void> main(List<String> args) async {
     return;
   }
   if (kDebugMode && Platform.isAndroid) {
-    const channel = MethodChannel('com.example.jax/debug_sync');
+    const channel = MethodChannel('com.jarrett.jax/debug_sync');
     final commandPath = await channel.invokeMethod<String>('takeCommandPath');
     if (commandPath != null && commandPath.isNotEmpty) {
       final succeeded = await runAndroidDebugSyncCommand(commandPath);
@@ -113,7 +113,7 @@ Future<void> main(List<String> args) async {
               '-Action',
               'Apply',
               '-Package',
-              'com.example.jax',
+              'com.jarrett.jax',
               '-Device',
               device,
               '-Resolution',

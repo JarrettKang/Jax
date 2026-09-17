@@ -210,7 +210,7 @@ v0.1 至少需要通过以下行为验证：
 
 ## 8. Android v0.1 平台规则与验收
 
-- Android 与 Windows 共用 Core 业务规则、Data 数据模型和 Repository 语义；Android application ID 为 `com.example.jax`。
+- Android 与 Windows 共用 Core 业务规则、Data 数据模型和 Repository 语义；Android application ID 为 `com.jarrett.jax`。
 - Android 切换后台、锁屏、返回键离开主页面、返回桌面或被系统正常回收进程时，不得自动暂停 `running` 事件。只有用户明确点击“暂停”或“完成”才改变其运行状态。
 - 进程重新启动后，从本地数据库恢复 `running` 状态和未结束执行片段，并根据真实时间戳继续计算持续时间；不依赖 UI、后台 Service 或后台逐秒任务持续运行。
 - Windows 正常关闭窗口时自动暂停仍是 Windows 专属生命周期策略，不映射到 Android。

@@ -17,7 +17,7 @@ database or recreate a synchronization baseline.
 ## Isolate test devices and data
 
 Run integration tests on an emulator or an explicitly isolated fixture package
-and database. Keep ordinary `com.example.jax` separate from fixture entry points.
+and database. Keep ordinary `com.jarrett.jax` separate from fixture entry points.
 Never install a fixture build over a package containing personal data. Use
 synthetic fixtures and fake ADB tools to verify failure paths.
 

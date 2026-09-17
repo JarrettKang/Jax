@@ -1,4 +1,4 @@
-package com.example.jax
+package com.jarrett.jax
 
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
@@ -6,7 +6,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val channelName = "com.example.jax/debug_sync"
+    private val channelName = "com.jarrett.jax/debug_sync"
     private var syncCommandPath: String? = null
 
     override fun onNewIntent(intent: Intent) {

@@ -5,16 +5,16 @@ param(
     [string]$ApkPath,
     [string]$AdbPath,
     [string]$AaptPath,
-    [ValidateSet('com.example.jax', 'com.example.jax.worldfixture')]
-    [string]$Package,
+    [ValidateSet('com.jarrett.jax', 'com.jarrett.jax.worldfixture')]
+    [string]$Package = 'com.jarrett.jax',
     [switch]$Help
 )
 $ErrorActionPreference = 'Stop'
-if ($Help) { Write-Output 'Safe Debug update only. -Device -ApkPath -Package required; -AdbPath/-AaptPath or JAX_ADB_PATH/JAX_AAPT2_PATH/PATH. Supports -WhatIf. One install -r; failure stops. No uninstall or clear. See docs/TOOLS.md.'; return }
+if ($Help) { Write-Output 'Safe Debug update only. -Device -ApkPath required; -Package defaults to com.jarrett.jax; -AdbPath/-AaptPath or JAX_ADB_PATH/JAX_AAPT2_PATH/PATH. Supports -WhatIf. One install -r; failure stops. No uninstall or clear. See docs/TOOLS.md.'; return }
 $rule = 'NO_AUTO_UNINSTALL_REAL_DATA'
 . (Join-Path $PSScriptRoot 'tool_locator.ps1')
 trap { Write-Verbose ($_ | Out-String); throw (Protect-JaxLog $_.Exception.Message) }
-if (-not $Device -or -not $ApkPath -or -not $Package) { throw "$rule : explicit Device, ApkPath and Package required." }
+if (-not $Device -or -not $ApkPath -or -not $Package) { throw "$rule : explicit Device and ApkPath required; Package must be valid." }
 $AdbPath = Resolve-JaxTool adb $AdbPath
 $AaptPath = Resolve-JaxTool aapt2 $AaptPath
 foreach ($path in @($ApkPath, $AdbPath, $AaptPath)) {
@@ -33,7 +33,7 @@ $state = @(& $AdbPath -s $Device get-state 2>&1)
 if ($LASTEXITCODE -ne 0 -or ($state -join '').Trim() -ne 'device') { throw "$rule : Device not ready." }
 $installed = @(& $AdbPath -s $Device shell pm list packages $Package 2>&1)
 if ($LASTEXITCODE -ne 0) { throw "$rule : Cannot inspect installed package." }
-if ($Package -eq 'com.example.jax' -and -not ($installed | Where-Object { "$_".Trim() -eq "package:$Package" })) {
+if ($Package -eq 'com.jarrett.jax' -and -not ($installed | Where-Object { "$_".Trim() -eq "package:$Package" })) {
     throw "$rule : Real-data package missing. Stop and investigate; this command only updates an existing Jax install."
 }
 $hash = (Get-FileHash -LiteralPath $ApkPath -Algorithm SHA256).Hash

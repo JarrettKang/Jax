@@ -35,10 +35,10 @@ flutter build apk --debug
 
 Build with `flutter build apk --debug --target=tool/world_attention_fixture.dart`.
 Gradle derives isolation from the fixture entry point. This produces Debug package
-`com.example.jax.worldfixture`, displayed as **Jax World QA**. Use the guarded
-installer with `-Package com.example.jax.worldfixture`. The fixture creates its
+`com.jarrett.jax.worldfixture`, displayed as **Jax World QA**. Use the guarded
+installer with `-Package com.jarrett.jax.worldfixture`. The fixture creates its
 own temporary SQLite database in that separate package's sandbox. Never install
-a fixture entry point into `com.example.jax`. A normal `flutter build apk --debug`
+a fixture entry point into `com.jarrett.jax`. A normal `flutter build apk --debug`
 builds the ordinary main-entry APK. Fixture release builds are rejected.
 
 Safety regression: `powershell -File tool/install_android_debug_contract_test.ps1`.

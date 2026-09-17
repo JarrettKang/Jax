@@ -6,7 +6,7 @@
 
 - Android 设备已开启 USB debugging，并已接受当前电脑的授权提示。
 - 使用当前源码；脚本默认构建并通过 `adb install -r` 更新 Debug APK，保留 App 数据。
-- 包必须支持 `run-as`。脚本固定默认为 `com.example.jax`，无法确认 debuggable 时会停止。
+- 包必须支持 `run-as`。脚本固定默认为 `com.jarrett.jax`，无法确认 debuggable 时会停止。
 - 关闭 Windows Jax 不是必需条件；脚本通过 SQLite `VACUUM INTO` 从 live database 生成包含 WAL 最新事务的一致快照。
 
 单台已授权设备：

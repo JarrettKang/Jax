@@ -40,7 +40,7 @@ function Protect-JaxLog([string]$Text) {
 }
 
 function Assert-JaxPackage([string]$Package) {
-    if ($Package -notin @('com.example.jax','com.example.jax.worldfixture')) { throw 'Only the explicitly selected Jax Debug package is allowed.' }
+    if ($Package -notin @('com.jarrett.jax','com.jarrett.jax.worldfixture')) { throw 'Only the explicitly selected Jax Debug package is allowed.' }
 }
 
 function Select-JaxDevice([string]$Adb, [string]$Device) {

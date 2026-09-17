@@ -24,11 +24,11 @@ elseif ($args[2] -eq 'shell') {
 $installer = Join-Path $PSScriptRoot 'install_android_debug.ps1'
 $case = 0
 foreach ($scenario in @(
-    @('com.example.jax', 'yes', 'no', 'com.example.jax', $false, 1),
-    @('com.example.jax', 'yes', 'yes', 'com.example.jax', $true, 1),
-    @('com.example.jax', 'no', 'no', 'com.example.jax', $true, 0),
-    @('com.example.jax.worldfixture', 'yes', 'no', 'com.example.jax', $true, 0),
-    @('com.example.jax.worldfixture', 'no', 'no', 'com.example.jax.worldfixture', $false, 1)
+    @('com.jarrett.jax', 'yes', 'no', 'com.jarrett.jax', $false, 1),
+    @('com.jarrett.jax', 'yes', 'yes', 'com.jarrett.jax', $true, 1),
+    @('com.jarrett.jax', 'no', 'no', 'com.jarrett.jax', $true, 0),
+    @('com.jarrett.jax.worldfixture', 'yes', 'no', 'com.jarrett.jax', $true, 0),
+    @('com.jarrett.jax.worldfixture', 'no', 'no', 'com.jarrett.jax.worldfixture', $false, 1)
 )) {
     $case++
     $env:JAX_TEST_PACKAGE = $scenario[0]
@@ -44,3 +44,20 @@ foreach ($scenario in @(
     if ($calls | Where-Object { $_ -match 'uninstall|\bclear\b' }) { throw "Case $case destructive command" }
 }
 Write-Output "PASS: $case installer safety scenarios. Mock evidence: $temp"
+
+# Omitting Package must select the new canonical app without weakening guards.
+$env:JAX_TEST_PACKAGE = 'com.jarrett.jax'
+$env:JAX_TEST_EXISTS = 'yes'
+$env:JAX_TEST_FAIL = 'no'
+$env:JAX_TEST_LOG = Join-Path $temp 'canonical-default.log'
+& $installer -Device test-device -ApkPath $apk -AdbPath $adb -AaptPath $aapt | Out-Null
+$calls = @(Get-Content -LiteralPath $env:JAX_TEST_LOG)
+if (@($calls | Where-Object { $_ -match ' install -r ' }).Count -ne 1) { throw 'Canonical default did not perform exactly one install' }
+if ($calls | Where-Object { $_ -match 'uninstall|\bclear\b' }) { throw 'Canonical default used a destructive command' }
+# Explicit old-ID fixture: legacy identity must not regain permission by override.
+$env:JAX_TEST_LOG = Join-Path $temp 'legacy-rejected.log'
+$rejected = $false
+try { & $installer -Device test-device -ApkPath $apk -AdbPath $adb -AaptPath $aapt -Package 'com.example.jax' | Out-Null }
+catch [System.Management.Automation.ParameterBindingException] { if ($_.FullyQualifiedErrorId -notmatch '^ParameterArgumentValidationError') { throw }; $rejected = $true }
+if (-not $rejected -or (Test-Path -LiteralPath $env:JAX_TEST_LOG)) { throw 'Legacy package was not rejected before ADB' }
+Write-Output 'PASS: canonical package default and explicit legacy-package rejection.'

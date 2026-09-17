@@ -1,0 +1,7 @@
+# Copy to ignored android/key.properties only on your private machine.
+# Use forward slashes on Windows. Relative paths resolve from android/.
+# Environment variables take precedence per field; never commit real values.
+storeFile=/absolute/path/to/release-keystore.jks
+storePassword=YOUR_STORE_PASSWORD
+keyAlias=jax-release
+keyPassword=YOUR_KEY_PASSWORD

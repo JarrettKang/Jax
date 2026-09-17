@@ -9,8 +9,9 @@ Filenames are retained to avoid breaking historical references.
 
 - No automatic Android uninstall, `pm clear`, sandbox deletion, or destructive
   installation retry. An install failure stops after one `adb install -r`.
-- Android data tools allow only the explicitly selected `com.example.jax` or
-  `com.example.jax.worldfixture` package, verify exact installed identity and
+- Android data tools default to `com.jarrett.jax`; an explicit override allows only
+  `com.jarrett.jax` or
+  `com.jarrett.jax.worldfixture` package, verify exact installed identity and
   `run-as`, and refuse missing/offline/unauthorized devices. Multiple connected
   devices require an explicit serial. Copy always requires one.
 - Audit/readiness/verify never open through the migrating AppDatabase entrypoint.
@@ -133,7 +134,7 @@ reset. Reset runs transactionally; the backup remains available on failure.
 
 ```powershell
 # Replace the device placeholder deliberately; default is a plan only.
-./tool/copy_windows_data_to_android.ps1 -SourceDatabase .local_private/database-exports/demo.db -Device '<device-serial>' -Package com.example.jax
+./tool/copy_windows_data_to_android.ps1 -SourceDatabase .local_private/database-exports/demo.db -Device '<device-serial>' -Package com.jarrett.jax
 # Add BOTH -Apply -ConfirmOverwrite only to intentionally overwrite that target.
 ```
 
@@ -175,8 +176,8 @@ is not a consistent snapshot.
 ## WARNING: Debug Sync
 
 ```powershell
-./tool/sync_phase2a.ps1 -Package com.example.jax -Device '<device-serial>'
-./tool/sync_phase2b2.ps1 -Package com.example.jax -Device '<device-serial>' -Action Analyze
+./tool/sync_phase2a.ps1 -Package com.jarrett.jax -Device '<device-serial>'
+./tool/sync_phase2b2.ps1 -Package com.jarrett.jax -Device '<device-serial>' -Action Analyze
 ```
 
 Analyze stops writers and creates private reports; it does not Apply business

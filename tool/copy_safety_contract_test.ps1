@@ -12,8 +12,8 @@ class FakeAdb {
  static int Main(string[] a) {
   string call=String.Join(" ",a); File.AppendAllText(Path.Combine(R,"calls.log"),call+"\n");
   if (call=="devices") { Console.WriteLine("List of devices attached\nfixture-device\tdevice"); if(Environment.GetEnvironmentVariable("JAX_COPY_MULTIPLE")=="1") Console.WriteLine("second-device\tdevice"); return 0; }
-  if(call.Contains("pm list packages")) {Console.WriteLine("package:com.example.jax");return 0;}
-  if(call.EndsWith("run-as com.example.jax pwd")){Console.WriteLine("/data/user/0/com.example.jax");return 0;}
+  if(call.Contains("pm list packages")) {Console.WriteLine("package:com.jarrett.jax");return 0;}
+  if(call.EndsWith("run-as com.jarrett.jax pwd")){Console.WriteLine("/data/user/0/com.jarrett.jax");return 0;}
   if(call.Contains(" test -f ")) return call.EndsWith("databases/jax.db") ? 0 : 1;
   if(call.Contains("exec-out")) {
    if(Environment.GetEnvironmentVariable("JAX_COPY_BACKUP_FAIL")=="1") return 1;
@@ -48,7 +48,7 @@ throw 'Unexpected fake Dart operation'
 $sourceDb=Join-Path $temp 'source.db'; [IO.File]::WriteAllText($sourceDb,'new')
 $target=Join-Path $temp 'target.db'
 $copy=Join-Path $PSScriptRoot 'copy_windows_data_to_android.ps1'
-$common=@{SourceDatabase=$sourceDb;Device='fixture-device';Package='com.example.jax';AdbPath=$adb;DartPath=$dart;BackupRoot=(Join-Path $temp 'backups')}
+$common=@{SourceDatabase=$sourceDb;Device='fixture-device';Package='com.jarrett.jax';AdbPath=$adb;DartPath=$dart;BackupRoot=(Join-Path $temp 'backups')}
 function Assert([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
 foreach($case in @('dry','wrong-package','backup-fail','schema-fail','success','verify-fail')) {
  [IO.File]::WriteAllText($target,'old')
