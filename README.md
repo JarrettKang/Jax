@@ -4,7 +4,7 @@ Jax is a local-first personal planning, execution, and life-management app for
 Windows and Android. It helps turn long-term intentions into plans, today's
 actions, execution records, and review.
 
-**Early public candidate · active development · 0.1.0+1.** Prebuilt releases are
+**Initial public source release · active development · 0.1.0+1.** Prebuilt releases are
 not published yet; build from source. The current application interface is Chinese.
 
 ## Why Jax
@@ -77,13 +77,14 @@ artifacts, not public Release downloads.
 
 ## Testing
 
-The Phase 6 release-candidate verification recorded **695 passing Flutter tests**,
-Android native verification **8/8**, Windows native verification **7/7**, and tool
-contracts **7/7**. These are candidate verification counts, not coverage claims.
-[Publication checklist](docs/PUBLICATION_CHECKLIST.md) records Phase 7 checks.
+The public source checkout passed **698 Flutter tests** and `flutter analyze`.
+Phase 6 separately verified Android native **8/8**, Windows native **7/7**, and
+tool contracts **7/7**. These are verification counts, not coverage claims.
+[Publication checklist](docs/PUBLICATION_CHECKLIST.md) records the publication checks.
 
-CI is configured for analysis, host tests, Android Debug and Windows Release
-builds. Its first GitHub-hosted run is pending publication; no green run is claimed.
+GitHub-hosted CI has passed analysis, host tests, Android Debug and Windows Release
+builds. See the [verified public run](https://github.com/JarrettKang/Jax/actions/runs/35491066377)
+and [current CI runs](https://github.com/JarrettKang/Jax/actions/workflows/ci.yml).
 Native matrices are separate release verification. Android integration-test
 harness instability was observed; independent SQLite smoke tests and subsequent
 native verification passed. See the reproducibility report for the boundary.

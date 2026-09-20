@@ -3,9 +3,9 @@
 Do not disclose sensitive vulnerability details, personal data or credentials in
 public issues or pull requests.
 
-Use GitHub private vulnerability reporting **once it has been enabled** for the
-published repository (Security → Report a vulnerability). The repository is still
-being prepared; this document does not claim that channel is already available.
+GitHub private vulnerability reporting is enabled for this repository. Use
+[Security → Report a vulnerability](https://github.com/JarrettKang/Jax/security/advisories/new)
+to report sensitive issues privately.
 If the private-reporting option is absent, withhold sensitive details until a
 private channel is established. Do not post a vulnerability as a public fallback.
 
