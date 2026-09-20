@@ -12,10 +12,6 @@ jobs:
     # Host SQLite tests use the project's Windows winsqlite3 native hook.
     runs-on: windows-2022
     timeout-minutes: 45
-    # Avoid the runner profile's 8.3 TEMP alias: safety checks compare resolved paths.
-    env:
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     defaults:
       run:
         shell: pwsh
@@ -38,6 +34,10 @@ jobs:
       - name: Analyze
         run: flutter analyze
       - name: Host tests
+        # Avoid the runner profile's 8.3 TEMP alias in resolved-path safety checks.
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: flutter test
       - name: Windows build smoke
         run: flutter build windows --release
