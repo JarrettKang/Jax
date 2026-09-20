@@ -1,5 +1,10 @@
 # Jax Release Candidate
 
+> Historical Phase 4/5 verification record. For the subsequent 163-commit Phase 6
+> baseline, see [REPRODUCIBILITY](REPRODUCIBILITY.md). Current publication readiness
+> is tracked in [PUBLICATION_CHECKLIST](PUBLICATION_CHECKLIST.md). Counts and
+> environment observations below refer to their stated verification phase.
+
 ## Candidate identity
 
 Verification dates: 2026-09-17 (baseline/native tests) and 2026-09-18 (release signing). This is a local public-source candidate, not a

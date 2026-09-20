@@ -239,3 +239,13 @@ building is not permission to install on a data-bearing device.
 
 Privacy-document cleanup, Git history rewrite, release signing, package rename,
 LICENSE and final README are separate phases. Debug Sync remains developer-only.
+
+## Public synthetic demo tools
+
+`demo_data.dart` creates only a new fixture below `.local_private/demo`; an explicit
+output path is required. It refuses existing databases/sidecars, path escapes,
+links and real Jax data directories. There is no overwrite mode or source DB input.
+`capture_demo.dart` is a Windows-only developer entry using the real JaxApp with
+that new synthetic dataset, an in-memory preference store and a fixed clock. It
+automatically captures four module views and exits. Both are class B, synthetic-only.
+See [SCREENSHOTS](SCREENSHOTS.md) for reproduction and restoring the normal entry.
